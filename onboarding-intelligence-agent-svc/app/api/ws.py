@@ -589,6 +589,9 @@ async def _run_analysis(
             timeout=5.0,
         )
     except asyncio.TimeoutError:
+        from app.metrics import record_sufficiency_drop
+
+        record_sufficiency_drop()
         logger.warning(
             "analysis_timeout",
             session=session.session_id,
@@ -793,6 +796,9 @@ async def _evaluate_sufficiency(
                 timeout=5.0,
             )
         except asyncio.TimeoutError:
+            from app.metrics import record_sufficiency_drop
+
+            record_sufficiency_drop()
             logger.warning(
                 "sufficiency_timeout",
                 session=session.session_id,

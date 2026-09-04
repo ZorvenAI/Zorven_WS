@@ -3,6 +3,8 @@
 Exercises the full WebSocket lifecycle with FakeSTTAdapter + real Redis.
 The fixture replays 21 STT events from ``two_speaker_2min.jsonl`` with
 realistic ``delay_ms`` pacing.
+
+N-02 AC-4 extends this with a 45-minute session stability test.
 """
 
 from __future__ import annotations
@@ -12,8 +14,11 @@ import threading
 import time
 
 import pytest
+import redis as sync_redis
 
 from app.cache.redis_manager import TenantKeys
+
+from tests.conftest import REDIS_URL
 
 pytestmark = pytest.mark.e2e
 
@@ -88,10 +93,6 @@ class TestLiveMeeting:
         self, e2e_client, live_company, app_with_live_redis
     ):
         """After a live session, transcript segments are stored in Redis."""
-        import redis as sync_redis
-
-        from tests.conftest import REDIS_URL
-
         tenant = f"live-redis-{live_company}"
         session_id = f"sess-{live_company}-redis"
 
@@ -107,3 +108,50 @@ class TestLiveMeeting:
         r.close()
 
         assert stored > 0, "expected transcript frames buffered in Redis"
+
+
+class TestLongSession:
+    """N-02 AC-4: 45-minute meeting holds up."""
+
+    def test_45_minute_session_stable(
+        self, e2e_client_45min, live_company, app_with_live_redis
+    ):
+        """WebSocket survives a full 45-minute meeting (compressed replay).
+
+        Verifies: WS stays open, frames span the full timestamp range,
+        Redis replay buffer stays bounded at BUFFER_FRAMES, and the
+        session shuts down cleanly.
+        """
+        from app.logic.live_session import BUFFER_FRAMES
+
+        tenant = f"long-{live_company}"
+        session_id = f"sess-{live_company}-long"
+
+        with e2e_client_45min.websocket_connect(
+            f"/v1/live/{session_id}?tenant_id={tenant}&ticket=tkt-1"
+        ) as ws:
+            frames = _collect_frames(ws, timeout=120.0)
+
+        partials = [f for f in frames if f.get("type") == "transcript.partial"]
+        finals = [f for f in frames if f.get("type") == "transcript.final"]
+
+        assert len(partials) > 0, "expected partial transcripts"
+        assert len(finals) > 0, "expected final transcripts"
+
+        all_t_ends = [f.get("t_end", 0.0) for f in finals if f.get("t_end") is not None]
+        if all_t_ends:
+            max_t = max(all_t_ends)
+            assert (
+                max_t > 2000.0
+            ), f"expected finals spanning > 2000s, got max t_end={max_t:.1f}"
+
+        r = sync_redis.Redis.from_url(REDIS_URL)
+        keys = TenantKeys(tenant)
+        frames_key = keys.live_frames(session_id)
+        stored = r.llen(frames_key)
+        r.close()
+
+        assert stored > 0, "expected frames in Redis"
+        assert (
+            stored <= BUFFER_FRAMES
+        ), f"frames {stored} exceeds BUFFER_FRAMES {BUFFER_FRAMES}"

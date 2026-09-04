@@ -10,11 +10,13 @@ from app.metrics import (
     GOLDEN_CANDIDATES,
     GUARDRAIL_TRIGGERS,
     STT_PARTIAL_LATENCY,
+    SUFFICIENCY_DROPS,
     SUFFICIENCY_LATENCY,
     WS_SESSIONS_ACTIVE,
     record_circuit_state,
     record_guardrail_trigger,
     record_stt_partial_latency,
+    record_sufficiency_drop,
     record_sufficiency_latency,
 )
 
@@ -31,6 +33,7 @@ def test_all_metrics_have_oia_prefix():
         GOLDEN_CANDIDATES,
         DROPPED_UNGROUNDED,
         EVENTS_DROPPED,
+        SUFFICIENCY_DROPS,
     ]
     for m in metrics:
         desc = m.describe()[0]
@@ -93,3 +96,9 @@ def test_events_dropped_increments():
     before = EVENTS_DROPPED._value.get()
     EVENTS_DROPPED.inc()
     assert EVENTS_DROPPED._value.get() == before + 1
+
+
+def test_sufficiency_drops_increments():
+    before = SUFFICIENCY_DROPS._value.get()
+    record_sufficiency_drop()
+    assert SUFFICIENCY_DROPS._value.get() == before + 1

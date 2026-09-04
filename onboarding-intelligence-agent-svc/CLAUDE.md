@@ -229,6 +229,13 @@ pytest -m unit -q              # no network
 pytest -m property -q          # hypothesis
 pytest -m integration -q       # real Redis and, if present, real Kafka
 pytest -m e2e -q               # real container; needs Docker
+pytest -m load --collect-only  # list load tests (skip without OIA_LOAD_TARGET)
+
+# Load tests — NFR performance verification against a deployed target
+OIA_LOAD_TARGET=wss://oia.zorven.dev \
+  OIA_LOAD_ENVIRONMENT=kong_dev \
+  OIA_LOAD_CONCURRENCY=5 \
+  pytest -m load -v
 
 black app/ tests/ && flake8 app/ tests/ && mypy app/
 ```

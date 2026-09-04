@@ -75,6 +75,13 @@ EVENTS_DROPPED = Counter(
     "Events dropped due to queue overflow",
 )
 
+# ── Panel 9: Sufficiency signals dropped due to timeout ──
+
+SUFFICIENCY_DROPS = Counter(
+    "oia_sufficiency_drops_total",
+    "Sufficiency signals dropped due to timeout",
+)
+
 # ── Alert threshold constants ──
 
 ALERT_STT_PARTIAL_P95_MS = 2000.0
@@ -99,3 +106,7 @@ def record_stt_partial_latency(ms: float) -> None:
 
 def record_sufficiency_latency(ms: float) -> None:
     SUFFICIENCY_LATENCY.observe(ms)
+
+
+def record_sufficiency_drop() -> None:
+    SUFFICIENCY_DROPS.inc()

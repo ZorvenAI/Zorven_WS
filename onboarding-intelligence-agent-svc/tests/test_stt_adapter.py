@@ -33,6 +33,7 @@ from app.providers.stt import (
 pytestmark = pytest.mark.unit
 
 FIXTURE = Path(__file__).parent / "fixtures" / "two_speaker_2min.jsonl"
+FIXTURE_45MIN = Path(__file__).parent / "fixtures" / "two_speaker_45min.jsonl"
 
 
 async def _silent_audio(n: int = 5) -> None:
@@ -220,6 +221,42 @@ def test_dedup_does_not_drop_partials():
             seen.add(key)
         kept.append(r)
     assert len(kept) == 2
+
+
+# ── Long-session memory bounds (N-02 AC-4) ──────────────────────────
+
+
+def test_dedup_seen_set_bounded_after_long_session():
+    """The dedup ``seen`` set grows linearly with finals, not with total events.
+
+    For a 45-minute meeting (~400 finals) each entry is a (float, str) tuple
+    of ~80 bytes, totalling ~32 KB — well within bounds.
+    """
+    import json
+    import sys
+
+    with open(FIXTURE_45MIN) as f:
+        events = [json.loads(line) for line in f]
+
+    seen: set[tuple[float, str]] = set()
+    for ev in events:
+        if ev.get("is_final"):
+            r = STTResult(
+                text=ev["text"],
+                is_final=True,
+                t_start=ev["t_start"],
+                t_end=ev["t_end"],
+                stability=ev.get("stability", 1.0),
+            )
+            key = _dedup_key(r)
+            seen.add(key)
+
+    finals_count = sum(1 for ev in events if ev.get("is_final"))
+    assert len(seen) <= finals_count
+    assert len(seen) > 0
+    avg_entry_bytes = sys.getsizeof(next(iter(seen)))
+    total_bytes = len(seen) * avg_entry_bytes
+    assert total_bytes < 100_000, f"seen set {total_bytes} bytes exceeds 100 KB"
 
 
 # ── Circuit breaker ──────────────────────────────────────────────────

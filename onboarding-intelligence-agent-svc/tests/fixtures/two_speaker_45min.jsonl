@@ -1,0 +1,1230 @@
+{"text": "how", "is_final": false, "t_start": 0.0, "t_end": 0.7, "stability": 0.6, "delay_ms": 1}
+{"text": "how do you", "is_final": false, "t_start": 0.0, "t_end": 1.5, "stability": 0.6, "delay_ms": 3}
+{"text": "How do you handle customer feedback?", "is_final": true, "t_start": 0.0, "t_end": 2.4, "stability": 1.0, "delay_ms": 1}
+{"text": "who are", "is_final": false, "t_start": 5.4, "t_end": 6.7, "stability": 0.4, "delay_ms": 1}
+{"text": "who are your primary", "is_final": false, "t_start": 5.4, "t_end": 8.0, "stability": 0.6, "delay_ms": 3}
+{"text": "Who are your primary competitors in this space?", "is_final": true, "t_start": 5.4, "t_end": 9.8, "stability": 1.0, "delay_ms": 3}
+{"text": "we recently", "is_final": false, "t_start": 10.9, "t_end": 12.3, "stability": 0.5, "delay_ms": 2}
+{"text": "we recently expanded into", "is_final": false, "t_start": 10.9, "t_end": 13.8, "stability": 0.7, "delay_ms": 1}
+{"text": "We recently expanded into three new regional markets.", "is_final": true, "t_start": 10.9, "t_end": 15.7, "stability": 1.0, "delay_ms": 1}
+{"text": "what makes", "is_final": false, "t_start": 18.8, "t_end": 19.7, "stability": 0.6, "delay_ms": 1}
+{"text": "what makes your product", "is_final": false, "t_start": 18.8, "t_end": 20.5, "stability": 0.6, "delay_ms": 1}
+{"text": "What makes your product unique compared to alternatives?", "is_final": true, "t_start": 18.8, "t_end": 21.7, "stability": 1.0, "delay_ms": 2}
+{"text": "what", "is_final": false, "t_start": 25.2, "t_end": 26.7, "stability": 0.6, "delay_ms": 2}
+{"text": "what year was", "is_final": false, "t_start": 25.2, "t_end": 28.2, "stability": 0.6, "delay_ms": 2}
+{"text": "What year was the business founded?", "is_final": true, "t_start": 25.2, "t_end": 30.2, "stability": 1.0, "delay_ms": 3}
+{"text": "where do", "is_final": false, "t_start": 33.1, "t_end": 33.9, "stability": 0.4, "delay_ms": 3}
+{"text": "where do you see the", "is_final": false, "t_start": 33.1, "t_end": 34.8, "stability": 0.6, "delay_ms": 2}
+{"text": "Where do you see the brand in five years?", "is_final": true, "t_start": 33.1, "t_end": 35.8, "stability": 1.0, "delay_ms": 1}
+{"text": "what does", "is_final": false, "t_start": 39.4, "t_end": 40.3, "stability": 0.6, "delay_ms": 2}
+{"text": "what does your competitive", "is_final": false, "t_start": 39.4, "t_end": 41.3, "stability": 0.6, "delay_ms": 2}
+{"text": "What does your competitive landscape look like?", "is_final": true, "t_start": 39.4, "t_end": 42.5, "stability": 1.0, "delay_ms": 1}
+{"text": "what is", "is_final": false, "t_start": 45.5, "t_end": 46.9, "stability": 0.6, "delay_ms": 1}
+{"text": "what is your current", "is_final": false, "t_start": 45.5, "t_end": 48.3, "stability": 0.7, "delay_ms": 1}
+{"text": "What is your current monthly marketing budget?", "is_final": true, "t_start": 45.5, "t_end": 50.1, "stability": 1.0, "delay_ms": 1}
+{"text": "we recently", "is_final": false, "t_start": 52.5, "t_end": 53.9, "stability": 0.5, "delay_ms": 2}
+{"text": "we recently expanded into", "is_final": false, "t_start": 52.5, "t_end": 55.4, "stability": 0.8, "delay_ms": 1}
+{"text": "We recently expanded into three new regional markets.", "is_final": true, "t_start": 52.5, "t_end": 57.2, "stability": 1.0, "delay_ms": 1}
+{"text": "we value", "is_final": false, "t_start": 60.7, "t_end": 61.6, "stability": 0.5, "delay_ms": 3}
+{"text": "we value transparency, innovation, and", "is_final": false, "t_start": 60.7, "t_end": 62.5, "stability": 0.8, "delay_ms": 2}
+{"text": "We value transparency, innovation, and customer success above all.", "is_final": true, "t_start": 60.7, "t_end": 63.7, "stability": 1.0, "delay_ms": 1}
+{"text": "how", "is_final": false, "t_start": 66.7, "t_end": 67.9, "stability": 0.5, "delay_ms": 1}
+{"text": "how do you", "is_final": false, "t_start": 66.7, "t_end": 69.0, "stability": 0.7, "delay_ms": 3}
+{"text": "How do you handle customer feedback?", "is_final": true, "t_start": 66.7, "t_end": 70.5, "stability": 1.0, "delay_ms": 2}
+{"text": "where do", "is_final": false, "t_start": 73.7, "t_end": 74.8, "stability": 0.5, "delay_ms": 1}
+{"text": "where do you see the", "is_final": false, "t_start": 73.7, "t_end": 75.9, "stability": 0.7, "delay_ms": 1}
+{"text": "Where do you see the brand in five years?", "is_final": true, "t_start": 73.7, "t_end": 77.3, "stability": 1.0, "delay_ms": 1}
+{"text": "we price competitively", "is_final": false, "t_start": 80.9, "t_end": 82.5, "stability": 0.5, "delay_ms": 1}
+{"text": "we price competitively at forty-nine dollars per", "is_final": false, "t_start": 80.9, "t_end": 84.0, "stability": 0.7, "delay_ms": 3}
+{"text": "We price competitively at forty-nine dollars per month for the base plan.", "is_final": true, "t_start": 80.9, "t_end": 86.1, "stability": 1.0, "delay_ms": 2}
+{"text": "we were founded", "is_final": false, "t_start": 88.7, "t_end": 90.1, "stability": 0.4, "delay_ms": 3}
+{"text": "we were founded in 2018 by", "is_final": false, "t_start": 88.7, "t_end": 91.5, "stability": 0.8, "delay_ms": 3}
+{"text": "We were founded in 2018 by two former tech executives.", "is_final": true, "t_start": 88.7, "t_end": 93.4, "stability": 1.0, "delay_ms": 2}
+{"text": "instagram and", "is_final": false, "t_start": 94.7, "t_end": 95.3, "stability": 0.6, "delay_ms": 3}
+{"text": "instagram and linkedin are", "is_final": false, "t_start": 94.7, "t_end": 95.9, "stability": 0.7, "delay_ms": 3}
+{"text": "Instagram and LinkedIn are our most effective channels.", "is_final": true, "t_start": 94.7, "t_end": 96.7, "stability": 1.0, "delay_ms": 1}
+{"text": "how", "is_final": false, "t_start": 99.2, "t_end": 100.2, "stability": 0.6, "delay_ms": 3}
+{"text": "how do you", "is_final": false, "t_start": 99.2, "t_end": 101.1, "stability": 0.6, "delay_ms": 2}
+{"text": "How do you handle customer feedback?", "is_final": true, "t_start": 99.2, "t_end": 102.4, "stability": 1.0, "delay_ms": 1}
+{"text": "what", "is_final": false, "t_start": 105.0, "t_end": 106.7, "stability": 0.6, "delay_ms": 2}
+{"text": "what is your", "is_final": false, "t_start": 105.0, "t_end": 108.4, "stability": 0.6, "delay_ms": 2}
+{"text": "What is your brand mission statement?", "is_final": true, "t_start": 105.0, "t_end": 110.7, "stability": 1.0, "delay_ms": 2}
+{"text": "we launched a", "is_final": false, "t_start": 112.4, "t_end": 114.1, "stability": 0.4, "delay_ms": 2}
+{"text": "we launched a referral program that drives", "is_final": false, "t_start": 112.4, "t_end": 115.9, "stability": 0.8, "delay_ms": 3}
+{"text": "We launched a referral program that drives thirty percent of new signups.", "is_final": true, "t_start": 112.4, "t_end": 118.2, "stability": 1.0, "delay_ms": 1}
+{"text": "our retention", "is_final": false, "t_start": 119.6, "t_end": 120.4, "stability": 0.6, "delay_ms": 3}
+{"text": "our retention rate is", "is_final": false, "t_start": 119.6, "t_end": 121.2, "stability": 0.7, "delay_ms": 1}
+{"text": "Our retention rate is about ninety-two percent annually.", "is_final": true, "t_start": 119.6, "t_end": 122.2, "stability": 1.0, "delay_ms": 3}
+{"text": "we use a", "is_final": false, "t_start": 125.5, "t_end": 126.5, "stability": 0.7, "delay_ms": 3}
+{"text": "we use a combination of content", "is_final": false, "t_start": 125.5, "t_end": 127.4, "stability": 0.7, "delay_ms": 3}
+{"text": "We use a combination of content marketing and paid search.", "is_final": true, "t_start": 125.5, "t_end": 128.7, "stability": 1.0, "delay_ms": 2}
+{"text": "what channels", "is_final": false, "t_start": 130.1, "t_end": 130.7, "stability": 0.6, "delay_ms": 3}
+{"text": "what channels do you", "is_final": false, "t_start": 130.1, "t_end": 131.4, "stability": 0.6, "delay_ms": 1}
+{"text": "What channels do you use for customer acquisition?", "is_final": true, "t_start": 130.1, "t_end": 132.1, "stability": 1.0, "delay_ms": 3}
+{"text": "our main product", "is_final": false, "t_start": 135.0, "t_end": 136.6, "stability": 0.4, "delay_ms": 1}
+{"text": "our main product is a saas", "is_final": false, "t_start": 135.0, "t_end": 138.3, "stability": 0.7, "delay_ms": 2}
+{"text": "Our main product is a SaaS platform for small businesses.", "is_final": true, "t_start": 135.0, "t_end": 140.4, "stability": 1.0, "delay_ms": 1}
+{"text": "we launched a", "is_final": false, "t_start": 143.0, "t_end": 144.3, "stability": 0.5, "delay_ms": 2}
+{"text": "we launched a referral program that drives", "is_final": false, "t_start": 143.0, "t_end": 145.6, "stability": 0.8, "delay_ms": 1}
+{"text": "We launched a referral program that drives thirty percent of new signups.", "is_final": true, "t_start": 143.0, "t_end": 147.3, "stability": 1.0, "delay_ms": 1}
+{"text": "in five years", "is_final": false, "t_start": 148.6, "t_end": 149.7, "stability": 0.7, "delay_ms": 1}
+{"text": "in five years we want to be", "is_final": false, "t_start": 148.6, "t_end": 150.8, "stability": 0.7, "delay_ms": 3}
+{"text": "In five years we want to be the leading platform in our vertical.", "is_final": true, "t_start": 148.6, "t_end": 152.2, "stability": 1.0, "delay_ms": 1}
+{"text": "our biggest competitor", "is_final": false, "t_start": 153.4, "t_end": 154.3, "stability": 0.5, "delay_ms": 2}
+{"text": "our biggest competitor is acme corp, but", "is_final": false, "t_start": 153.4, "t_end": 155.2, "stability": 0.6, "delay_ms": 1}
+{"text": "Our biggest competitor is Acme Corp, but we focus on a different niche.", "is_final": true, "t_start": 153.4, "t_end": 156.4, "stability": 1.0, "delay_ms": 2}
+{"text": "we currently", "is_final": false, "t_start": 158.8, "t_end": 159.9, "stability": 0.7, "delay_ms": 3}
+{"text": "we currently serve about", "is_final": false, "t_start": 158.8, "t_end": 161.1, "stability": 0.6, "delay_ms": 3}
+{"text": "We currently serve about three thousand active customers.", "is_final": true, "t_start": 158.8, "t_end": 162.6, "stability": 1.0, "delay_ms": 3}
+{"text": "we have", "is_final": false, "t_start": 166.1, "t_end": 167.7, "stability": 0.4, "delay_ms": 2}
+{"text": "we have partnerships with", "is_final": false, "t_start": 166.1, "t_end": 169.3, "stability": 0.7, "delay_ms": 2}
+{"text": "We have partnerships with several industry associations.", "is_final": true, "t_start": 166.1, "t_end": 171.5, "stability": 1.0, "delay_ms": 1}
+{"text": "what does", "is_final": false, "t_start": 173.0, "t_end": 173.9, "stability": 0.6, "delay_ms": 2}
+{"text": "what does your competitive", "is_final": false, "t_start": 173.0, "t_end": 174.8, "stability": 0.7, "delay_ms": 3}
+{"text": "What does your competitive landscape look like?", "is_final": true, "t_start": 173.0, "t_end": 176.1, "stability": 1.0, "delay_ms": 3}
+{"text": "tell", "is_final": false, "t_start": 180.1, "t_end": 181.3, "stability": 0.5, "delay_ms": 1}
+{"text": "tell me about", "is_final": false, "t_start": 180.1, "t_end": 182.5, "stability": 0.8, "delay_ms": 3}
+{"text": "Tell me about your team structure.", "is_final": true, "t_start": 180.1, "t_end": 184.0, "stability": 1.0, "delay_ms": 3}
+{"text": "what", "is_final": false, "t_start": 186.6, "t_end": 187.3, "stability": 0.5, "delay_ms": 3}
+{"text": "what year was", "is_final": false, "t_start": 186.6, "t_end": 187.9, "stability": 0.6, "delay_ms": 3}
+{"text": "What year was the business founded?", "is_final": true, "t_start": 186.6, "t_end": 188.8, "stability": 1.0, "delay_ms": 1}
+{"text": "we currently", "is_final": false, "t_start": 192.4, "t_end": 193.8, "stability": 0.5, "delay_ms": 1}
+{"text": "we currently serve about", "is_final": false, "t_start": 192.4, "t_end": 195.2, "stability": 0.8, "delay_ms": 3}
+{"text": "We currently serve about three thousand active customers.", "is_final": true, "t_start": 192.4, "t_end": 197.1, "stability": 1.0, "delay_ms": 1}
+{"text": "who are", "is_final": false, "t_start": 199.8, "t_end": 200.9, "stability": 0.6, "delay_ms": 3}
+{"text": "who are your primary", "is_final": false, "t_start": 199.8, "t_end": 202.0, "stability": 0.7, "delay_ms": 2}
+{"text": "Who are your primary competitors in this space?", "is_final": true, "t_start": 199.8, "t_end": 203.5, "stability": 1.0, "delay_ms": 1}
+{"text": "we spend about", "is_final": false, "t_start": 206.5, "t_end": 207.6, "stability": 0.6, "delay_ms": 2}
+{"text": "we spend about fifteen thousand dollars", "is_final": false, "t_start": 206.5, "t_end": 208.6, "stability": 0.7, "delay_ms": 1}
+{"text": "We spend about fifteen thousand dollars per month on marketing.", "is_final": true, "t_start": 206.5, "t_end": 210.1, "stability": 1.0, "delay_ms": 1}
+{"text": "our biggest competitor", "is_final": false, "t_start": 212.5, "t_end": 213.2, "stability": 0.5, "delay_ms": 2}
+{"text": "our biggest competitor is acme corp, but", "is_final": false, "t_start": 212.5, "t_end": 213.9, "stability": 0.6, "delay_ms": 2}
+{"text": "Our biggest competitor is Acme Corp, but we focus on a different niche.", "is_final": true, "t_start": 212.5, "t_end": 214.8, "stability": 1.0, "delay_ms": 1}
+{"text": "can you", "is_final": false, "t_start": 218.4, "t_end": 219.5, "stability": 0.6, "delay_ms": 2}
+{"text": "can you walk me through", "is_final": false, "t_start": 218.4, "t_end": 220.7, "stability": 0.7, "delay_ms": 3}
+{"text": "Can you walk me through your target customer profile?", "is_final": true, "t_start": 218.4, "t_end": 222.2, "stability": 1.0, "delay_ms": 3}
+{"text": "tell", "is_final": false, "t_start": 223.2, "t_end": 224.9, "stability": 0.4, "delay_ms": 1}
+{"text": "tell me about", "is_final": false, "t_start": 223.2, "t_end": 226.6, "stability": 0.7, "delay_ms": 1}
+{"text": "Tell me about your pricing strategy.", "is_final": true, "t_start": 223.2, "t_end": 229.0, "stability": 1.0, "delay_ms": 3}
+{"text": "the biggest", "is_final": false, "t_start": 231.7, "t_end": 232.6, "stability": 0.5, "delay_ms": 3}
+{"text": "the biggest challenge is scaling", "is_final": false, "t_start": 231.7, "t_end": 233.4, "stability": 0.7, "delay_ms": 2}
+{"text": "The biggest challenge is scaling support while maintaining quality.", "is_final": true, "t_start": 231.7, "t_end": 234.5, "stability": 1.0, "delay_ms": 3}
+{"text": "our main product", "is_final": false, "t_start": 237.0, "t_end": 237.7, "stability": 0.5, "delay_ms": 2}
+{"text": "our main product is a saas", "is_final": false, "t_start": 237.0, "t_end": 238.4, "stability": 0.6, "delay_ms": 2}
+{"text": "Our main product is a SaaS platform for small businesses.", "is_final": true, "t_start": 237.0, "t_end": 239.3, "stability": 1.0, "delay_ms": 1}
+{"text": "how", "is_final": false, "t_start": 242.2, "t_end": 243.3, "stability": 0.6, "delay_ms": 3}
+{"text": "how do you", "is_final": false, "t_start": 242.2, "t_end": 244.5, "stability": 0.6, "delay_ms": 1}
+{"text": "How do you onboard new customers?", "is_final": true, "t_start": 242.2, "t_end": 246.0, "stability": 1.0, "delay_ms": 3}
+{"text": "how do", "is_final": false, "t_start": 249.7, "t_end": 251.0, "stability": 0.4, "delay_ms": 1}
+{"text": "how do you measure", "is_final": false, "t_start": 249.7, "t_end": 252.3, "stability": 0.6, "delay_ms": 2}
+{"text": "How do you measure brand awareness today?", "is_final": true, "t_start": 249.7, "t_end": 254.0, "stability": 1.0, "delay_ms": 1}
+{"text": "our target audience", "is_final": false, "t_start": 257.7, "t_end": 259.1, "stability": 0.5, "delay_ms": 3}
+{"text": "our target audience is small business", "is_final": false, "t_start": 257.7, "t_end": 260.5, "stability": 0.8, "delay_ms": 2}
+{"text": "Our target audience is small business owners aged 30 to 55.", "is_final": true, "t_start": 257.7, "t_end": 262.4, "stability": 1.0, "delay_ms": 3}
+{"text": "our target audience", "is_final": false, "t_start": 265.6, "t_end": 267.2, "stability": 0.7, "delay_ms": 1}
+{"text": "our target audience is small business", "is_final": false, "t_start": 265.6, "t_end": 268.9, "stability": 0.8, "delay_ms": 1}
+{"text": "Our target audience is small business owners aged 30 to 55.", "is_final": true, "t_start": 265.6, "t_end": 271.1, "stability": 1.0, "delay_ms": 1}
+{"text": "can you", "is_final": false, "t_start": 274.3, "t_end": 275.9, "stability": 0.7, "delay_ms": 1}
+{"text": "can you describe your", "is_final": false, "t_start": 274.3, "t_end": 277.4, "stability": 0.7, "delay_ms": 3}
+{"text": "Can you describe your ideal customer journey?", "is_final": true, "t_start": 274.3, "t_end": 279.5, "stability": 1.0, "delay_ms": 1}
+{"text": "we do quarterly", "is_final": false, "t_start": 281.6, "t_end": 282.5, "stability": 0.6, "delay_ms": 2}
+{"text": "we do quarterly nps surveys and", "is_final": false, "t_start": 281.6, "t_end": 283.3, "stability": 0.7, "delay_ms": 1}
+{"text": "We do quarterly NPS surveys and weekly support ticket analysis.", "is_final": true, "t_start": 281.6, "t_end": 284.5, "stability": 1.0, "delay_ms": 1}
+{"text": "what channels", "is_final": false, "t_start": 285.6, "t_end": 286.5, "stability": 0.4, "delay_ms": 2}
+{"text": "what channels do you", "is_final": false, "t_start": 285.6, "t_end": 287.5, "stability": 0.7, "delay_ms": 3}
+{"text": "What channels do you use for customer acquisition?", "is_final": true, "t_start": 285.6, "t_end": 288.7, "stability": 1.0, "delay_ms": 2}
+{"text": "what channels", "is_final": false, "t_start": 291.7, "t_end": 293.4, "stability": 0.4, "delay_ms": 2}
+{"text": "what channels do you", "is_final": false, "t_start": 291.7, "t_end": 295.2, "stability": 0.6, "delay_ms": 2}
+{"text": "What channels do you use for customer acquisition?", "is_final": true, "t_start": 291.7, "t_end": 297.5, "stability": 1.0, "delay_ms": 1}
+{"text": "how", "is_final": false, "t_start": 298.8, "t_end": 300.3, "stability": 0.5, "delay_ms": 3}
+{"text": "how do you", "is_final": false, "t_start": 298.8, "t_end": 301.9, "stability": 0.6, "delay_ms": 3}
+{"text": "How do you onboard new customers?", "is_final": true, "t_start": 298.8, "t_end": 304.0, "stability": 1.0, "delay_ms": 1}
+{"text": "tell me", "is_final": false, "t_start": 305.8, "t_end": 307.0, "stability": 0.6, "delay_ms": 3}
+{"text": "tell me more about", "is_final": false, "t_start": 305.8, "t_end": 308.2, "stability": 0.7, "delay_ms": 3}
+{"text": "Tell me more about your company background.", "is_final": true, "t_start": 305.8, "t_end": 309.8, "stability": 1.0, "delay_ms": 3}
+{"text": "we currently", "is_final": false, "t_start": 312.8, "t_end": 314.5, "stability": 0.7, "delay_ms": 3}
+{"text": "we currently serve about", "is_final": false, "t_start": 312.8, "t_end": 316.3, "stability": 0.7, "delay_ms": 1}
+{"text": "We currently serve about three thousand active customers.", "is_final": true, "t_start": 312.8, "t_end": 318.6, "stability": 1.0, "delay_ms": 3}
+{"text": "our average deal", "is_final": false, "t_start": 322.3, "t_end": 323.4, "stability": 0.5, "delay_ms": 2}
+{"text": "our average deal size is about", "is_final": false, "t_start": 322.3, "t_end": 324.5, "stability": 0.7, "delay_ms": 1}
+{"text": "Our average deal size is about five hundred dollars annually.", "is_final": true, "t_start": 322.3, "t_end": 325.9, "stability": 1.0, "delay_ms": 2}
+{"text": "how", "is_final": false, "t_start": 328.9, "t_end": 330.6, "stability": 0.6, "delay_ms": 2}
+{"text": "how do you", "is_final": false, "t_start": 328.9, "t_end": 332.3, "stability": 0.7, "delay_ms": 1}
+{"text": "How do you onboard new customers?", "is_final": true, "t_start": 328.9, "t_end": 334.5, "stability": 1.0, "delay_ms": 2}
+{"text": "where do", "is_final": false, "t_start": 336.4, "t_end": 337.7, "stability": 0.5, "delay_ms": 2}
+{"text": "where do you see the", "is_final": false, "t_start": 336.4, "t_end": 339.1, "stability": 0.7, "delay_ms": 1}
+{"text": "Where do you see the brand in five years?", "is_final": true, "t_start": 336.4, "t_end": 340.8, "stability": 1.0, "delay_ms": 3}
+{"text": "how", "is_final": false, "t_start": 343.2, "t_end": 344.0, "stability": 0.4, "delay_ms": 3}
+{"text": "how do you", "is_final": false, "t_start": 343.2, "t_end": 344.8, "stability": 0.7, "delay_ms": 3}
+{"text": "How do you onboard new customers?", "is_final": true, "t_start": 343.2, "t_end": 345.9, "stability": 1.0, "delay_ms": 2}
+{"text": "how do", "is_final": false, "t_start": 347.2, "t_end": 348.6, "stability": 0.5, "delay_ms": 1}
+{"text": "how do customers typically", "is_final": false, "t_start": 347.2, "t_end": 350.0, "stability": 0.6, "delay_ms": 1}
+{"text": "How do customers typically discover your brand?", "is_final": true, "t_start": 347.2, "t_end": 351.9, "stability": 1.0, "delay_ms": 1}
+{"text": "what does", "is_final": false, "t_start": 355.9, "t_end": 356.6, "stability": 0.5, "delay_ms": 3}
+{"text": "what does your sales", "is_final": false, "t_start": 355.9, "t_end": 357.3, "stability": 0.7, "delay_ms": 3}
+{"text": "What does your sales funnel look like?", "is_final": true, "t_start": 355.9, "t_end": 358.1, "stability": 1.0, "delay_ms": 3}
+{"text": "the brand", "is_final": false, "t_start": 360.3, "t_end": 361.7, "stability": 0.4, "delay_ms": 1}
+{"text": "the brand personality is", "is_final": false, "t_start": 360.3, "t_end": 363.1, "stability": 0.8, "delay_ms": 1}
+{"text": "The brand personality is modern, approachable, and trustworthy.", "is_final": true, "t_start": 360.3, "t_end": 364.9, "stability": 1.0, "delay_ms": 1}
+{"text": "instagram and", "is_final": false, "t_start": 368.3, "t_end": 369.0, "stability": 0.5, "delay_ms": 1}
+{"text": "instagram and linkedin are", "is_final": false, "t_start": 368.3, "t_end": 369.6, "stability": 0.7, "delay_ms": 2}
+{"text": "Instagram and LinkedIn are our most effective channels.", "is_final": true, "t_start": 368.3, "t_end": 370.5, "stability": 1.0, "delay_ms": 3}
+{"text": "we differentiate", "is_final": false, "t_start": 373.1, "t_end": 374.8, "stability": 0.7, "delay_ms": 3}
+{"text": "we differentiate by offering personalized", "is_final": false, "t_start": 373.1, "t_end": 376.6, "stability": 0.8, "delay_ms": 3}
+{"text": "We differentiate by offering personalized onboarding for every client.", "is_final": true, "t_start": 373.1, "t_end": 378.9, "stability": 1.0, "delay_ms": 2}
+{"text": "we price competitively", "is_final": false, "t_start": 382.4, "t_end": 383.9, "stability": 0.5, "delay_ms": 2}
+{"text": "we price competitively at forty-nine dollars per", "is_final": false, "t_start": 382.4, "t_end": 385.4, "stability": 0.8, "delay_ms": 3}
+{"text": "We price competitively at forty-nine dollars per month for the base plan.", "is_final": true, "t_start": 382.4, "t_end": 387.4, "stability": 1.0, "delay_ms": 2}
+{"text": "we recently", "is_final": false, "t_start": 390.7, "t_end": 391.6, "stability": 0.5, "delay_ms": 3}
+{"text": "we recently expanded into", "is_final": false, "t_start": 390.7, "t_end": 392.5, "stability": 0.7, "delay_ms": 2}
+{"text": "We recently expanded into three new regional markets.", "is_final": true, "t_start": 390.7, "t_end": 393.7, "stability": 1.0, "delay_ms": 2}
+{"text": "the brand", "is_final": false, "t_start": 395.7, "t_end": 396.5, "stability": 0.5, "delay_ms": 1}
+{"text": "the brand personality is", "is_final": false, "t_start": 395.7, "t_end": 397.3, "stability": 0.7, "delay_ms": 1}
+{"text": "The brand personality is modern, approachable, and trustworthy.", "is_final": true, "t_start": 395.7, "t_end": 398.3, "stability": 1.0, "delay_ms": 2}
+{"text": "in five years", "is_final": false, "t_start": 400.5, "t_end": 401.2, "stability": 0.6, "delay_ms": 2}
+{"text": "in five years we want to be", "is_final": false, "t_start": 400.5, "t_end": 401.8, "stability": 0.8, "delay_ms": 3}
+{"text": "In five years we want to be the leading platform in our vertical.", "is_final": true, "t_start": 400.5, "t_end": 402.8, "stability": 1.0, "delay_ms": 3}
+{"text": "we launched a", "is_final": false, "t_start": 403.9, "t_end": 405.0, "stability": 0.4, "delay_ms": 2}
+{"text": "we launched a referral program that drives", "is_final": false, "t_start": 403.9, "t_end": 406.0, "stability": 0.7, "delay_ms": 2}
+{"text": "We launched a referral program that drives thirty percent of new signups.", "is_final": true, "t_start": 403.9, "t_end": 407.4, "stability": 1.0, "delay_ms": 2}
+{"text": "the biggest", "is_final": false, "t_start": 410.0, "t_end": 411.7, "stability": 0.5, "delay_ms": 2}
+{"text": "the biggest challenge is scaling", "is_final": false, "t_start": 410.0, "t_end": 413.4, "stability": 0.7, "delay_ms": 1}
+{"text": "The biggest challenge is scaling support while maintaining quality.", "is_final": true, "t_start": 410.0, "t_end": 415.6, "stability": 1.0, "delay_ms": 2}
+{"text": "we value", "is_final": false, "t_start": 417.6, "t_end": 419.1, "stability": 0.7, "delay_ms": 1}
+{"text": "we value transparency, innovation, and", "is_final": false, "t_start": 417.6, "t_end": 420.5, "stability": 0.8, "delay_ms": 3}
+{"text": "We value transparency, innovation, and customer success above all.", "is_final": true, "t_start": 417.6, "t_end": 422.5, "stability": 1.0, "delay_ms": 1}
+{"text": "our average deal", "is_final": false, "t_start": 426.2, "t_end": 426.8, "stability": 0.6, "delay_ms": 1}
+{"text": "our average deal size is about", "is_final": false, "t_start": 426.2, "t_end": 427.5, "stability": 0.8, "delay_ms": 1}
+{"text": "Our average deal size is about five hundred dollars annually.", "is_final": true, "t_start": 426.2, "t_end": 428.3, "stability": 1.0, "delay_ms": 1}
+{"text": "what are", "is_final": false, "t_start": 430.1, "t_end": 431.1, "stability": 0.6, "delay_ms": 2}
+{"text": "what are the biggest", "is_final": false, "t_start": 430.1, "t_end": 432.1, "stability": 0.7, "delay_ms": 2}
+{"text": "What are the biggest challenges your brand faces?", "is_final": true, "t_start": 430.1, "t_end": 433.4, "stability": 1.0, "delay_ms": 2}
+{"text": "how", "is_final": false, "t_start": 436.9, "t_end": 438.1, "stability": 0.7, "delay_ms": 2}
+{"text": "how do you", "is_final": false, "t_start": 436.9, "t_end": 439.4, "stability": 0.6, "delay_ms": 1}
+{"text": "How do you onboard new customers?", "is_final": true, "t_start": 436.9, "t_end": 441.1, "stability": 1.0, "delay_ms": 3}
+{"text": "our target audience", "is_final": false, "t_start": 442.2, "t_end": 443.0, "stability": 0.4, "delay_ms": 1}
+{"text": "our target audience is small business", "is_final": false, "t_start": 442.2, "t_end": 443.9, "stability": 0.6, "delay_ms": 2}
+{"text": "Our target audience is small business owners aged 30 to 55.", "is_final": true, "t_start": 442.2, "t_end": 445.0, "stability": 1.0, "delay_ms": 3}
+{"text": "instagram and", "is_final": false, "t_start": 446.3, "t_end": 447.7, "stability": 0.6, "delay_ms": 1}
+{"text": "instagram and linkedin are", "is_final": false, "t_start": 446.3, "t_end": 449.2, "stability": 0.7, "delay_ms": 3}
+{"text": "Instagram and LinkedIn are our most effective channels.", "is_final": true, "t_start": 446.3, "t_end": 451.1, "stability": 1.0, "delay_ms": 3}
+{"text": "the team is", "is_final": false, "t_start": 452.4, "t_end": 453.1, "stability": 0.4, "delay_ms": 2}
+{"text": "the team is twenty people across", "is_final": false, "t_start": 452.4, "t_end": 453.9, "stability": 0.7, "delay_ms": 2}
+{"text": "The team is twenty people across engineering, sales, and support.", "is_final": true, "t_start": 452.4, "t_end": 454.9, "stability": 1.0, "delay_ms": 2}
+{"text": "where do", "is_final": false, "t_start": 458.7, "t_end": 460.1, "stability": 0.6, "delay_ms": 1}
+{"text": "where do you see the", "is_final": false, "t_start": 458.7, "t_end": 461.6, "stability": 0.7, "delay_ms": 2}
+{"text": "Where do you see the brand in five years?", "is_final": true, "t_start": 458.7, "t_end": 463.5, "stability": 1.0, "delay_ms": 3}
+{"text": "we launched a", "is_final": false, "t_start": 466.3, "t_end": 467.8, "stability": 0.5, "delay_ms": 2}
+{"text": "we launched a referral program that drives", "is_final": false, "t_start": 466.3, "t_end": 469.4, "stability": 0.7, "delay_ms": 1}
+{"text": "We launched a referral program that drives thirty percent of new signups.", "is_final": true, "t_start": 466.3, "t_end": 471.4, "stability": 1.0, "delay_ms": 3}
+{"text": "can you", "is_final": false, "t_start": 474.3, "t_end": 475.9, "stability": 0.4, "delay_ms": 2}
+{"text": "can you describe your", "is_final": false, "t_start": 474.3, "t_end": 477.5, "stability": 0.7, "delay_ms": 2}
+{"text": "Can you describe your ideal customer journey?", "is_final": true, "t_start": 474.3, "t_end": 479.6, "stability": 1.0, "delay_ms": 3}
+{"text": "customer acquisition", "is_final": false, "t_start": 481.1, "t_end": 482.9, "stability": 0.5, "delay_ms": 3}
+{"text": "customer acquisition cost is around", "is_final": false, "t_start": 481.1, "t_end": 484.6, "stability": 0.8, "delay_ms": 2}
+{"text": "Customer acquisition cost is around one hundred twenty dollars.", "is_final": true, "t_start": 481.1, "t_end": 486.9, "stability": 1.0, "delay_ms": 2}
+{"text": "we differentiate", "is_final": false, "t_start": 490.4, "t_end": 492.0, "stability": 0.6, "delay_ms": 1}
+{"text": "we differentiate by offering personalized", "is_final": false, "t_start": 490.4, "t_end": 493.6, "stability": 0.7, "delay_ms": 2}
+{"text": "We differentiate by offering personalized onboarding for every client.", "is_final": true, "t_start": 490.4, "t_end": 495.8, "stability": 1.0, "delay_ms": 1}
+{"text": "our average deal", "is_final": false, "t_start": 499.1, "t_end": 500.2, "stability": 0.4, "delay_ms": 2}
+{"text": "our average deal size is about", "is_final": false, "t_start": 499.1, "t_end": 501.2, "stability": 0.6, "delay_ms": 1}
+{"text": "Our average deal size is about five hundred dollars annually.", "is_final": true, "t_start": 499.1, "t_end": 502.6, "stability": 1.0, "delay_ms": 2}
+{"text": "what social", "is_final": false, "t_start": 506.0, "t_end": 507.4, "stability": 0.5, "delay_ms": 1}
+{"text": "what social media platforms are", "is_final": false, "t_start": 506.0, "t_end": 508.9, "stability": 0.7, "delay_ms": 1}
+{"text": "What social media platforms are most effective for you?", "is_final": true, "t_start": 506.0, "t_end": 510.8, "stability": 1.0, "delay_ms": 1}
+{"text": "tell", "is_final": false, "t_start": 512.5, "t_end": 514.0, "stability": 0.6, "delay_ms": 3}
+{"text": "tell me about", "is_final": false, "t_start": 512.5, "t_end": 515.5, "stability": 0.7, "delay_ms": 2}
+{"text": "Tell me about your company values.", "is_final": true, "t_start": 512.5, "t_end": 517.6, "stability": 1.0, "delay_ms": 1}
+{"text": "we use a", "is_final": false, "t_start": 518.9, "t_end": 519.8, "stability": 0.6, "delay_ms": 2}
+{"text": "we use a combination of content", "is_final": false, "t_start": 518.9, "t_end": 520.7, "stability": 0.7, "delay_ms": 3}
+{"text": "We use a combination of content marketing and paid search.", "is_final": true, "t_start": 518.9, "t_end": 521.9, "stability": 1.0, "delay_ms": 2}
+{"text": "we differentiate", "is_final": false, "t_start": 524.2, "t_end": 525.2, "stability": 0.5, "delay_ms": 2}
+{"text": "we differentiate by offering personalized", "is_final": false, "t_start": 524.2, "t_end": 526.2, "stability": 0.7, "delay_ms": 1}
+{"text": "We differentiate by offering personalized onboarding for every client.", "is_final": true, "t_start": 524.2, "t_end": 527.6, "stability": 1.0, "delay_ms": 3}
+{"text": "tell", "is_final": false, "t_start": 529.2, "t_end": 530.9, "stability": 0.6, "delay_ms": 1}
+{"text": "tell me about", "is_final": false, "t_start": 529.2, "t_end": 532.7, "stability": 0.6, "delay_ms": 2}
+{"text": "Tell me about your company values.", "is_final": true, "t_start": 529.2, "t_end": 535.0, "stability": 1.0, "delay_ms": 2}
+{"text": "what", "is_final": false, "t_start": 538.2, "t_end": 539.5, "stability": 0.7, "delay_ms": 1}
+{"text": "what is your", "is_final": false, "t_start": 538.2, "t_end": 540.8, "stability": 0.7, "delay_ms": 2}
+{"text": "What is your brand mission statement?", "is_final": true, "t_start": 538.2, "t_end": 542.6, "stability": 1.0, "delay_ms": 1}
+{"text": "what makes", "is_final": false, "t_start": 544.5, "t_end": 545.4, "stability": 0.7, "delay_ms": 3}
+{"text": "what makes your product", "is_final": false, "t_start": 544.5, "t_end": 546.4, "stability": 0.7, "delay_ms": 1}
+{"text": "What makes your product unique compared to alternatives?", "is_final": true, "t_start": 544.5, "t_end": 547.6, "stability": 1.0, "delay_ms": 3}
+{"text": "tell me", "is_final": false, "t_start": 551.2, "t_end": 552.5, "stability": 0.5, "delay_ms": 2}
+{"text": "tell me more about", "is_final": false, "t_start": 551.2, "t_end": 553.8, "stability": 0.7, "delay_ms": 1}
+{"text": "Tell me more about your company background.", "is_final": true, "t_start": 551.2, "t_end": 555.5, "stability": 1.0, "delay_ms": 2}
+{"text": "who are", "is_final": false, "t_start": 559.3, "t_end": 560.4, "stability": 0.4, "delay_ms": 3}
+{"text": "who are your primary", "is_final": false, "t_start": 559.3, "t_end": 561.5, "stability": 0.7, "delay_ms": 1}
+{"text": "Who are your primary competitors in this space?", "is_final": true, "t_start": 559.3, "t_end": 562.9, "stability": 1.0, "delay_ms": 1}
+{"text": "who are", "is_final": false, "t_start": 566.3, "t_end": 568.1, "stability": 0.4, "delay_ms": 2}
+{"text": "who are your primary", "is_final": false, "t_start": 566.3, "t_end": 569.9, "stability": 0.7, "delay_ms": 3}
+{"text": "Who are your primary competitors in this space?", "is_final": true, "t_start": 566.3, "t_end": 572.3, "stability": 1.0, "delay_ms": 1}
+{"text": "instagram and", "is_final": false, "t_start": 575.6, "t_end": 576.6, "stability": 0.6, "delay_ms": 2}
+{"text": "instagram and linkedin are", "is_final": false, "t_start": 575.6, "t_end": 577.5, "stability": 0.7, "delay_ms": 3}
+{"text": "Instagram and LinkedIn are our most effective channels.", "is_final": true, "t_start": 575.6, "t_end": 578.8, "stability": 1.0, "delay_ms": 1}
+{"text": "we have", "is_final": false, "t_start": 581.6, "t_end": 582.4, "stability": 0.5, "delay_ms": 3}
+{"text": "we have partnerships with", "is_final": false, "t_start": 581.6, "t_end": 583.3, "stability": 0.6, "delay_ms": 1}
+{"text": "We have partnerships with several industry associations.", "is_final": true, "t_start": 581.6, "t_end": 584.5, "stability": 1.0, "delay_ms": 1}
+{"text": "can you", "is_final": false, "t_start": 587.2, "t_end": 588.3, "stability": 0.6, "delay_ms": 2}
+{"text": "can you describe your", "is_final": false, "t_start": 587.2, "t_end": 589.5, "stability": 0.6, "delay_ms": 2}
+{"text": "Can you describe your ideal customer journey?", "is_final": true, "t_start": 587.2, "t_end": 591.0, "stability": 1.0, "delay_ms": 3}
+{"text": "who are", "is_final": false, "t_start": 592.8, "t_end": 594.2, "stability": 0.7, "delay_ms": 3}
+{"text": "who are your primary", "is_final": false, "t_start": 592.8, "t_end": 595.6, "stability": 0.7, "delay_ms": 1}
+{"text": "Who are your primary competitors in this space?", "is_final": true, "t_start": 592.8, "t_end": 597.6, "stability": 1.0, "delay_ms": 2}
+{"text": "the brand", "is_final": false, "t_start": 598.9, "t_end": 600.6, "stability": 0.6, "delay_ms": 1}
+{"text": "the brand personality is", "is_final": false, "t_start": 598.9, "t_end": 602.3, "stability": 0.6, "delay_ms": 2}
+{"text": "The brand personality is modern, approachable, and trustworthy.", "is_final": true, "t_start": 598.9, "t_end": 604.6, "stability": 1.0, "delay_ms": 3}
+{"text": "the team is", "is_final": false, "t_start": 607.8, "t_end": 608.9, "stability": 0.5, "delay_ms": 2}
+{"text": "the team is twenty people across", "is_final": false, "t_start": 607.8, "t_end": 610.1, "stability": 0.7, "delay_ms": 2}
+{"text": "The team is twenty people across engineering, sales, and support.", "is_final": true, "t_start": 607.8, "t_end": 611.6, "stability": 1.0, "delay_ms": 3}
+{"text": "the biggest", "is_final": false, "t_start": 614.2, "t_end": 614.8, "stability": 0.5, "delay_ms": 2}
+{"text": "the biggest challenge is scaling", "is_final": false, "t_start": 614.2, "t_end": 615.5, "stability": 0.7, "delay_ms": 1}
+{"text": "The biggest challenge is scaling support while maintaining quality.", "is_final": true, "t_start": 614.2, "t_end": 616.4, "stability": 1.0, "delay_ms": 1}
+{"text": "we launched a", "is_final": false, "t_start": 618.1, "t_end": 619.4, "stability": 0.4, "delay_ms": 3}
+{"text": "we launched a referral program that drives", "is_final": false, "t_start": 618.1, "t_end": 620.7, "stability": 0.8, "delay_ms": 3}
+{"text": "We launched a referral program that drives thirty percent of new signups.", "is_final": true, "t_start": 618.1, "t_end": 622.4, "stability": 1.0, "delay_ms": 1}
+{"text": "what", "is_final": false, "t_start": 625.7, "t_end": 627.1, "stability": 0.7, "delay_ms": 1}
+{"text": "what is your", "is_final": false, "t_start": 625.7, "t_end": 628.5, "stability": 0.8, "delay_ms": 2}
+{"text": "What is your brand mission statement?", "is_final": true, "t_start": 625.7, "t_end": 630.3, "stability": 1.0, "delay_ms": 3}
+{"text": "how do", "is_final": false, "t_start": 633.7, "t_end": 634.7, "stability": 0.5, "delay_ms": 3}
+{"text": "how do you differentiate", "is_final": false, "t_start": 633.7, "t_end": 635.7, "stability": 0.6, "delay_ms": 1}
+{"text": "How do you differentiate from your closest competitor?", "is_final": true, "t_start": 633.7, "t_end": 637.1, "stability": 1.0, "delay_ms": 2}
+{"text": "what is", "is_final": false, "t_start": 639.3, "t_end": 641.0, "stability": 0.6, "delay_ms": 3}
+{"text": "what is your current", "is_final": false, "t_start": 639.3, "t_end": 642.8, "stability": 0.6, "delay_ms": 1}
+{"text": "What is your current monthly marketing budget?", "is_final": true, "t_start": 639.3, "t_end": 645.1, "stability": 1.0, "delay_ms": 2}
+{"text": "we have", "is_final": false, "t_start": 646.9, "t_end": 648.0, "stability": 0.6, "delay_ms": 1}
+{"text": "we have partnerships with", "is_final": false, "t_start": 646.9, "t_end": 649.1, "stability": 0.7, "delay_ms": 3}
+{"text": "We have partnerships with several industry associations.", "is_final": true, "t_start": 646.9, "t_end": 650.5, "stability": 1.0, "delay_ms": 2}
+{"text": "how do", "is_final": false, "t_start": 652.7, "t_end": 654.0, "stability": 0.5, "delay_ms": 2}
+{"text": "how do you measure", "is_final": false, "t_start": 652.7, "t_end": 655.4, "stability": 0.8, "delay_ms": 1}
+{"text": "How do you measure brand awareness today?", "is_final": true, "t_start": 652.7, "t_end": 657.2, "stability": 1.0, "delay_ms": 2}
+{"text": "what are", "is_final": false, "t_start": 659.8, "t_end": 661.5, "stability": 0.5, "delay_ms": 1}
+{"text": "what are the biggest", "is_final": false, "t_start": 659.8, "t_end": 663.1, "stability": 0.8, "delay_ms": 3}
+{"text": "What are the biggest challenges your brand faces?", "is_final": true, "t_start": 659.8, "t_end": 665.4, "stability": 1.0, "delay_ms": 1}
+{"text": "we were founded", "is_final": false, "t_start": 668.5, "t_end": 669.8, "stability": 0.4, "delay_ms": 1}
+{"text": "we were founded in 2018 by", "is_final": false, "t_start": 668.5, "t_end": 671.0, "stability": 0.7, "delay_ms": 1}
+{"text": "We were founded in 2018 by two former tech executives.", "is_final": true, "t_start": 668.5, "t_end": 672.7, "stability": 1.0, "delay_ms": 3}
+{"text": "we use a", "is_final": false, "t_start": 676.2, "t_end": 677.2, "stability": 0.6, "delay_ms": 2}
+{"text": "we use a combination of content", "is_final": false, "t_start": 676.2, "t_end": 678.1, "stability": 0.8, "delay_ms": 2}
+{"text": "We use a combination of content marketing and paid search.", "is_final": true, "t_start": 676.2, "t_end": 679.4, "stability": 1.0, "delay_ms": 1}
+{"text": "what", "is_final": false, "t_start": 681.8, "t_end": 683.5, "stability": 0.6, "delay_ms": 1}
+{"text": "what is your", "is_final": false, "t_start": 681.8, "t_end": 685.2, "stability": 0.8, "delay_ms": 2}
+{"text": "What is your current marketing strategy?", "is_final": true, "t_start": 681.8, "t_end": 687.5, "stability": 1.0, "delay_ms": 2}
+{"text": "what are your", "is_final": false, "t_start": 689.5, "t_end": 691.1, "stability": 0.5, "delay_ms": 2}
+{"text": "what are your top three business", "is_final": false, "t_start": 689.5, "t_end": 692.7, "stability": 0.8, "delay_ms": 3}
+{"text": "What are your top three business goals for the next year?", "is_final": true, "t_start": 689.5, "t_end": 694.8, "stability": 1.0, "delay_ms": 3}
+{"text": "our retention", "is_final": false, "t_start": 697.3, "t_end": 698.5, "stability": 0.5, "delay_ms": 3}
+{"text": "our retention rate is", "is_final": false, "t_start": 697.3, "t_end": 699.7, "stability": 0.7, "delay_ms": 2}
+{"text": "Our retention rate is about ninety-two percent annually.", "is_final": true, "t_start": 697.3, "t_end": 701.2, "stability": 1.0, "delay_ms": 1}
+{"text": "what does", "is_final": false, "t_start": 705.1, "t_end": 706.0, "stability": 0.6, "delay_ms": 1}
+{"text": "what does your competitive", "is_final": false, "t_start": 705.1, "t_end": 706.9, "stability": 0.7, "delay_ms": 2}
+{"text": "What does your competitive landscape look like?", "is_final": true, "t_start": 705.1, "t_end": 708.1, "stability": 1.0, "delay_ms": 3}
+{"text": "our average deal", "is_final": false, "t_start": 711.8, "t_end": 713.4, "stability": 0.6, "delay_ms": 1}
+{"text": "our average deal size is about", "is_final": false, "t_start": 711.8, "t_end": 714.9, "stability": 0.7, "delay_ms": 1}
+{"text": "Our average deal size is about five hundred dollars annually.", "is_final": true, "t_start": 711.8, "t_end": 717.0, "stability": 1.0, "delay_ms": 1}
+{"text": "our biggest competitor", "is_final": false, "t_start": 719.5, "t_end": 721.1, "stability": 0.5, "delay_ms": 3}
+{"text": "our biggest competitor is acme corp, but", "is_final": false, "t_start": 719.5, "t_end": 722.8, "stability": 0.8, "delay_ms": 1}
+{"text": "Our biggest competitor is Acme Corp, but we focus on a different niche.", "is_final": true, "t_start": 719.5, "t_end": 725.0, "stability": 1.0, "delay_ms": 3}
+{"text": "the brand", "is_final": false, "t_start": 726.4, "t_end": 727.1, "stability": 0.6, "delay_ms": 2}
+{"text": "the brand personality is", "is_final": false, "t_start": 726.4, "t_end": 727.8, "stability": 0.7, "delay_ms": 3}
+{"text": "The brand personality is modern, approachable, and trustworthy.", "is_final": true, "t_start": 726.4, "t_end": 728.7, "stability": 1.0, "delay_ms": 2}
+{"text": "our average deal", "is_final": false, "t_start": 731.6, "t_end": 733.2, "stability": 0.5, "delay_ms": 2}
+{"text": "our average deal size is about", "is_final": false, "t_start": 731.6, "t_end": 734.9, "stability": 0.7, "delay_ms": 2}
+{"text": "Our average deal size is about five hundred dollars annually.", "is_final": true, "t_start": 731.6, "t_end": 737.1, "stability": 1.0, "delay_ms": 3}
+{"text": "how", "is_final": false, "t_start": 738.2, "t_end": 739.6, "stability": 0.5, "delay_ms": 1}
+{"text": "how do you", "is_final": false, "t_start": 738.2, "t_end": 741.0, "stability": 0.7, "delay_ms": 2}
+{"text": "How do you handle customer feedback?", "is_final": true, "t_start": 738.2, "t_end": 742.9, "stability": 1.0, "delay_ms": 1}
+{"text": "how would", "is_final": false, "t_start": 746.2, "t_end": 747.3, "stability": 0.6, "delay_ms": 1}
+{"text": "how would you describe", "is_final": false, "t_start": 746.2, "t_end": 748.5, "stability": 0.6, "delay_ms": 1}
+{"text": "How would you describe your brand personality?", "is_final": true, "t_start": 746.2, "t_end": 750.0, "stability": 1.0, "delay_ms": 2}
+{"text": "how do", "is_final": false, "t_start": 752.1, "t_end": 753.3, "stability": 0.6, "delay_ms": 1}
+{"text": "how do customers typically", "is_final": false, "t_start": 752.1, "t_end": 754.6, "stability": 0.6, "delay_ms": 1}
+{"text": "How do customers typically discover your brand?", "is_final": true, "t_start": 752.1, "t_end": 756.2, "stability": 1.0, "delay_ms": 3}
+{"text": "how do", "is_final": false, "t_start": 759.8, "t_end": 761.0, "stability": 0.6, "delay_ms": 1}
+{"text": "how do customers typically", "is_final": false, "t_start": 759.8, "t_end": 762.2, "stability": 0.7, "delay_ms": 2}
+{"text": "How do customers typically discover your brand?", "is_final": true, "t_start": 759.8, "t_end": 763.8, "stability": 1.0, "delay_ms": 2}
+{"text": "instagram and", "is_final": false, "t_start": 765.6, "t_end": 767.3, "stability": 0.6, "delay_ms": 1}
+{"text": "instagram and linkedin are", "is_final": false, "t_start": 765.6, "t_end": 769.0, "stability": 0.6, "delay_ms": 2}
+{"text": "Instagram and LinkedIn are our most effective channels.", "is_final": true, "t_start": 765.6, "t_end": 771.2, "stability": 1.0, "delay_ms": 3}
+{"text": "we use a", "is_final": false, "t_start": 773.1, "t_end": 774.0, "stability": 0.7, "delay_ms": 1}
+{"text": "we use a combination of content", "is_final": false, "t_start": 773.1, "t_end": 774.9, "stability": 0.8, "delay_ms": 2}
+{"text": "We use a combination of content marketing and paid search.", "is_final": true, "t_start": 773.1, "t_end": 776.1, "stability": 1.0, "delay_ms": 1}
+{"text": "we launched a", "is_final": false, "t_start": 777.8, "t_end": 778.8, "stability": 0.6, "delay_ms": 1}
+{"text": "we launched a referral program that drives", "is_final": false, "t_start": 777.8, "t_end": 779.7, "stability": 0.8, "delay_ms": 3}
+{"text": "We launched a referral program that drives thirty percent of new signups.", "is_final": true, "t_start": 777.8, "t_end": 781.0, "stability": 1.0, "delay_ms": 2}
+{"text": "our average deal", "is_final": false, "t_start": 782.8, "t_end": 784.3, "stability": 0.7, "delay_ms": 3}
+{"text": "our average deal size is about", "is_final": false, "t_start": 782.8, "t_end": 785.9, "stability": 0.7, "delay_ms": 2}
+{"text": "Our average deal size is about five hundred dollars annually.", "is_final": true, "t_start": 782.8, "t_end": 787.9, "stability": 1.0, "delay_ms": 1}
+{"text": "how", "is_final": false, "t_start": 790.7, "t_end": 791.5, "stability": 0.5, "delay_ms": 3}
+{"text": "how do you", "is_final": false, "t_start": 790.7, "t_end": 792.4, "stability": 0.8, "delay_ms": 3}
+{"text": "How do you handle customer feedback?", "is_final": true, "t_start": 790.7, "t_end": 793.5, "stability": 1.0, "delay_ms": 1}
+{"text": "how", "is_final": false, "t_start": 796.4, "t_end": 797.0, "stability": 0.6, "delay_ms": 1}
+{"text": "how do you", "is_final": false, "t_start": 796.4, "t_end": 797.7, "stability": 0.7, "delay_ms": 3}
+{"text": "How do you handle customer feedback?", "is_final": true, "t_start": 796.4, "t_end": 798.5, "stability": 1.0, "delay_ms": 1}
+{"text": "our customer", "is_final": false, "t_start": 799.8, "t_end": 800.9, "stability": 0.5, "delay_ms": 3}
+{"text": "our customer lifetime value is", "is_final": false, "t_start": 799.8, "t_end": 802.0, "stability": 0.8, "delay_ms": 2}
+{"text": "Our customer lifetime value is roughly two thousand dollars.", "is_final": true, "t_start": 799.8, "t_end": 803.4, "stability": 1.0, "delay_ms": 3}
+{"text": "can you", "is_final": false, "t_start": 805.9, "t_end": 806.8, "stability": 0.6, "delay_ms": 2}
+{"text": "can you walk me through", "is_final": false, "t_start": 805.9, "t_end": 807.7, "stability": 0.8, "delay_ms": 2}
+{"text": "Can you walk me through your target customer profile?", "is_final": true, "t_start": 805.9, "t_end": 808.9, "stability": 1.0, "delay_ms": 3}
+{"text": "what are", "is_final": false, "t_start": 812.5, "t_end": 814.3, "stability": 0.4, "delay_ms": 1}
+{"text": "what are the biggest", "is_final": false, "t_start": 812.5, "t_end": 816.0, "stability": 0.8, "delay_ms": 3}
+{"text": "What are the biggest challenges your brand faces?", "is_final": true, "t_start": 812.5, "t_end": 818.4, "stability": 1.0, "delay_ms": 3}
+{"text": "tell", "is_final": false, "t_start": 822.3, "t_end": 823.3, "stability": 0.6, "delay_ms": 1}
+{"text": "tell me about", "is_final": false, "t_start": 822.3, "t_end": 824.4, "stability": 0.7, "delay_ms": 1}
+{"text": "Tell me about your company values.", "is_final": true, "t_start": 822.3, "t_end": 825.8, "stability": 1.0, "delay_ms": 2}
+{"text": "what are your", "is_final": false, "t_start": 827.9, "t_end": 829.2, "stability": 0.6, "delay_ms": 2}
+{"text": "what are your top three business", "is_final": false, "t_start": 827.9, "t_end": 830.5, "stability": 0.6, "delay_ms": 1}
+{"text": "What are your top three business goals for the next year?", "is_final": true, "t_start": 827.9, "t_end": 832.2, "stability": 1.0, "delay_ms": 2}
+{"text": "tell", "is_final": false, "t_start": 833.3, "t_end": 834.3, "stability": 0.6, "delay_ms": 3}
+{"text": "tell me about", "is_final": false, "t_start": 833.3, "t_end": 835.3, "stability": 0.6, "delay_ms": 2}
+{"text": "Tell me about your company values.", "is_final": true, "t_start": 833.3, "t_end": 836.6, "stability": 1.0, "delay_ms": 3}
+{"text": "what makes", "is_final": false, "t_start": 838.5, "t_end": 839.2, "stability": 0.4, "delay_ms": 2}
+{"text": "what makes your product", "is_final": false, "t_start": 838.5, "t_end": 839.8, "stability": 0.6, "delay_ms": 1}
+{"text": "What makes your product unique compared to alternatives?", "is_final": true, "t_start": 838.5, "t_end": 840.7, "stability": 1.0, "delay_ms": 3}
+{"text": "what is", "is_final": false, "t_start": 842.1, "t_end": 843.8, "stability": 0.6, "delay_ms": 3}
+{"text": "what is your current", "is_final": false, "t_start": 842.1, "t_end": 845.6, "stability": 0.7, "delay_ms": 3}
+{"text": "What is your current monthly marketing budget?", "is_final": true, "t_start": 842.1, "t_end": 847.9, "stability": 1.0, "delay_ms": 3}
+{"text": "how would", "is_final": false, "t_start": 849.4, "t_end": 851.0, "stability": 0.6, "delay_ms": 2}
+{"text": "how would you describe", "is_final": false, "t_start": 849.4, "t_end": 852.6, "stability": 0.6, "delay_ms": 2}
+{"text": "How would you describe your brand personality?", "is_final": true, "t_start": 849.4, "t_end": 854.7, "stability": 1.0, "delay_ms": 1}
+{"text": "how do", "is_final": false, "t_start": 857.0, "t_end": 857.7, "stability": 0.6, "delay_ms": 3}
+{"text": "how do you measure", "is_final": false, "t_start": 857.0, "t_end": 858.4, "stability": 0.8, "delay_ms": 3}
+{"text": "How do you measure brand awareness today?", "is_final": true, "t_start": 857.0, "t_end": 859.4, "stability": 1.0, "delay_ms": 2}
+{"text": "our biggest competitor", "is_final": false, "t_start": 860.6, "t_end": 862.3, "stability": 0.6, "delay_ms": 1}
+{"text": "our biggest competitor is acme corp, but", "is_final": false, "t_start": 860.6, "t_end": 864.1, "stability": 0.7, "delay_ms": 3}
+{"text": "Our biggest competitor is Acme Corp, but we focus on a different niche.", "is_final": true, "t_start": 860.6, "t_end": 866.4, "stability": 1.0, "delay_ms": 3}
+{"text": "what channels", "is_final": false, "t_start": 869.2, "t_end": 870.1, "stability": 0.4, "delay_ms": 3}
+{"text": "what channels do you", "is_final": false, "t_start": 869.2, "t_end": 871.0, "stability": 0.6, "delay_ms": 3}
+{"text": "What channels do you use for customer acquisition?", "is_final": true, "t_start": 869.2, "t_end": 872.2, "stability": 1.0, "delay_ms": 1}
+{"text": "how do", "is_final": false, "t_start": 875.0, "t_end": 876.0, "stability": 0.4, "delay_ms": 3}
+{"text": "how do customers typically", "is_final": false, "t_start": 875.0, "t_end": 877.0, "stability": 0.6, "delay_ms": 1}
+{"text": "How do customers typically discover your brand?", "is_final": true, "t_start": 875.0, "t_end": 878.3, "stability": 1.0, "delay_ms": 1}
+{"text": "how would", "is_final": false, "t_start": 880.9, "t_end": 882.3, "stability": 0.4, "delay_ms": 1}
+{"text": "how would you describe", "is_final": false, "t_start": 880.9, "t_end": 883.7, "stability": 0.7, "delay_ms": 1}
+{"text": "How would you describe your brand personality?", "is_final": true, "t_start": 880.9, "t_end": 885.6, "stability": 1.0, "delay_ms": 3}
+{"text": "our main product", "is_final": false, "t_start": 887.6, "t_end": 888.4, "stability": 0.5, "delay_ms": 1}
+{"text": "our main product is a saas", "is_final": false, "t_start": 887.6, "t_end": 889.1, "stability": 0.7, "delay_ms": 2}
+{"text": "Our main product is a SaaS platform for small businesses.", "is_final": true, "t_start": 887.6, "t_end": 890.1, "stability": 1.0, "delay_ms": 2}
+{"text": "our biggest competitor", "is_final": false, "t_start": 893.4, "t_end": 894.5, "stability": 0.5, "delay_ms": 3}
+{"text": "our biggest competitor is acme corp, but", "is_final": false, "t_start": 893.4, "t_end": 895.7, "stability": 0.6, "delay_ms": 3}
+{"text": "Our biggest competitor is Acme Corp, but we focus on a different niche.", "is_final": true, "t_start": 893.4, "t_end": 897.2, "stability": 1.0, "delay_ms": 3}
+{"text": "we were founded", "is_final": false, "t_start": 899.1, "t_end": 899.8, "stability": 0.5, "delay_ms": 2}
+{"text": "we were founded in 2018 by", "is_final": false, "t_start": 899.1, "t_end": 900.4, "stability": 0.7, "delay_ms": 1}
+{"text": "We were founded in 2018 by two former tech executives.", "is_final": true, "t_start": 899.1, "t_end": 901.3, "stability": 1.0, "delay_ms": 2}
+{"text": "we currently", "is_final": false, "t_start": 904.4, "t_end": 905.4, "stability": 0.4, "delay_ms": 1}
+{"text": "we currently serve about", "is_final": false, "t_start": 904.4, "t_end": 906.4, "stability": 0.7, "delay_ms": 3}
+{"text": "We currently serve about three thousand active customers.", "is_final": true, "t_start": 904.4, "t_end": 907.7, "stability": 1.0, "delay_ms": 3}
+{"text": "what social", "is_final": false, "t_start": 910.3, "t_end": 911.5, "stability": 0.5, "delay_ms": 3}
+{"text": "what social media platforms are", "is_final": false, "t_start": 910.3, "t_end": 912.8, "stability": 0.7, "delay_ms": 3}
+{"text": "What social media platforms are most effective for you?", "is_final": true, "t_start": 910.3, "t_end": 914.5, "stability": 1.0, "delay_ms": 1}
+{"text": "what does", "is_final": false, "t_start": 918.1, "t_end": 919.4, "stability": 0.7, "delay_ms": 2}
+{"text": "what does your sales", "is_final": false, "t_start": 918.1, "t_end": 920.6, "stability": 0.7, "delay_ms": 1}
+{"text": "What does your sales funnel look like?", "is_final": true, "t_start": 918.1, "t_end": 922.3, "stability": 1.0, "delay_ms": 2}
+{"text": "can you", "is_final": false, "t_start": 924.3, "t_end": 925.8, "stability": 0.5, "delay_ms": 2}
+{"text": "can you describe your", "is_final": false, "t_start": 924.3, "t_end": 927.3, "stability": 0.7, "delay_ms": 2}
+{"text": "Can you describe your ideal customer journey?", "is_final": true, "t_start": 924.3, "t_end": 929.2, "stability": 1.0, "delay_ms": 1}
+{"text": "who are", "is_final": false, "t_start": 932.3, "t_end": 933.9, "stability": 0.4, "delay_ms": 1}
+{"text": "who are your primary", "is_final": false, "t_start": 932.3, "t_end": 935.5, "stability": 0.7, "delay_ms": 2}
+{"text": "Who are your primary competitors in this space?", "is_final": true, "t_start": 932.3, "t_end": 937.6, "stability": 1.0, "delay_ms": 1}
+{"text": "tell", "is_final": false, "t_start": 940.3, "t_end": 941.6, "stability": 0.6, "delay_ms": 2}
+{"text": "tell me about", "is_final": false, "t_start": 940.3, "t_end": 942.8, "stability": 0.7, "delay_ms": 3}
+{"text": "Tell me about your company values.", "is_final": true, "t_start": 940.3, "t_end": 944.5, "stability": 1.0, "delay_ms": 2}
+{"text": "tell", "is_final": false, "t_start": 948.1, "t_end": 949.4, "stability": 0.5, "delay_ms": 3}
+{"text": "tell me about", "is_final": false, "t_start": 948.1, "t_end": 950.7, "stability": 0.7, "delay_ms": 1}
+{"text": "Tell me about your pricing strategy.", "is_final": true, "t_start": 948.1, "t_end": 952.5, "stability": 1.0, "delay_ms": 3}
+{"text": "how do", "is_final": false, "t_start": 954.9, "t_end": 956.5, "stability": 0.5, "delay_ms": 2}
+{"text": "how do you measure", "is_final": false, "t_start": 954.9, "t_end": 958.1, "stability": 0.7, "delay_ms": 2}
+{"text": "How do you measure brand awareness today?", "is_final": true, "t_start": 954.9, "t_end": 960.3, "stability": 1.0, "delay_ms": 3}
+{"text": "what social", "is_final": false, "t_start": 964.2, "t_end": 965.6, "stability": 0.6, "delay_ms": 3}
+{"text": "what social media platforms are", "is_final": false, "t_start": 964.2, "t_end": 967.0, "stability": 0.8, "delay_ms": 3}
+{"text": "What social media platforms are most effective for you?", "is_final": true, "t_start": 964.2, "t_end": 968.9, "stability": 1.0, "delay_ms": 2}
+{"text": "we have", "is_final": false, "t_start": 970.0, "t_end": 971.0, "stability": 0.5, "delay_ms": 1}
+{"text": "we have partnerships with", "is_final": false, "t_start": 970.0, "t_end": 971.9, "stability": 0.6, "delay_ms": 1}
+{"text": "We have partnerships with several industry associations.", "is_final": true, "t_start": 970.0, "t_end": 973.2, "stability": 1.0, "delay_ms": 3}
+{"text": "how", "is_final": false, "t_start": 976.2, "t_end": 977.6, "stability": 0.4, "delay_ms": 3}
+{"text": "how do you", "is_final": false, "t_start": 976.2, "t_end": 978.9, "stability": 0.7, "delay_ms": 2}
+{"text": "How do you onboard new customers?", "is_final": true, "t_start": 976.2, "t_end": 980.7, "stability": 1.0, "delay_ms": 2}
+{"text": "the team is", "is_final": false, "t_start": 983.1, "t_end": 984.6, "stability": 0.6, "delay_ms": 3}
+{"text": "the team is twenty people across", "is_final": false, "t_start": 983.1, "t_end": 986.0, "stability": 0.7, "delay_ms": 1}
+{"text": "The team is twenty people across engineering, sales, and support.", "is_final": true, "t_start": 983.1, "t_end": 987.9, "stability": 1.0, "delay_ms": 1}
+{"text": "our average deal", "is_final": false, "t_start": 989.4, "t_end": 990.1, "stability": 0.5, "delay_ms": 2}
+{"text": "our average deal size is about", "is_final": false, "t_start": 989.4, "t_end": 990.8, "stability": 0.7, "delay_ms": 2}
+{"text": "Our average deal size is about five hundred dollars annually.", "is_final": true, "t_start": 989.4, "t_end": 991.7, "stability": 1.0, "delay_ms": 2}
+{"text": "our biggest competitor", "is_final": false, "t_start": 993.5, "t_end": 994.5, "stability": 0.4, "delay_ms": 3}
+{"text": "our biggest competitor is acme corp, but", "is_final": false, "t_start": 993.5, "t_end": 995.5, "stability": 0.7, "delay_ms": 2}
+{"text": "Our biggest competitor is Acme Corp, but we focus on a different niche.", "is_final": true, "t_start": 993.5, "t_end": 996.9, "stability": 1.0, "delay_ms": 3}
+{"text": "what does", "is_final": false, "t_start": 999.9, "t_end": 1001.7, "stability": 0.4, "delay_ms": 1}
+{"text": "what does your competitive", "is_final": false, "t_start": 999.9, "t_end": 1003.5, "stability": 0.7, "delay_ms": 1}
+{"text": "What does your competitive landscape look like?", "is_final": true, "t_start": 999.9, "t_end": 1005.8, "stability": 1.0, "delay_ms": 1}
+{"text": "our biggest competitor", "is_final": false, "t_start": 1009.1, "t_end": 1009.7, "stability": 0.6, "delay_ms": 1}
+{"text": "our biggest competitor is acme corp, but", "is_final": false, "t_start": 1009.1, "t_end": 1010.3, "stability": 0.6, "delay_ms": 3}
+{"text": "Our biggest competitor is Acme Corp, but we focus on a different niche.", "is_final": true, "t_start": 1009.1, "t_end": 1011.1, "stability": 1.0, "delay_ms": 3}
+{"text": "our average deal", "is_final": false, "t_start": 1012.8, "t_end": 1014.4, "stability": 0.4, "delay_ms": 3}
+{"text": "our average deal size is about", "is_final": false, "t_start": 1012.8, "t_end": 1015.9, "stability": 0.6, "delay_ms": 1}
+{"text": "Our average deal size is about five hundred dollars annually.", "is_final": true, "t_start": 1012.8, "t_end": 1018.0, "stability": 1.0, "delay_ms": 2}
+{"text": "we launched a", "is_final": false, "t_start": 1021.8, "t_end": 1022.9, "stability": 0.5, "delay_ms": 3}
+{"text": "we launched a referral program that drives", "is_final": false, "t_start": 1021.8, "t_end": 1024.0, "stability": 0.7, "delay_ms": 1}
+{"text": "We launched a referral program that drives thirty percent of new signups.", "is_final": true, "t_start": 1021.8, "t_end": 1025.5, "stability": 1.0, "delay_ms": 2}
+{"text": "what social", "is_final": false, "t_start": 1026.6, "t_end": 1027.8, "stability": 0.6, "delay_ms": 2}
+{"text": "what social media platforms are", "is_final": false, "t_start": 1026.6, "t_end": 1028.9, "stability": 0.6, "delay_ms": 1}
+{"text": "What social media platforms are most effective for you?", "is_final": true, "t_start": 1026.6, "t_end": 1030.4, "stability": 1.0, "delay_ms": 1}
+{"text": "who are", "is_final": false, "t_start": 1032.7, "t_end": 1033.8, "stability": 0.5, "delay_ms": 2}
+{"text": "who are your primary", "is_final": false, "t_start": 1032.7, "t_end": 1034.8, "stability": 0.6, "delay_ms": 1}
+{"text": "Who are your primary competitors in this space?", "is_final": true, "t_start": 1032.7, "t_end": 1036.3, "stability": 1.0, "delay_ms": 1}
+{"text": "customer acquisition", "is_final": false, "t_start": 1038.8, "t_end": 1039.6, "stability": 0.6, "delay_ms": 2}
+{"text": "customer acquisition cost is around", "is_final": false, "t_start": 1038.8, "t_end": 1040.5, "stability": 0.7, "delay_ms": 3}
+{"text": "Customer acquisition cost is around one hundred twenty dollars.", "is_final": true, "t_start": 1038.8, "t_end": 1041.6, "stability": 1.0, "delay_ms": 1}
+{"text": "what", "is_final": false, "t_start": 1043.3, "t_end": 1044.1, "stability": 0.4, "delay_ms": 3}
+{"text": "what is your", "is_final": false, "t_start": 1043.3, "t_end": 1044.9, "stability": 0.6, "delay_ms": 3}
+{"text": "What is your current marketing strategy?", "is_final": true, "t_start": 1043.3, "t_end": 1046.0, "stability": 1.0, "delay_ms": 2}
+{"text": "where do", "is_final": false, "t_start": 1048.4, "t_end": 1049.5, "stability": 0.7, "delay_ms": 3}
+{"text": "where do you see the", "is_final": false, "t_start": 1048.4, "t_end": 1050.7, "stability": 0.7, "delay_ms": 3}
+{"text": "Where do you see the brand in five years?", "is_final": true, "t_start": 1048.4, "t_end": 1052.2, "stability": 1.0, "delay_ms": 2}
+{"text": "what makes", "is_final": false, "t_start": 1055.8, "t_end": 1056.9, "stability": 0.5, "delay_ms": 3}
+{"text": "what makes your product", "is_final": false, "t_start": 1055.8, "t_end": 1058.1, "stability": 0.7, "delay_ms": 2}
+{"text": "What makes your product unique compared to alternatives?", "is_final": true, "t_start": 1055.8, "t_end": 1059.6, "stability": 1.0, "delay_ms": 3}
+{"text": "tell", "is_final": false, "t_start": 1060.8, "t_end": 1062.0, "stability": 0.4, "delay_ms": 2}
+{"text": "tell me about", "is_final": false, "t_start": 1060.8, "t_end": 1063.1, "stability": 0.8, "delay_ms": 1}
+{"text": "Tell me about your pricing strategy.", "is_final": true, "t_start": 1060.8, "t_end": 1064.6, "stability": 1.0, "delay_ms": 3}
+{"text": "what social", "is_final": false, "t_start": 1068.2, "t_end": 1069.5, "stability": 0.5, "delay_ms": 3}
+{"text": "what social media platforms are", "is_final": false, "t_start": 1068.2, "t_end": 1070.8, "stability": 0.7, "delay_ms": 3}
+{"text": "What social media platforms are most effective for you?", "is_final": true, "t_start": 1068.2, "t_end": 1072.6, "stability": 1.0, "delay_ms": 1}
+{"text": "how", "is_final": false, "t_start": 1074.9, "t_end": 1075.7, "stability": 0.6, "delay_ms": 3}
+{"text": "how do you", "is_final": false, "t_start": 1074.9, "t_end": 1076.6, "stability": 0.6, "delay_ms": 1}
+{"text": "How do you handle customer feedback?", "is_final": true, "t_start": 1074.9, "t_end": 1077.7, "stability": 1.0, "delay_ms": 2}
+{"text": "what channels", "is_final": false, "t_start": 1079.0, "t_end": 1080.8, "stability": 0.4, "delay_ms": 3}
+{"text": "what channels do you", "is_final": false, "t_start": 1079.0, "t_end": 1082.6, "stability": 0.6, "delay_ms": 1}
+{"text": "What channels do you use for customer acquisition?", "is_final": true, "t_start": 1079.0, "t_end": 1084.9, "stability": 1.0, "delay_ms": 3}
+{"text": "what", "is_final": false, "t_start": 1087.2, "t_end": 1088.5, "stability": 0.5, "delay_ms": 2}
+{"text": "what is your", "is_final": false, "t_start": 1087.2, "t_end": 1089.9, "stability": 0.7, "delay_ms": 2}
+{"text": "What is your brand mission statement?", "is_final": true, "t_start": 1087.2, "t_end": 1091.7, "stability": 1.0, "delay_ms": 3}
+{"text": "how", "is_final": false, "t_start": 1094.5, "t_end": 1095.5, "stability": 0.5, "delay_ms": 3}
+{"text": "how do you", "is_final": false, "t_start": 1094.5, "t_end": 1096.5, "stability": 0.7, "delay_ms": 2}
+{"text": "How do you handle customer feedback?", "is_final": true, "t_start": 1094.5, "t_end": 1097.8, "stability": 1.0, "delay_ms": 2}
+{"text": "what social", "is_final": false, "t_start": 1101.0, "t_end": 1102.6, "stability": 0.5, "delay_ms": 3}
+{"text": "what social media platforms are", "is_final": false, "t_start": 1101.0, "t_end": 1104.3, "stability": 0.7, "delay_ms": 2}
+{"text": "What social media platforms are most effective for you?", "is_final": true, "t_start": 1101.0, "t_end": 1106.5, "stability": 1.0, "delay_ms": 2}
+{"text": "what does", "is_final": false, "t_start": 1110.4, "t_end": 1111.2, "stability": 0.6, "delay_ms": 1}
+{"text": "what does your competitive", "is_final": false, "t_start": 1110.4, "t_end": 1111.9, "stability": 0.7, "delay_ms": 2}
+{"text": "What does your competitive landscape look like?", "is_final": true, "t_start": 1110.4, "t_end": 1112.9, "stability": 1.0, "delay_ms": 3}
+{"text": "what is", "is_final": false, "t_start": 1116.3, "t_end": 1117.7, "stability": 0.7, "delay_ms": 3}
+{"text": "what is your current", "is_final": false, "t_start": 1116.3, "t_end": 1119.2, "stability": 0.8, "delay_ms": 1}
+{"text": "What is your current monthly marketing budget?", "is_final": true, "t_start": 1116.3, "t_end": 1121.1, "stability": 1.0, "delay_ms": 3}
+{"text": "tell me", "is_final": false, "t_start": 1124.1, "t_end": 1125.1, "stability": 0.5, "delay_ms": 1}
+{"text": "tell me more about", "is_final": false, "t_start": 1124.1, "t_end": 1126.2, "stability": 0.7, "delay_ms": 2}
+{"text": "Tell me more about your company background.", "is_final": true, "t_start": 1124.1, "t_end": 1127.6, "stability": 1.0, "delay_ms": 1}
+{"text": "we currently", "is_final": false, "t_start": 1129.3, "t_end": 1130.3, "stability": 0.6, "delay_ms": 3}
+{"text": "we currently serve about", "is_final": false, "t_start": 1129.3, "t_end": 1131.2, "stability": 0.8, "delay_ms": 3}
+{"text": "We currently serve about three thousand active customers.", "is_final": true, "t_start": 1129.3, "t_end": 1132.5, "stability": 1.0, "delay_ms": 3}
+{"text": "what does", "is_final": false, "t_start": 1133.6, "t_end": 1134.9, "stability": 0.6, "delay_ms": 1}
+{"text": "what does your sales", "is_final": false, "t_start": 1133.6, "t_end": 1136.3, "stability": 0.6, "delay_ms": 3}
+{"text": "What does your sales funnel look like?", "is_final": true, "t_start": 1133.6, "t_end": 1138.1, "stability": 1.0, "delay_ms": 3}
+{"text": "instagram and", "is_final": false, "t_start": 1141.5, "t_end": 1142.2, "stability": 0.5, "delay_ms": 3}
+{"text": "instagram and linkedin are", "is_final": false, "t_start": 1141.5, "t_end": 1142.8, "stability": 0.6, "delay_ms": 2}
+{"text": "Instagram and LinkedIn are our most effective channels.", "is_final": true, "t_start": 1141.5, "t_end": 1143.7, "stability": 1.0, "delay_ms": 3}
+{"text": "instagram and", "is_final": false, "t_start": 1145.6, "t_end": 1146.5, "stability": 0.5, "delay_ms": 2}
+{"text": "instagram and linkedin are", "is_final": false, "t_start": 1145.6, "t_end": 1147.4, "stability": 0.8, "delay_ms": 1}
+{"text": "Instagram and LinkedIn are our most effective channels.", "is_final": true, "t_start": 1145.6, "t_end": 1148.5, "stability": 1.0, "delay_ms": 2}
+{"text": "instagram and", "is_final": false, "t_start": 1151.5, "t_end": 1152.7, "stability": 0.5, "delay_ms": 2}
+{"text": "instagram and linkedin are", "is_final": false, "t_start": 1151.5, "t_end": 1153.8, "stability": 0.7, "delay_ms": 2}
+{"text": "Instagram and LinkedIn are our most effective channels.", "is_final": true, "t_start": 1151.5, "t_end": 1155.4, "stability": 1.0, "delay_ms": 1}
+{"text": "the brand", "is_final": false, "t_start": 1158.9, "t_end": 1160.5, "stability": 0.4, "delay_ms": 2}
+{"text": "the brand personality is", "is_final": false, "t_start": 1158.9, "t_end": 1162.2, "stability": 0.8, "delay_ms": 3}
+{"text": "The brand personality is modern, approachable, and trustworthy.", "is_final": true, "t_start": 1158.9, "t_end": 1164.3, "stability": 1.0, "delay_ms": 1}
+{"text": "our biggest competitor", "is_final": false, "t_start": 1167.4, "t_end": 1168.3, "stability": 0.6, "delay_ms": 2}
+{"text": "our biggest competitor is acme corp, but", "is_final": false, "t_start": 1167.4, "t_end": 1169.3, "stability": 0.7, "delay_ms": 3}
+{"text": "Our biggest competitor is Acme Corp, but we focus on a different niche.", "is_final": true, "t_start": 1167.4, "t_end": 1170.6, "stability": 1.0, "delay_ms": 1}
+{"text": "how do", "is_final": false, "t_start": 1174.1, "t_end": 1175.7, "stability": 0.7, "delay_ms": 1}
+{"text": "how do customers typically", "is_final": false, "t_start": 1174.1, "t_end": 1177.3, "stability": 0.7, "delay_ms": 2}
+{"text": "How do customers typically discover your brand?", "is_final": true, "t_start": 1174.1, "t_end": 1179.4, "stability": 1.0, "delay_ms": 3}
+{"text": "we currently", "is_final": false, "t_start": 1181.5, "t_end": 1182.5, "stability": 0.4, "delay_ms": 1}
+{"text": "we currently serve about", "is_final": false, "t_start": 1181.5, "t_end": 1183.6, "stability": 0.8, "delay_ms": 3}
+{"text": "We currently serve about three thousand active customers.", "is_final": true, "t_start": 1181.5, "t_end": 1185.0, "stability": 1.0, "delay_ms": 2}
+{"text": "tell", "is_final": false, "t_start": 1188.4, "t_end": 1190.1, "stability": 0.5, "delay_ms": 1}
+{"text": "tell me about", "is_final": false, "t_start": 1188.4, "t_end": 1191.8, "stability": 0.8, "delay_ms": 2}
+{"text": "Tell me about your pricing strategy.", "is_final": true, "t_start": 1188.4, "t_end": 1194.0, "stability": 1.0, "delay_ms": 2}
+{"text": "tell me", "is_final": false, "t_start": 1196.8, "t_end": 1197.7, "stability": 0.7, "delay_ms": 3}
+{"text": "tell me more about", "is_final": false, "t_start": 1196.8, "t_end": 1198.6, "stability": 0.8, "delay_ms": 3}
+{"text": "Tell me more about your company background.", "is_final": true, "t_start": 1196.8, "t_end": 1199.9, "stability": 1.0, "delay_ms": 3}
+{"text": "how do", "is_final": false, "t_start": 1202.2, "t_end": 1203.2, "stability": 0.4, "delay_ms": 2}
+{"text": "how do customers typically", "is_final": false, "t_start": 1202.2, "t_end": 1204.1, "stability": 0.7, "delay_ms": 3}
+{"text": "How do customers typically discover your brand?", "is_final": true, "t_start": 1202.2, "t_end": 1205.4, "stability": 1.0, "delay_ms": 2}
+{"text": "how do", "is_final": false, "t_start": 1206.6, "t_end": 1207.9, "stability": 0.4, "delay_ms": 3}
+{"text": "how do you differentiate", "is_final": false, "t_start": 1206.6, "t_end": 1209.2, "stability": 0.7, "delay_ms": 3}
+{"text": "How do you differentiate from your closest competitor?", "is_final": true, "t_start": 1206.6, "t_end": 1211.0, "stability": 1.0, "delay_ms": 1}
+{"text": "our mission is", "is_final": false, "t_start": 1212.9, "t_end": 1213.8, "stability": 0.5, "delay_ms": 3}
+{"text": "our mission is to make technology", "is_final": false, "t_start": 1212.9, "t_end": 1214.7, "stability": 0.7, "delay_ms": 3}
+{"text": "Our mission is to make technology accessible for small businesses.", "is_final": true, "t_start": 1212.9, "t_end": 1215.8, "stability": 1.0, "delay_ms": 2}
+{"text": "customer acquisition", "is_final": false, "t_start": 1217.0, "t_end": 1218.5, "stability": 0.6, "delay_ms": 1}
+{"text": "customer acquisition cost is around", "is_final": false, "t_start": 1217.0, "t_end": 1220.1, "stability": 0.7, "delay_ms": 2}
+{"text": "Customer acquisition cost is around one hundred twenty dollars.", "is_final": true, "t_start": 1217.0, "t_end": 1222.1, "stability": 1.0, "delay_ms": 1}
+{"text": "we spend about", "is_final": false, "t_start": 1225.0, "t_end": 1226.5, "stability": 0.5, "delay_ms": 1}
+{"text": "we spend about fifteen thousand dollars", "is_final": false, "t_start": 1225.0, "t_end": 1228.0, "stability": 0.7, "delay_ms": 3}
+{"text": "We spend about fifteen thousand dollars per month on marketing.", "is_final": true, "t_start": 1225.0, "t_end": 1230.0, "stability": 1.0, "delay_ms": 3}
+{"text": "our customer", "is_final": false, "t_start": 1232.9, "t_end": 1234.4, "stability": 0.4, "delay_ms": 2}
+{"text": "our customer lifetime value is", "is_final": false, "t_start": 1232.9, "t_end": 1235.9, "stability": 0.7, "delay_ms": 3}
+{"text": "Our customer lifetime value is roughly two thousand dollars.", "is_final": true, "t_start": 1232.9, "t_end": 1237.9, "stability": 1.0, "delay_ms": 1}
+{"text": "we use a", "is_final": false, "t_start": 1241.4, "t_end": 1242.6, "stability": 0.5, "delay_ms": 1}
+{"text": "we use a combination of content", "is_final": false, "t_start": 1241.4, "t_end": 1243.7, "stability": 0.6, "delay_ms": 2}
+{"text": "We use a combination of content marketing and paid search.", "is_final": true, "t_start": 1241.4, "t_end": 1245.3, "stability": 1.0, "delay_ms": 1}
+{"text": "what", "is_final": false, "t_start": 1247.2, "t_end": 1248.9, "stability": 0.5, "delay_ms": 2}
+{"text": "what is your", "is_final": false, "t_start": 1247.2, "t_end": 1250.5, "stability": 0.7, "delay_ms": 3}
+{"text": "What is your current marketing strategy?", "is_final": true, "t_start": 1247.2, "t_end": 1252.7, "stability": 1.0, "delay_ms": 2}
+{"text": "what", "is_final": false, "t_start": 1254.5, "t_end": 1255.4, "stability": 0.7, "delay_ms": 1}
+{"text": "what is your", "is_final": false, "t_start": 1254.5, "t_end": 1256.4, "stability": 0.8, "delay_ms": 2}
+{"text": "What is your current marketing strategy?", "is_final": true, "t_start": 1254.5, "t_end": 1257.6, "stability": 1.0, "delay_ms": 2}
+{"text": "we value", "is_final": false, "t_start": 1259.0, "t_end": 1260.5, "stability": 0.7, "delay_ms": 2}
+{"text": "we value transparency, innovation, and", "is_final": false, "t_start": 1259.0, "t_end": 1262.0, "stability": 0.7, "delay_ms": 1}
+{"text": "We value transparency, innovation, and customer success above all.", "is_final": true, "t_start": 1259.0, "t_end": 1263.9, "stability": 1.0, "delay_ms": 2}
+{"text": "what", "is_final": false, "t_start": 1267.0, "t_end": 1267.9, "stability": 0.4, "delay_ms": 2}
+{"text": "what is your", "is_final": false, "t_start": 1267.0, "t_end": 1268.8, "stability": 0.6, "delay_ms": 3}
+{"text": "What is your brand mission statement?", "is_final": true, "t_start": 1267.0, "t_end": 1270.0, "stability": 1.0, "delay_ms": 1}
+{"text": "we currently", "is_final": false, "t_start": 1272.6, "t_end": 1273.6, "stability": 0.5, "delay_ms": 2}
+{"text": "we currently serve about", "is_final": false, "t_start": 1272.6, "t_end": 1274.6, "stability": 0.7, "delay_ms": 2}
+{"text": "We currently serve about three thousand active customers.", "is_final": true, "t_start": 1272.6, "t_end": 1275.9, "stability": 1.0, "delay_ms": 1}
+{"text": "what", "is_final": false, "t_start": 1279.0, "t_end": 1280.5, "stability": 0.7, "delay_ms": 3}
+{"text": "what year was", "is_final": false, "t_start": 1279.0, "t_end": 1281.9, "stability": 0.8, "delay_ms": 2}
+{"text": "What year was the business founded?", "is_final": true, "t_start": 1279.0, "t_end": 1283.9, "stability": 1.0, "delay_ms": 3}
+{"text": "who are", "is_final": false, "t_start": 1287.8, "t_end": 1289.2, "stability": 0.5, "delay_ms": 3}
+{"text": "who are your primary", "is_final": false, "t_start": 1287.8, "t_end": 1290.6, "stability": 0.8, "delay_ms": 3}
+{"text": "Who are your primary competitors in this space?", "is_final": true, "t_start": 1287.8, "t_end": 1292.5, "stability": 1.0, "delay_ms": 1}
+{"text": "the biggest", "is_final": false, "t_start": 1296.4, "t_end": 1297.8, "stability": 0.5, "delay_ms": 1}
+{"text": "the biggest challenge is scaling", "is_final": false, "t_start": 1296.4, "t_end": 1299.2, "stability": 0.6, "delay_ms": 3}
+{"text": "The biggest challenge is scaling support while maintaining quality.", "is_final": true, "t_start": 1296.4, "t_end": 1301.1, "stability": 1.0, "delay_ms": 2}
+{"text": "our main product", "is_final": false, "t_start": 1303.2, "t_end": 1304.5, "stability": 0.6, "delay_ms": 2}
+{"text": "our main product is a saas", "is_final": false, "t_start": 1303.2, "t_end": 1305.9, "stability": 0.7, "delay_ms": 1}
+{"text": "Our main product is a SaaS platform for small businesses.", "is_final": true, "t_start": 1303.2, "t_end": 1307.6, "stability": 1.0, "delay_ms": 3}
+{"text": "what channels", "is_final": false, "t_start": 1309.0, "t_end": 1310.4, "stability": 0.5, "delay_ms": 1}
+{"text": "what channels do you", "is_final": false, "t_start": 1309.0, "t_end": 1311.8, "stability": 0.6, "delay_ms": 1}
+{"text": "What channels do you use for customer acquisition?", "is_final": true, "t_start": 1309.0, "t_end": 1313.6, "stability": 1.0, "delay_ms": 2}
+{"text": "how would", "is_final": false, "t_start": 1316.2, "t_end": 1317.1, "stability": 0.5, "delay_ms": 2}
+{"text": "how would you describe", "is_final": false, "t_start": 1316.2, "t_end": 1318.0, "stability": 0.6, "delay_ms": 3}
+{"text": "How would you describe your brand personality?", "is_final": true, "t_start": 1316.2, "t_end": 1319.2, "stability": 1.0, "delay_ms": 2}
+{"text": "what", "is_final": false, "t_start": 1322.3, "t_end": 1323.0, "stability": 0.7, "delay_ms": 2}
+{"text": "what is your", "is_final": false, "t_start": 1322.3, "t_end": 1323.8, "stability": 0.6, "delay_ms": 3}
+{"text": "What is your current marketing strategy?", "is_final": true, "t_start": 1322.3, "t_end": 1324.8, "stability": 1.0, "delay_ms": 2}
+{"text": "what channels", "is_final": false, "t_start": 1328.8, "t_end": 1330.2, "stability": 0.6, "delay_ms": 3}
+{"text": "what channels do you", "is_final": false, "t_start": 1328.8, "t_end": 1331.6, "stability": 0.7, "delay_ms": 2}
+{"text": "What channels do you use for customer acquisition?", "is_final": true, "t_start": 1328.8, "t_end": 1333.5, "stability": 1.0, "delay_ms": 1}
+{"text": "how", "is_final": false, "t_start": 1336.6, "t_end": 1337.4, "stability": 0.5, "delay_ms": 1}
+{"text": "how do you", "is_final": false, "t_start": 1336.6, "t_end": 1338.2, "stability": 0.6, "delay_ms": 1}
+{"text": "How do you handle customer feedback?", "is_final": true, "t_start": 1336.6, "t_end": 1339.3, "stability": 1.0, "delay_ms": 1}
+{"text": "how do", "is_final": false, "t_start": 1341.0, "t_end": 1342.3, "stability": 0.5, "delay_ms": 3}
+{"text": "how do you measure", "is_final": false, "t_start": 1341.0, "t_end": 1343.5, "stability": 0.6, "delay_ms": 1}
+{"text": "How do you measure brand awareness today?", "is_final": true, "t_start": 1341.0, "t_end": 1345.2, "stability": 1.0, "delay_ms": 1}
+{"text": "how", "is_final": false, "t_start": 1347.1, "t_end": 1348.3, "stability": 0.5, "delay_ms": 2}
+{"text": "how do you", "is_final": false, "t_start": 1347.1, "t_end": 1349.4, "stability": 0.8, "delay_ms": 1}
+{"text": "How do you onboard new customers?", "is_final": true, "t_start": 1347.1, "t_end": 1351.0, "stability": 1.0, "delay_ms": 1}
+{"text": "what are", "is_final": false, "t_start": 1354.9, "t_end": 1356.1, "stability": 0.6, "delay_ms": 1}
+{"text": "what are the biggest", "is_final": false, "t_start": 1354.9, "t_end": 1357.2, "stability": 0.8, "delay_ms": 3}
+{"text": "What are the biggest challenges your brand faces?", "is_final": true, "t_start": 1354.9, "t_end": 1358.8, "stability": 1.0, "delay_ms": 3}
+{"text": "what makes", "is_final": false, "t_start": 1361.6, "t_end": 1362.7, "stability": 0.7, "delay_ms": 1}
+{"text": "what makes your product", "is_final": false, "t_start": 1361.6, "t_end": 1363.8, "stability": 0.8, "delay_ms": 3}
+{"text": "What makes your product unique compared to alternatives?", "is_final": true, "t_start": 1361.6, "t_end": 1365.3, "stability": 1.0, "delay_ms": 1}
+{"text": "we use a", "is_final": false, "t_start": 1367.2, "t_end": 1368.1, "stability": 0.7, "delay_ms": 3}
+{"text": "we use a combination of content", "is_final": false, "t_start": 1367.2, "t_end": 1368.9, "stability": 0.8, "delay_ms": 1}
+{"text": "We use a combination of content marketing and paid search.", "is_final": true, "t_start": 1367.2, "t_end": 1370.1, "stability": 1.0, "delay_ms": 2}
+{"text": "we spend about", "is_final": false, "t_start": 1371.7, "t_end": 1372.5, "stability": 0.5, "delay_ms": 3}
+{"text": "we spend about fifteen thousand dollars", "is_final": false, "t_start": 1371.7, "t_end": 1373.2, "stability": 0.6, "delay_ms": 3}
+{"text": "We spend about fifteen thousand dollars per month on marketing.", "is_final": true, "t_start": 1371.7, "t_end": 1374.2, "stability": 1.0, "delay_ms": 1}
+{"text": "we price competitively", "is_final": false, "t_start": 1377.0, "t_end": 1378.4, "stability": 0.6, "delay_ms": 3}
+{"text": "we price competitively at forty-nine dollars per", "is_final": false, "t_start": 1377.0, "t_end": 1379.8, "stability": 0.7, "delay_ms": 3}
+{"text": "We price competitively at forty-nine dollars per month for the base plan.", "is_final": true, "t_start": 1377.0, "t_end": 1381.6, "stability": 1.0, "delay_ms": 1}
+{"text": "what", "is_final": false, "t_start": 1385.1, "t_end": 1386.8, "stability": 0.6, "delay_ms": 2}
+{"text": "what year was", "is_final": false, "t_start": 1385.1, "t_end": 1388.6, "stability": 0.7, "delay_ms": 3}
+{"text": "What year was the business founded?", "is_final": true, "t_start": 1385.1, "t_end": 1390.9, "stability": 1.0, "delay_ms": 2}
+{"text": "we recently", "is_final": false, "t_start": 1393.8, "t_end": 1395.1, "stability": 0.6, "delay_ms": 2}
+{"text": "we recently expanded into", "is_final": false, "t_start": 1393.8, "t_end": 1396.3, "stability": 0.7, "delay_ms": 3}
+{"text": "We recently expanded into three new regional markets.", "is_final": true, "t_start": 1393.8, "t_end": 1397.9, "stability": 1.0, "delay_ms": 2}
+{"text": "what", "is_final": false, "t_start": 1399.8, "t_end": 1400.6, "stability": 0.5, "delay_ms": 2}
+{"text": "what year was", "is_final": false, "t_start": 1399.8, "t_end": 1401.4, "stability": 0.6, "delay_ms": 3}
+{"text": "What year was the business founded?", "is_final": true, "t_start": 1399.8, "t_end": 1402.4, "stability": 1.0, "delay_ms": 1}
+{"text": "how", "is_final": false, "t_start": 1404.3, "t_end": 1406.1, "stability": 0.5, "delay_ms": 2}
+{"text": "how do you", "is_final": false, "t_start": 1404.3, "t_end": 1407.9, "stability": 0.6, "delay_ms": 2}
+{"text": "How do you onboard new customers?", "is_final": true, "t_start": 1404.3, "t_end": 1410.3, "stability": 1.0, "delay_ms": 3}
+{"text": "instagram and", "is_final": false, "t_start": 1413.0, "t_end": 1413.7, "stability": 0.5, "delay_ms": 1}
+{"text": "instagram and linkedin are", "is_final": false, "t_start": 1413.0, "t_end": 1414.5, "stability": 0.6, "delay_ms": 2}
+{"text": "Instagram and LinkedIn are our most effective channels.", "is_final": true, "t_start": 1413.0, "t_end": 1415.5, "stability": 1.0, "delay_ms": 2}
+{"text": "we price competitively", "is_final": false, "t_start": 1419.1, "t_end": 1420.7, "stability": 0.7, "delay_ms": 3}
+{"text": "we price competitively at forty-nine dollars per", "is_final": false, "t_start": 1419.1, "t_end": 1422.3, "stability": 0.7, "delay_ms": 1}
+{"text": "We price competitively at forty-nine dollars per month for the base plan.", "is_final": true, "t_start": 1419.1, "t_end": 1424.3, "stability": 1.0, "delay_ms": 2}
+{"text": "the team is", "is_final": false, "t_start": 1428.3, "t_end": 1429.5, "stability": 0.4, "delay_ms": 2}
+{"text": "the team is twenty people across", "is_final": false, "t_start": 1428.3, "t_end": 1430.7, "stability": 0.7, "delay_ms": 1}
+{"text": "The team is twenty people across engineering, sales, and support.", "is_final": true, "t_start": 1428.3, "t_end": 1432.3, "stability": 1.0, "delay_ms": 1}
+{"text": "tell", "is_final": false, "t_start": 1435.1, "t_end": 1436.3, "stability": 0.7, "delay_ms": 3}
+{"text": "tell me about", "is_final": false, "t_start": 1435.1, "t_end": 1437.5, "stability": 0.7, "delay_ms": 2}
+{"text": "Tell me about your pricing strategy.", "is_final": true, "t_start": 1435.1, "t_end": 1439.0, "stability": 1.0, "delay_ms": 3}
+{"text": "the brand", "is_final": false, "t_start": 1440.0, "t_end": 1441.7, "stability": 0.6, "delay_ms": 2}
+{"text": "the brand personality is", "is_final": false, "t_start": 1440.0, "t_end": 1443.3, "stability": 0.7, "delay_ms": 2}
+{"text": "The brand personality is modern, approachable, and trustworthy.", "is_final": true, "t_start": 1440.0, "t_end": 1445.6, "stability": 1.0, "delay_ms": 1}
+{"text": "tell", "is_final": false, "t_start": 1448.3, "t_end": 1449.2, "stability": 0.5, "delay_ms": 2}
+{"text": "tell me about", "is_final": false, "t_start": 1448.3, "t_end": 1450.2, "stability": 0.8, "delay_ms": 2}
+{"text": "Tell me about your company values.", "is_final": true, "t_start": 1448.3, "t_end": 1451.5, "stability": 1.0, "delay_ms": 3}
+{"text": "our biggest competitor", "is_final": false, "t_start": 1454.5, "t_end": 1455.6, "stability": 0.6, "delay_ms": 2}
+{"text": "our biggest competitor is acme corp, but", "is_final": false, "t_start": 1454.5, "t_end": 1456.6, "stability": 0.7, "delay_ms": 2}
+{"text": "Our biggest competitor is Acme Corp, but we focus on a different niche.", "is_final": true, "t_start": 1454.5, "t_end": 1458.1, "stability": 1.0, "delay_ms": 1}
+{"text": "customer acquisition", "is_final": false, "t_start": 1459.7, "t_end": 1460.3, "stability": 0.4, "delay_ms": 3}
+{"text": "customer acquisition cost is around", "is_final": false, "t_start": 1459.7, "t_end": 1461.0, "stability": 0.7, "delay_ms": 2}
+{"text": "Customer acquisition cost is around one hundred twenty dollars.", "is_final": true, "t_start": 1459.7, "t_end": 1461.9, "stability": 1.0, "delay_ms": 3}
+{"text": "customer acquisition", "is_final": false, "t_start": 1464.3, "t_end": 1465.1, "stability": 0.7, "delay_ms": 2}
+{"text": "customer acquisition cost is around", "is_final": false, "t_start": 1464.3, "t_end": 1465.8, "stability": 0.6, "delay_ms": 3}
+{"text": "Customer acquisition cost is around one hundred twenty dollars.", "is_final": true, "t_start": 1464.3, "t_end": 1466.8, "stability": 1.0, "delay_ms": 3}
+{"text": "customer acquisition", "is_final": false, "t_start": 1470.3, "t_end": 1471.9, "stability": 0.6, "delay_ms": 3}
+{"text": "customer acquisition cost is around", "is_final": false, "t_start": 1470.3, "t_end": 1473.5, "stability": 0.7, "delay_ms": 2}
+{"text": "Customer acquisition cost is around one hundred twenty dollars.", "is_final": true, "t_start": 1470.3, "t_end": 1475.6, "stability": 1.0, "delay_ms": 1}
+{"text": "in five years", "is_final": false, "t_start": 1477.7, "t_end": 1479.0, "stability": 0.6, "delay_ms": 3}
+{"text": "in five years we want to be", "is_final": false, "t_start": 1477.7, "t_end": 1480.3, "stability": 0.8, "delay_ms": 3}
+{"text": "In five years we want to be the leading platform in our vertical.", "is_final": true, "t_start": 1477.7, "t_end": 1482.0, "stability": 1.0, "delay_ms": 1}
+{"text": "how", "is_final": false, "t_start": 1484.8, "t_end": 1486.3, "stability": 0.6, "delay_ms": 3}
+{"text": "how do you", "is_final": false, "t_start": 1484.8, "t_end": 1487.9, "stability": 0.6, "delay_ms": 1}
+{"text": "How do you handle customer feedback?", "is_final": true, "t_start": 1484.8, "t_end": 1489.9, "stability": 1.0, "delay_ms": 3}
+{"text": "how", "is_final": false, "t_start": 1492.3, "t_end": 1493.6, "stability": 0.7, "delay_ms": 1}
+{"text": "how do you", "is_final": false, "t_start": 1492.3, "t_end": 1495.0, "stability": 0.8, "delay_ms": 1}
+{"text": "How do you onboard new customers?", "is_final": true, "t_start": 1492.3, "t_end": 1496.8, "stability": 1.0, "delay_ms": 1}
+{"text": "what", "is_final": false, "t_start": 1499.5, "t_end": 1500.1, "stability": 0.5, "delay_ms": 1}
+{"text": "what is your", "is_final": false, "t_start": 1499.5, "t_end": 1500.7, "stability": 0.7, "delay_ms": 1}
+{"text": "What is your current marketing strategy?", "is_final": true, "t_start": 1499.5, "t_end": 1501.6, "stability": 1.0, "delay_ms": 2}
+{"text": "how do", "is_final": false, "t_start": 1504.1, "t_end": 1505.7, "stability": 0.6, "delay_ms": 1}
+{"text": "how do you differentiate", "is_final": false, "t_start": 1504.1, "t_end": 1507.4, "stability": 0.7, "delay_ms": 3}
+{"text": "How do you differentiate from your closest competitor?", "is_final": true, "t_start": 1504.1, "t_end": 1509.6, "stability": 1.0, "delay_ms": 1}
+{"text": "how do", "is_final": false, "t_start": 1512.3, "t_end": 1513.5, "stability": 0.5, "delay_ms": 1}
+{"text": "how do you differentiate", "is_final": false, "t_start": 1512.3, "t_end": 1514.8, "stability": 0.7, "delay_ms": 3}
+{"text": "How do you differentiate from your closest competitor?", "is_final": true, "t_start": 1512.3, "t_end": 1516.4, "stability": 1.0, "delay_ms": 2}
+{"text": "how", "is_final": false, "t_start": 1519.0, "t_end": 1520.4, "stability": 0.6, "delay_ms": 2}
+{"text": "how do you", "is_final": false, "t_start": 1519.0, "t_end": 1521.8, "stability": 0.7, "delay_ms": 1}
+{"text": "How do you onboard new customers?", "is_final": true, "t_start": 1519.0, "t_end": 1523.8, "stability": 1.0, "delay_ms": 1}
+{"text": "the team is", "is_final": false, "t_start": 1525.6, "t_end": 1527.1, "stability": 0.6, "delay_ms": 3}
+{"text": "the team is twenty people across", "is_final": false, "t_start": 1525.6, "t_end": 1528.7, "stability": 0.7, "delay_ms": 2}
+{"text": "The team is twenty people across engineering, sales, and support.", "is_final": true, "t_start": 1525.6, "t_end": 1530.7, "stability": 1.0, "delay_ms": 2}
+{"text": "our customer", "is_final": false, "t_start": 1532.7, "t_end": 1533.6, "stability": 0.4, "delay_ms": 3}
+{"text": "our customer lifetime value is", "is_final": false, "t_start": 1532.7, "t_end": 1534.6, "stability": 0.7, "delay_ms": 2}
+{"text": "Our customer lifetime value is roughly two thousand dollars.", "is_final": true, "t_start": 1532.7, "t_end": 1535.8, "stability": 1.0, "delay_ms": 2}
+{"text": "the team is", "is_final": false, "t_start": 1539.7, "t_end": 1540.4, "stability": 0.7, "delay_ms": 1}
+{"text": "the team is twenty people across", "is_final": false, "t_start": 1539.7, "t_end": 1541.0, "stability": 0.7, "delay_ms": 2}
+{"text": "The team is twenty people across engineering, sales, and support.", "is_final": true, "t_start": 1539.7, "t_end": 1541.8, "stability": 1.0, "delay_ms": 3}
+{"text": "most customers find", "is_final": false, "t_start": 1543.6, "t_end": 1545.2, "stability": 0.5, "delay_ms": 3}
+{"text": "most customers find us through organic", "is_final": false, "t_start": 1543.6, "t_end": 1546.8, "stability": 0.7, "delay_ms": 1}
+{"text": "Most customers find us through organic search and word of mouth.", "is_final": true, "t_start": 1543.6, "t_end": 1548.9, "stability": 1.0, "delay_ms": 1}
+{"text": "our target audience", "is_final": false, "t_start": 1551.7, "t_end": 1552.4, "stability": 0.7, "delay_ms": 1}
+{"text": "our target audience is small business", "is_final": false, "t_start": 1551.7, "t_end": 1553.0, "stability": 0.7, "delay_ms": 1}
+{"text": "Our target audience is small business owners aged 30 to 55.", "is_final": true, "t_start": 1551.7, "t_end": 1554.0, "stability": 1.0, "delay_ms": 1}
+{"text": "our biggest competitor", "is_final": false, "t_start": 1556.2, "t_end": 1557.6, "stability": 0.4, "delay_ms": 3}
+{"text": "our biggest competitor is acme corp, but", "is_final": false, "t_start": 1556.2, "t_end": 1559.0, "stability": 0.8, "delay_ms": 1}
+{"text": "Our biggest competitor is Acme Corp, but we focus on a different niche.", "is_final": true, "t_start": 1556.2, "t_end": 1561.0, "stability": 1.0, "delay_ms": 2}
+{"text": "we do quarterly", "is_final": false, "t_start": 1564.0, "t_end": 1565.2, "stability": 0.5, "delay_ms": 2}
+{"text": "we do quarterly nps surveys and", "is_final": false, "t_start": 1564.0, "t_end": 1566.3, "stability": 0.7, "delay_ms": 3}
+{"text": "We do quarterly NPS surveys and weekly support ticket analysis.", "is_final": true, "t_start": 1564.0, "t_end": 1567.9, "stability": 1.0, "delay_ms": 1}
+{"text": "where do", "is_final": false, "t_start": 1571.6, "t_end": 1572.5, "stability": 0.6, "delay_ms": 1}
+{"text": "where do you see the", "is_final": false, "t_start": 1571.6, "t_end": 1573.4, "stability": 0.8, "delay_ms": 1}
+{"text": "Where do you see the brand in five years?", "is_final": true, "t_start": 1571.6, "t_end": 1574.6, "stability": 1.0, "delay_ms": 2}
+{"text": "our main product", "is_final": false, "t_start": 1578.2, "t_end": 1580.0, "stability": 0.5, "delay_ms": 2}
+{"text": "our main product is a saas", "is_final": false, "t_start": 1578.2, "t_end": 1581.8, "stability": 0.6, "delay_ms": 3}
+{"text": "Our main product is a SaaS platform for small businesses.", "is_final": true, "t_start": 1578.2, "t_end": 1584.2, "stability": 1.0, "delay_ms": 2}
+{"text": "where do", "is_final": false, "t_start": 1587.8, "t_end": 1589.1, "stability": 0.7, "delay_ms": 2}
+{"text": "where do you see the", "is_final": false, "t_start": 1587.8, "t_end": 1590.4, "stability": 0.7, "delay_ms": 3}
+{"text": "Where do you see the brand in five years?", "is_final": true, "t_start": 1587.8, "t_end": 1592.2, "stability": 1.0, "delay_ms": 3}
+{"text": "what makes", "is_final": false, "t_start": 1594.8, "t_end": 1596.4, "stability": 0.5, "delay_ms": 1}
+{"text": "what makes your product", "is_final": false, "t_start": 1594.8, "t_end": 1598.0, "stability": 0.8, "delay_ms": 2}
+{"text": "What makes your product unique compared to alternatives?", "is_final": true, "t_start": 1594.8, "t_end": 1600.2, "stability": 1.0, "delay_ms": 1}
+{"text": "tell", "is_final": false, "t_start": 1603.4, "t_end": 1604.2, "stability": 0.6, "delay_ms": 2}
+{"text": "tell me about", "is_final": false, "t_start": 1603.4, "t_end": 1605.0, "stability": 0.7, "delay_ms": 1}
+{"text": "Tell me about your team structure.", "is_final": true, "t_start": 1603.4, "t_end": 1606.1, "stability": 1.0, "delay_ms": 1}
+{"text": "what does", "is_final": false, "t_start": 1608.9, "t_end": 1610.5, "stability": 0.6, "delay_ms": 1}
+{"text": "what does your competitive", "is_final": false, "t_start": 1608.9, "t_end": 1612.1, "stability": 0.7, "delay_ms": 1}
+{"text": "What does your competitive landscape look like?", "is_final": true, "t_start": 1608.9, "t_end": 1614.2, "stability": 1.0, "delay_ms": 1}
+{"text": "how do", "is_final": false, "t_start": 1618.1, "t_end": 1618.7, "stability": 0.5, "delay_ms": 2}
+{"text": "how do customers typically", "is_final": false, "t_start": 1618.1, "t_end": 1619.3, "stability": 0.8, "delay_ms": 2}
+{"text": "How do customers typically discover your brand?", "is_final": true, "t_start": 1618.1, "t_end": 1620.2, "stability": 1.0, "delay_ms": 2}
+{"text": "what are your", "is_final": false, "t_start": 1622.9, "t_end": 1624.3, "stability": 0.6, "delay_ms": 1}
+{"text": "what are your top three business", "is_final": false, "t_start": 1622.9, "t_end": 1625.7, "stability": 0.7, "delay_ms": 2}
+{"text": "What are your top three business goals for the next year?", "is_final": true, "t_start": 1622.9, "t_end": 1627.6, "stability": 1.0, "delay_ms": 2}
+{"text": "tell", "is_final": false, "t_start": 1629.1, "t_end": 1630.6, "stability": 0.6, "delay_ms": 3}
+{"text": "tell me about", "is_final": false, "t_start": 1629.1, "t_end": 1632.1, "stability": 0.8, "delay_ms": 2}
+{"text": "Tell me about your team structure.", "is_final": true, "t_start": 1629.1, "t_end": 1634.2, "stability": 1.0, "delay_ms": 2}
+{"text": "the brand", "is_final": false, "t_start": 1637.0, "t_end": 1638.2, "stability": 0.5, "delay_ms": 3}
+{"text": "the brand personality is", "is_final": false, "t_start": 1637.0, "t_end": 1639.3, "stability": 0.7, "delay_ms": 3}
+{"text": "The brand personality is modern, approachable, and trustworthy.", "is_final": true, "t_start": 1637.0, "t_end": 1641.0, "stability": 1.0, "delay_ms": 3}
+{"text": "our average deal", "is_final": false, "t_start": 1644.7, "t_end": 1646.3, "stability": 0.6, "delay_ms": 3}
+{"text": "our average deal size is about", "is_final": false, "t_start": 1644.7, "t_end": 1647.9, "stability": 0.8, "delay_ms": 1}
+{"text": "Our average deal size is about five hundred dollars annually.", "is_final": true, "t_start": 1644.7, "t_end": 1650.0, "stability": 1.0, "delay_ms": 3}
+{"text": "we currently", "is_final": false, "t_start": 1652.3, "t_end": 1654.0, "stability": 0.4, "delay_ms": 3}
+{"text": "we currently serve about", "is_final": false, "t_start": 1652.3, "t_end": 1655.7, "stability": 0.8, "delay_ms": 1}
+{"text": "We currently serve about three thousand active customers.", "is_final": true, "t_start": 1652.3, "t_end": 1658.0, "stability": 1.0, "delay_ms": 3}
+{"text": "what", "is_final": false, "t_start": 1660.6, "t_end": 1661.7, "stability": 0.6, "delay_ms": 3}
+{"text": "what is your", "is_final": false, "t_start": 1660.6, "t_end": 1662.9, "stability": 0.7, "delay_ms": 1}
+{"text": "What is your brand mission statement?", "is_final": true, "t_start": 1660.6, "t_end": 1664.4, "stability": 1.0, "delay_ms": 3}
+{"text": "the brand", "is_final": false, "t_start": 1666.7, "t_end": 1667.9, "stability": 0.5, "delay_ms": 1}
+{"text": "the brand personality is", "is_final": false, "t_start": 1666.7, "t_end": 1669.1, "stability": 0.7, "delay_ms": 3}
+{"text": "The brand personality is modern, approachable, and trustworthy.", "is_final": true, "t_start": 1666.7, "t_end": 1670.8, "stability": 1.0, "delay_ms": 2}
+{"text": "tell me", "is_final": false, "t_start": 1674.0, "t_end": 1675.5, "stability": 0.6, "delay_ms": 1}
+{"text": "tell me more about", "is_final": false, "t_start": 1674.0, "t_end": 1677.0, "stability": 0.7, "delay_ms": 3}
+{"text": "Tell me more about your company background.", "is_final": true, "t_start": 1674.0, "t_end": 1679.0, "stability": 1.0, "delay_ms": 1}
+{"text": "we currently", "is_final": false, "t_start": 1681.6, "t_end": 1683.4, "stability": 0.5, "delay_ms": 2}
+{"text": "we currently serve about", "is_final": false, "t_start": 1681.6, "t_end": 1685.2, "stability": 0.7, "delay_ms": 1}
+{"text": "We currently serve about three thousand active customers.", "is_final": true, "t_start": 1681.6, "t_end": 1687.6, "stability": 1.0, "delay_ms": 3}
+{"text": "in five years", "is_final": false, "t_start": 1691.5, "t_end": 1692.5, "stability": 0.7, "delay_ms": 2}
+{"text": "in five years we want to be", "is_final": false, "t_start": 1691.5, "t_end": 1693.6, "stability": 0.8, "delay_ms": 2}
+{"text": "In five years we want to be the leading platform in our vertical.", "is_final": true, "t_start": 1691.5, "t_end": 1695.0, "stability": 1.0, "delay_ms": 2}
+{"text": "our retention", "is_final": false, "t_start": 1696.2, "t_end": 1697.0, "stability": 0.7, "delay_ms": 1}
+{"text": "our retention rate is", "is_final": false, "t_start": 1696.2, "t_end": 1697.7, "stability": 0.6, "delay_ms": 3}
+{"text": "Our retention rate is about ninety-two percent annually.", "is_final": true, "t_start": 1696.2, "t_end": 1698.8, "stability": 1.0, "delay_ms": 2}
+{"text": "our target audience", "is_final": false, "t_start": 1701.4, "t_end": 1703.0, "stability": 0.6, "delay_ms": 2}
+{"text": "our target audience is small business", "is_final": false, "t_start": 1701.4, "t_end": 1704.6, "stability": 0.7, "delay_ms": 3}
+{"text": "Our target audience is small business owners aged 30 to 55.", "is_final": true, "t_start": 1701.4, "t_end": 1706.7, "stability": 1.0, "delay_ms": 3}
+{"text": "how do", "is_final": false, "t_start": 1709.0, "t_end": 1709.9, "stability": 0.5, "delay_ms": 2}
+{"text": "how do customers typically", "is_final": false, "t_start": 1709.0, "t_end": 1710.8, "stability": 0.6, "delay_ms": 3}
+{"text": "How do customers typically discover your brand?", "is_final": true, "t_start": 1709.0, "t_end": 1712.0, "stability": 1.0, "delay_ms": 1}
+{"text": "what social", "is_final": false, "t_start": 1713.1, "t_end": 1714.6, "stability": 0.7, "delay_ms": 1}
+{"text": "what social media platforms are", "is_final": false, "t_start": 1713.1, "t_end": 1716.1, "stability": 0.6, "delay_ms": 1}
+{"text": "What social media platforms are most effective for you?", "is_final": true, "t_start": 1713.1, "t_end": 1718.2, "stability": 1.0, "delay_ms": 1}
+{"text": "what is", "is_final": false, "t_start": 1721.0, "t_end": 1722.4, "stability": 0.4, "delay_ms": 3}
+{"text": "what is your current", "is_final": false, "t_start": 1721.0, "t_end": 1723.9, "stability": 0.6, "delay_ms": 2}
+{"text": "What is your current monthly marketing budget?", "is_final": true, "t_start": 1721.0, "t_end": 1725.8, "stability": 1.0, "delay_ms": 1}
+{"text": "what does", "is_final": false, "t_start": 1728.4, "t_end": 1729.1, "stability": 0.6, "delay_ms": 2}
+{"text": "what does your sales", "is_final": false, "t_start": 1728.4, "t_end": 1729.7, "stability": 0.6, "delay_ms": 3}
+{"text": "What does your sales funnel look like?", "is_final": true, "t_start": 1728.4, "t_end": 1730.6, "stability": 1.0, "delay_ms": 3}
+{"text": "what is", "is_final": false, "t_start": 1732.6, "t_end": 1734.2, "stability": 0.5, "delay_ms": 1}
+{"text": "what is your current", "is_final": false, "t_start": 1732.6, "t_end": 1735.8, "stability": 0.8, "delay_ms": 3}
+{"text": "What is your current monthly marketing budget?", "is_final": true, "t_start": 1732.6, "t_end": 1737.8, "stability": 1.0, "delay_ms": 1}
+{"text": "our retention", "is_final": false, "t_start": 1740.0, "t_end": 1741.7, "stability": 0.7, "delay_ms": 1}
+{"text": "our retention rate is", "is_final": false, "t_start": 1740.0, "t_end": 1743.5, "stability": 0.7, "delay_ms": 2}
+{"text": "Our retention rate is about ninety-two percent annually.", "is_final": true, "t_start": 1740.0, "t_end": 1745.8, "stability": 1.0, "delay_ms": 3}
+{"text": "we recently", "is_final": false, "t_start": 1748.3, "t_end": 1749.7, "stability": 0.6, "delay_ms": 2}
+{"text": "we recently expanded into", "is_final": false, "t_start": 1748.3, "t_end": 1751.1, "stability": 0.7, "delay_ms": 2}
+{"text": "We recently expanded into three new regional markets.", "is_final": true, "t_start": 1748.3, "t_end": 1753.0, "stability": 1.0, "delay_ms": 1}
+{"text": "tell", "is_final": false, "t_start": 1754.9, "t_end": 1756.1, "stability": 0.7, "delay_ms": 2}
+{"text": "tell me about", "is_final": false, "t_start": 1754.9, "t_end": 1757.2, "stability": 0.8, "delay_ms": 1}
+{"text": "Tell me about your company values.", "is_final": true, "t_start": 1754.9, "t_end": 1758.8, "stability": 1.0, "delay_ms": 2}
+{"text": "can you", "is_final": false, "t_start": 1762.5, "t_end": 1763.8, "stability": 0.4, "delay_ms": 1}
+{"text": "can you describe your", "is_final": false, "t_start": 1762.5, "t_end": 1765.0, "stability": 0.7, "delay_ms": 2}
+{"text": "Can you describe your ideal customer journey?", "is_final": true, "t_start": 1762.5, "t_end": 1766.8, "stability": 1.0, "delay_ms": 3}
+{"text": "how do", "is_final": false, "t_start": 1768.0, "t_end": 1768.7, "stability": 0.6, "delay_ms": 1}
+{"text": "how do you measure", "is_final": false, "t_start": 1768.0, "t_end": 1769.4, "stability": 0.6, "delay_ms": 2}
+{"text": "How do you measure brand awareness today?", "is_final": true, "t_start": 1768.0, "t_end": 1770.4, "stability": 1.0, "delay_ms": 3}
+{"text": "we currently", "is_final": false, "t_start": 1773.2, "t_end": 1774.0, "stability": 0.6, "delay_ms": 3}
+{"text": "we currently serve about", "is_final": false, "t_start": 1773.2, "t_end": 1774.9, "stability": 0.7, "delay_ms": 1}
+{"text": "We currently serve about three thousand active customers.", "is_final": true, "t_start": 1773.2, "t_end": 1776.0, "stability": 1.0, "delay_ms": 2}
+{"text": "the team is", "is_final": false, "t_start": 1777.6, "t_end": 1779.3, "stability": 0.4, "delay_ms": 1}
+{"text": "the team is twenty people across", "is_final": false, "t_start": 1777.6, "t_end": 1781.1, "stability": 0.8, "delay_ms": 1}
+{"text": "The team is twenty people across engineering, sales, and support.", "is_final": true, "t_start": 1777.6, "t_end": 1783.5, "stability": 1.0, "delay_ms": 3}
+{"text": "our target audience", "is_final": false, "t_start": 1787.5, "t_end": 1788.9, "stability": 0.6, "delay_ms": 2}
+{"text": "our target audience is small business", "is_final": false, "t_start": 1787.5, "t_end": 1790.4, "stability": 0.8, "delay_ms": 3}
+{"text": "Our target audience is small business owners aged 30 to 55.", "is_final": true, "t_start": 1787.5, "t_end": 1792.3, "stability": 1.0, "delay_ms": 2}
+{"text": "tell", "is_final": false, "t_start": 1795.6, "t_end": 1797.0, "stability": 0.5, "delay_ms": 2}
+{"text": "tell me about", "is_final": false, "t_start": 1795.6, "t_end": 1798.4, "stability": 0.7, "delay_ms": 2}
+{"text": "Tell me about your company values.", "is_final": true, "t_start": 1795.6, "t_end": 1800.2, "stability": 1.0, "delay_ms": 2}
+{"text": "how do", "is_final": false, "t_start": 1801.5, "t_end": 1803.0, "stability": 0.5, "delay_ms": 1}
+{"text": "how do you differentiate", "is_final": false, "t_start": 1801.5, "t_end": 1804.5, "stability": 0.7, "delay_ms": 2}
+{"text": "How do you differentiate from your closest competitor?", "is_final": true, "t_start": 1801.5, "t_end": 1806.5, "stability": 1.0, "delay_ms": 1}
+{"text": "the brand", "is_final": false, "t_start": 1809.2, "t_end": 1809.8, "stability": 0.6, "delay_ms": 3}
+{"text": "the brand personality is", "is_final": false, "t_start": 1809.2, "t_end": 1810.4, "stability": 0.7, "delay_ms": 2}
+{"text": "The brand personality is modern, approachable, and trustworthy.", "is_final": true, "t_start": 1809.2, "t_end": 1811.3, "stability": 1.0, "delay_ms": 2}
+{"text": "what does", "is_final": false, "t_start": 1812.8, "t_end": 1814.1, "stability": 0.5, "delay_ms": 3}
+{"text": "what does your competitive", "is_final": false, "t_start": 1812.8, "t_end": 1815.4, "stability": 0.7, "delay_ms": 3}
+{"text": "What does your competitive landscape look like?", "is_final": true, "t_start": 1812.8, "t_end": 1817.0, "stability": 1.0, "delay_ms": 2}
+{"text": "how", "is_final": false, "t_start": 1818.8, "t_end": 1820.2, "stability": 0.5, "delay_ms": 1}
+{"text": "how do you", "is_final": false, "t_start": 1818.8, "t_end": 1821.5, "stability": 0.7, "delay_ms": 2}
+{"text": "How do you onboard new customers?", "is_final": true, "t_start": 1818.8, "t_end": 1823.3, "stability": 1.0, "delay_ms": 1}
+{"text": "can you", "is_final": false, "t_start": 1824.7, "t_end": 1826.4, "stability": 0.6, "delay_ms": 3}
+{"text": "can you walk me through", "is_final": false, "t_start": 1824.7, "t_end": 1828.1, "stability": 0.8, "delay_ms": 3}
+{"text": "Can you walk me through your target customer profile?", "is_final": true, "t_start": 1824.7, "t_end": 1830.4, "stability": 1.0, "delay_ms": 1}
+{"text": "our average deal", "is_final": false, "t_start": 1833.9, "t_end": 1834.6, "stability": 0.4, "delay_ms": 1}
+{"text": "our average deal size is about", "is_final": false, "t_start": 1833.9, "t_end": 1835.2, "stability": 0.8, "delay_ms": 1}
+{"text": "Our average deal size is about five hundred dollars annually.", "is_final": true, "t_start": 1833.9, "t_end": 1836.1, "stability": 1.0, "delay_ms": 1}
+{"text": "what", "is_final": false, "t_start": 1839.2, "t_end": 1840.3, "stability": 0.4, "delay_ms": 3}
+{"text": "what is your", "is_final": false, "t_start": 1839.2, "t_end": 1841.5, "stability": 0.7, "delay_ms": 3}
+{"text": "What is your brand mission statement?", "is_final": true, "t_start": 1839.2, "t_end": 1843.0, "stability": 1.0, "delay_ms": 2}
+{"text": "our retention", "is_final": false, "t_start": 1846.0, "t_end": 1847.3, "stability": 0.4, "delay_ms": 3}
+{"text": "our retention rate is", "is_final": false, "t_start": 1846.0, "t_end": 1848.5, "stability": 0.7, "delay_ms": 3}
+{"text": "Our retention rate is about ninety-two percent annually.", "is_final": true, "t_start": 1846.0, "t_end": 1850.2, "stability": 1.0, "delay_ms": 2}
+{"text": "our average deal", "is_final": false, "t_start": 1851.3, "t_end": 1852.4, "stability": 0.7, "delay_ms": 1}
+{"text": "our average deal size is about", "is_final": false, "t_start": 1851.3, "t_end": 1853.5, "stability": 0.6, "delay_ms": 1}
+{"text": "Our average deal size is about five hundred dollars annually.", "is_final": true, "t_start": 1851.3, "t_end": 1855.0, "stability": 1.0, "delay_ms": 3}
+{"text": "what", "is_final": false, "t_start": 1856.4, "t_end": 1857.3, "stability": 0.5, "delay_ms": 2}
+{"text": "what is your", "is_final": false, "t_start": 1856.4, "t_end": 1858.2, "stability": 0.6, "delay_ms": 2}
+{"text": "What is your brand mission statement?", "is_final": true, "t_start": 1856.4, "t_end": 1859.5, "stability": 1.0, "delay_ms": 2}
+{"text": "how do", "is_final": false, "t_start": 1862.2, "t_end": 1863.2, "stability": 0.6, "delay_ms": 1}
+{"text": "how do customers typically", "is_final": false, "t_start": 1862.2, "t_end": 1864.1, "stability": 0.7, "delay_ms": 3}
+{"text": "How do customers typically discover your brand?", "is_final": true, "t_start": 1862.2, "t_end": 1865.4, "stability": 1.0, "delay_ms": 1}
+{"text": "our retention", "is_final": false, "t_start": 1866.7, "t_end": 1867.9, "stability": 0.6, "delay_ms": 3}
+{"text": "our retention rate is", "is_final": false, "t_start": 1866.7, "t_end": 1869.0, "stability": 0.6, "delay_ms": 2}
+{"text": "Our retention rate is about ninety-two percent annually.", "is_final": true, "t_start": 1866.7, "t_end": 1870.6, "stability": 1.0, "delay_ms": 2}
+{"text": "how would", "is_final": false, "t_start": 1873.5, "t_end": 1875.2, "stability": 0.7, "delay_ms": 1}
+{"text": "how would you describe", "is_final": false, "t_start": 1873.5, "t_end": 1876.8, "stability": 0.6, "delay_ms": 3}
+{"text": "How would you describe your brand personality?", "is_final": true, "t_start": 1873.5, "t_end": 1879.1, "stability": 1.0, "delay_ms": 3}
+{"text": "we currently", "is_final": false, "t_start": 1881.5, "t_end": 1882.9, "stability": 0.5, "delay_ms": 3}
+{"text": "we currently serve about", "is_final": false, "t_start": 1881.5, "t_end": 1884.3, "stability": 0.7, "delay_ms": 1}
+{"text": "We currently serve about three thousand active customers.", "is_final": true, "t_start": 1881.5, "t_end": 1886.3, "stability": 1.0, "delay_ms": 1}
+{"text": "what", "is_final": false, "t_start": 1890.1, "t_end": 1891.4, "stability": 0.6, "delay_ms": 3}
+{"text": "what is your", "is_final": false, "t_start": 1890.1, "t_end": 1892.7, "stability": 0.8, "delay_ms": 1}
+{"text": "What is your current marketing strategy?", "is_final": true, "t_start": 1890.1, "t_end": 1894.4, "stability": 1.0, "delay_ms": 2}
+{"text": "we value", "is_final": false, "t_start": 1895.9, "t_end": 1897.3, "stability": 0.6, "delay_ms": 2}
+{"text": "we value transparency, innovation, and", "is_final": false, "t_start": 1895.9, "t_end": 1898.7, "stability": 0.8, "delay_ms": 1}
+{"text": "We value transparency, innovation, and customer success above all.", "is_final": true, "t_start": 1895.9, "t_end": 1900.6, "stability": 1.0, "delay_ms": 3}
+{"text": "our mission is", "is_final": false, "t_start": 1903.8, "t_end": 1904.5, "stability": 0.5, "delay_ms": 1}
+{"text": "our mission is to make technology", "is_final": false, "t_start": 1903.8, "t_end": 1905.1, "stability": 0.7, "delay_ms": 3}
+{"text": "Our mission is to make technology accessible for small businesses.", "is_final": true, "t_start": 1903.8, "t_end": 1906.0, "stability": 1.0, "delay_ms": 3}
+{"text": "we were founded", "is_final": false, "t_start": 1908.2, "t_end": 1909.6, "stability": 0.6, "delay_ms": 2}
+{"text": "we were founded in 2018 by", "is_final": false, "t_start": 1908.2, "t_end": 1910.9, "stability": 0.7, "delay_ms": 2}
+{"text": "We were founded in 2018 by two former tech executives.", "is_final": true, "t_start": 1908.2, "t_end": 1912.7, "stability": 1.0, "delay_ms": 3}
+{"text": "our average deal", "is_final": false, "t_start": 1916.5, "t_end": 1917.8, "stability": 0.5, "delay_ms": 3}
+{"text": "our average deal size is about", "is_final": false, "t_start": 1916.5, "t_end": 1919.1, "stability": 0.7, "delay_ms": 1}
+{"text": "Our average deal size is about five hundred dollars annually.", "is_final": true, "t_start": 1916.5, "t_end": 1920.9, "stability": 1.0, "delay_ms": 3}
+{"text": "what does", "is_final": false, "t_start": 1922.1, "t_end": 1923.6, "stability": 0.6, "delay_ms": 3}
+{"text": "what does your competitive", "is_final": false, "t_start": 1922.1, "t_end": 1925.0, "stability": 0.7, "delay_ms": 2}
+{"text": "What does your competitive landscape look like?", "is_final": true, "t_start": 1922.1, "t_end": 1927.0, "stability": 1.0, "delay_ms": 1}
+{"text": "what are", "is_final": false, "t_start": 1928.3, "t_end": 1929.3, "stability": 0.5, "delay_ms": 1}
+{"text": "what are the biggest", "is_final": false, "t_start": 1928.3, "t_end": 1930.4, "stability": 0.6, "delay_ms": 2}
+{"text": "What are the biggest challenges your brand faces?", "is_final": true, "t_start": 1928.3, "t_end": 1931.7, "stability": 1.0, "delay_ms": 2}
+{"text": "how would", "is_final": false, "t_start": 1934.4, "t_end": 1935.0, "stability": 0.5, "delay_ms": 1}
+{"text": "how would you describe", "is_final": false, "t_start": 1934.4, "t_end": 1935.7, "stability": 0.7, "delay_ms": 2}
+{"text": "How would you describe your brand personality?", "is_final": true, "t_start": 1934.4, "t_end": 1936.5, "stability": 1.0, "delay_ms": 2}
+{"text": "what does", "is_final": false, "t_start": 1937.5, "t_end": 1938.2, "stability": 0.7, "delay_ms": 1}
+{"text": "what does your sales", "is_final": false, "t_start": 1937.5, "t_end": 1938.9, "stability": 0.7, "delay_ms": 1}
+{"text": "What does your sales funnel look like?", "is_final": true, "t_start": 1937.5, "t_end": 1939.9, "stability": 1.0, "delay_ms": 3}
+{"text": "the team is", "is_final": false, "t_start": 1942.0, "t_end": 1942.9, "stability": 0.4, "delay_ms": 1}
+{"text": "the team is twenty people across", "is_final": false, "t_start": 1942.0, "t_end": 1943.8, "stability": 0.7, "delay_ms": 2}
+{"text": "The team is twenty people across engineering, sales, and support.", "is_final": true, "t_start": 1942.0, "t_end": 1945.1, "stability": 1.0, "delay_ms": 2}
+{"text": "what are your", "is_final": false, "t_start": 1947.6, "t_end": 1949.3, "stability": 0.6, "delay_ms": 2}
+{"text": "what are your top three business", "is_final": false, "t_start": 1947.6, "t_end": 1951.1, "stability": 0.7, "delay_ms": 1}
+{"text": "What are your top three business goals for the next year?", "is_final": true, "t_start": 1947.6, "t_end": 1953.3, "stability": 1.0, "delay_ms": 2}
+{"text": "we value", "is_final": false, "t_start": 1954.6, "t_end": 1955.6, "stability": 0.6, "delay_ms": 2}
+{"text": "we value transparency, innovation, and", "is_final": false, "t_start": 1954.6, "t_end": 1956.6, "stability": 0.7, "delay_ms": 2}
+{"text": "We value transparency, innovation, and customer success above all.", "is_final": true, "t_start": 1954.6, "t_end": 1957.9, "stability": 1.0, "delay_ms": 3}
+{"text": "what channels", "is_final": false, "t_start": 1961.8, "t_end": 1963.1, "stability": 0.6, "delay_ms": 2}
+{"text": "what channels do you", "is_final": false, "t_start": 1961.8, "t_end": 1964.4, "stability": 0.7, "delay_ms": 2}
+{"text": "What channels do you use for customer acquisition?", "is_final": true, "t_start": 1961.8, "t_end": 1966.2, "stability": 1.0, "delay_ms": 2}
+{"text": "how do", "is_final": false, "t_start": 1968.1, "t_end": 1969.9, "stability": 0.6, "delay_ms": 2}
+{"text": "how do you differentiate", "is_final": false, "t_start": 1968.1, "t_end": 1971.6, "stability": 0.7, "delay_ms": 2}
+{"text": "How do you differentiate from your closest competitor?", "is_final": true, "t_start": 1968.1, "t_end": 1973.9, "stability": 1.0, "delay_ms": 2}
+{"text": "where do", "is_final": false, "t_start": 1975.2, "t_end": 1977.0, "stability": 0.5, "delay_ms": 3}
+{"text": "where do you see the", "is_final": false, "t_start": 1975.2, "t_end": 1978.8, "stability": 0.6, "delay_ms": 3}
+{"text": "Where do you see the brand in five years?", "is_final": true, "t_start": 1975.2, "t_end": 1981.2, "stability": 1.0, "delay_ms": 2}
+{"text": "the team is", "is_final": false, "t_start": 1985.0, "t_end": 1986.6, "stability": 0.4, "delay_ms": 2}
+{"text": "the team is twenty people across", "is_final": false, "t_start": 1985.0, "t_end": 1988.2, "stability": 0.7, "delay_ms": 1}
+{"text": "The team is twenty people across engineering, sales, and support.", "is_final": true, "t_start": 1985.0, "t_end": 1990.4, "stability": 1.0, "delay_ms": 3}
+{"text": "what makes", "is_final": false, "t_start": 1992.3, "t_end": 1993.8, "stability": 0.6, "delay_ms": 1}
+{"text": "what makes your product", "is_final": false, "t_start": 1992.3, "t_end": 1995.2, "stability": 0.7, "delay_ms": 3}
+{"text": "What makes your product unique compared to alternatives?", "is_final": true, "t_start": 1992.3, "t_end": 1997.2, "stability": 1.0, "delay_ms": 2}
+{"text": "tell", "is_final": false, "t_start": 1999.9, "t_end": 2001.0, "stability": 0.4, "delay_ms": 2}
+{"text": "tell me about", "is_final": false, "t_start": 1999.9, "t_end": 2002.1, "stability": 0.7, "delay_ms": 3}
+{"text": "Tell me about your team structure.", "is_final": true, "t_start": 1999.9, "t_end": 2003.6, "stability": 1.0, "delay_ms": 3}
+{"text": "we have", "is_final": false, "t_start": 2006.5, "t_end": 2007.4, "stability": 0.6, "delay_ms": 1}
+{"text": "we have partnerships with", "is_final": false, "t_start": 2006.5, "t_end": 2008.3, "stability": 0.7, "delay_ms": 1}
+{"text": "We have partnerships with several industry associations.", "is_final": true, "t_start": 2006.5, "t_end": 2009.5, "stability": 1.0, "delay_ms": 3}
+{"text": "we value", "is_final": false, "t_start": 2013.5, "t_end": 2015.3, "stability": 0.5, "delay_ms": 2}
+{"text": "we value transparency, innovation, and", "is_final": false, "t_start": 2013.5, "t_end": 2017.0, "stability": 0.6, "delay_ms": 1}
+{"text": "We value transparency, innovation, and customer success above all.", "is_final": true, "t_start": 2013.5, "t_end": 2019.3, "stability": 1.0, "delay_ms": 2}
+{"text": "our retention", "is_final": false, "t_start": 2021.0, "t_end": 2022.3, "stability": 0.6, "delay_ms": 2}
+{"text": "our retention rate is", "is_final": false, "t_start": 2021.0, "t_end": 2023.6, "stability": 0.7, "delay_ms": 2}
+{"text": "Our retention rate is about ninety-two percent annually.", "is_final": true, "t_start": 2021.0, "t_end": 2025.3, "stability": 1.0, "delay_ms": 3}
+{"text": "our mission is", "is_final": false, "t_start": 2028.1, "t_end": 2029.9, "stability": 0.5, "delay_ms": 2}
+{"text": "our mission is to make technology", "is_final": false, "t_start": 2028.1, "t_end": 2031.7, "stability": 0.7, "delay_ms": 1}
+{"text": "Our mission is to make technology accessible for small businesses.", "is_final": true, "t_start": 2028.1, "t_end": 2034.1, "stability": 1.0, "delay_ms": 1}
+{"text": "our mission is", "is_final": false, "t_start": 2037.6, "t_end": 2038.6, "stability": 0.5, "delay_ms": 1}
+{"text": "our mission is to make technology", "is_final": false, "t_start": 2037.6, "t_end": 2039.5, "stability": 0.7, "delay_ms": 2}
+{"text": "Our mission is to make technology accessible for small businesses.", "is_final": true, "t_start": 2037.6, "t_end": 2040.8, "stability": 1.0, "delay_ms": 2}
+{"text": "instagram and", "is_final": false, "t_start": 2042.1, "t_end": 2043.1, "stability": 0.5, "delay_ms": 3}
+{"text": "instagram and linkedin are", "is_final": false, "t_start": 2042.1, "t_end": 2044.1, "stability": 0.6, "delay_ms": 2}
+{"text": "Instagram and LinkedIn are our most effective channels.", "is_final": true, "t_start": 2042.1, "t_end": 2045.4, "stability": 1.0, "delay_ms": 3}
+{"text": "our customer", "is_final": false, "t_start": 2046.7, "t_end": 2047.6, "stability": 0.5, "delay_ms": 1}
+{"text": "our customer lifetime value is", "is_final": false, "t_start": 2046.7, "t_end": 2048.5, "stability": 0.7, "delay_ms": 2}
+{"text": "Our customer lifetime value is roughly two thousand dollars.", "is_final": true, "t_start": 2046.7, "t_end": 2049.7, "stability": 1.0, "delay_ms": 2}
+{"text": "we price competitively", "is_final": false, "t_start": 2051.4, "t_end": 2052.2, "stability": 0.6, "delay_ms": 2}
+{"text": "we price competitively at forty-nine dollars per", "is_final": false, "t_start": 2051.4, "t_end": 2053.0, "stability": 0.6, "delay_ms": 3}
+{"text": "We price competitively at forty-nine dollars per month for the base plan.", "is_final": true, "t_start": 2051.4, "t_end": 2054.1, "stability": 1.0, "delay_ms": 1}
+{"text": "we were founded", "is_final": false, "t_start": 2056.4, "t_end": 2057.8, "stability": 0.5, "delay_ms": 3}
+{"text": "we were founded in 2018 by", "is_final": false, "t_start": 2056.4, "t_end": 2059.3, "stability": 0.8, "delay_ms": 1}
+{"text": "We were founded in 2018 by two former tech executives.", "is_final": true, "t_start": 2056.4, "t_end": 2061.3, "stability": 1.0, "delay_ms": 3}
+{"text": "we price competitively", "is_final": false, "t_start": 2062.6, "t_end": 2063.6, "stability": 0.5, "delay_ms": 1}
+{"text": "we price competitively at forty-nine dollars per", "is_final": false, "t_start": 2062.6, "t_end": 2064.7, "stability": 0.7, "delay_ms": 2}
+{"text": "We price competitively at forty-nine dollars per month for the base plan.", "is_final": true, "t_start": 2062.6, "t_end": 2066.1, "stability": 1.0, "delay_ms": 3}
+{"text": "what does", "is_final": false, "t_start": 2070.0, "t_end": 2071.3, "stability": 0.6, "delay_ms": 2}
+{"text": "what does your competitive", "is_final": false, "t_start": 2070.0, "t_end": 2072.7, "stability": 0.7, "delay_ms": 2}
+{"text": "What does your competitive landscape look like?", "is_final": true, "t_start": 2070.0, "t_end": 2074.4, "stability": 1.0, "delay_ms": 3}
+{"text": "tell", "is_final": false, "t_start": 2075.9, "t_end": 2077.6, "stability": 0.6, "delay_ms": 3}
+{"text": "tell me about", "is_final": false, "t_start": 2075.9, "t_end": 2079.3, "stability": 0.6, "delay_ms": 1}
+{"text": "Tell me about your pricing strategy.", "is_final": true, "t_start": 2075.9, "t_end": 2081.6, "stability": 1.0, "delay_ms": 1}
+{"text": "we use a", "is_final": false, "t_start": 2083.5, "t_end": 2084.3, "stability": 0.5, "delay_ms": 3}
+{"text": "we use a combination of content", "is_final": false, "t_start": 2083.5, "t_end": 2085.0, "stability": 0.6, "delay_ms": 2}
+{"text": "We use a combination of content marketing and paid search.", "is_final": true, "t_start": 2083.5, "t_end": 2086.1, "stability": 1.0, "delay_ms": 2}
+{"text": "we use a", "is_final": false, "t_start": 2087.7, "t_end": 2089.4, "stability": 0.7, "delay_ms": 1}
+{"text": "we use a combination of content", "is_final": false, "t_start": 2087.7, "t_end": 2091.1, "stability": 0.7, "delay_ms": 2}
+{"text": "We use a combination of content marketing and paid search.", "is_final": true, "t_start": 2087.7, "t_end": 2093.3, "stability": 1.0, "delay_ms": 2}
+{"text": "what are", "is_final": false, "t_start": 2094.7, "t_end": 2096.0, "stability": 0.7, "delay_ms": 1}
+{"text": "what are the biggest", "is_final": false, "t_start": 2094.7, "t_end": 2097.4, "stability": 0.7, "delay_ms": 1}
+{"text": "What are the biggest challenges your brand faces?", "is_final": true, "t_start": 2094.7, "t_end": 2099.2, "stability": 1.0, "delay_ms": 2}
+{"text": "how do", "is_final": false, "t_start": 2103.1, "t_end": 2104.2, "stability": 0.5, "delay_ms": 3}
+{"text": "how do you differentiate", "is_final": false, "t_start": 2103.1, "t_end": 2105.3, "stability": 0.8, "delay_ms": 2}
+{"text": "How do you differentiate from your closest competitor?", "is_final": true, "t_start": 2103.1, "t_end": 2106.7, "stability": 1.0, "delay_ms": 1}
+{"text": "we have", "is_final": false, "t_start": 2107.9, "t_end": 2108.8, "stability": 0.4, "delay_ms": 1}
+{"text": "we have partnerships with", "is_final": false, "t_start": 2107.9, "t_end": 2109.6, "stability": 0.7, "delay_ms": 1}
+{"text": "We have partnerships with several industry associations.", "is_final": true, "t_start": 2107.9, "t_end": 2110.8, "stability": 1.0, "delay_ms": 2}
+{"text": "we do quarterly", "is_final": false, "t_start": 2113.5, "t_end": 2114.8, "stability": 0.4, "delay_ms": 1}
+{"text": "we do quarterly nps surveys and", "is_final": false, "t_start": 2113.5, "t_end": 2116.0, "stability": 0.7, "delay_ms": 3}
+{"text": "We do quarterly NPS surveys and weekly support ticket analysis.", "is_final": true, "t_start": 2113.5, "t_end": 2117.7, "stability": 1.0, "delay_ms": 2}
+{"text": "we have", "is_final": false, "t_start": 2120.3, "t_end": 2121.8, "stability": 0.6, "delay_ms": 2}
+{"text": "we have partnerships with", "is_final": false, "t_start": 2120.3, "t_end": 2123.2, "stability": 0.6, "delay_ms": 3}
+{"text": "We have partnerships with several industry associations.", "is_final": true, "t_start": 2120.3, "t_end": 2125.2, "stability": 1.0, "delay_ms": 1}
+{"text": "instagram and", "is_final": false, "t_start": 2127.1, "t_end": 2128.0, "stability": 0.7, "delay_ms": 1}
+{"text": "instagram and linkedin are", "is_final": false, "t_start": 2127.1, "t_end": 2128.9, "stability": 0.7, "delay_ms": 1}
+{"text": "Instagram and LinkedIn are our most effective channels.", "is_final": true, "t_start": 2127.1, "t_end": 2130.1, "stability": 1.0, "delay_ms": 1}
+{"text": "we use a", "is_final": false, "t_start": 2131.7, "t_end": 2132.7, "stability": 0.6, "delay_ms": 3}
+{"text": "we use a combination of content", "is_final": false, "t_start": 2131.7, "t_end": 2133.7, "stability": 0.7, "delay_ms": 3}
+{"text": "We use a combination of content marketing and paid search.", "is_final": true, "t_start": 2131.7, "t_end": 2135.1, "stability": 1.0, "delay_ms": 1}
+{"text": "our main product", "is_final": false, "t_start": 2138.5, "t_end": 2139.8, "stability": 0.6, "delay_ms": 3}
+{"text": "our main product is a saas", "is_final": false, "t_start": 2138.5, "t_end": 2141.1, "stability": 0.7, "delay_ms": 2}
+{"text": "Our main product is a SaaS platform for small businesses.", "is_final": true, "t_start": 2138.5, "t_end": 2142.7, "stability": 1.0, "delay_ms": 3}
+{"text": "customer acquisition", "is_final": false, "t_start": 2144.6, "t_end": 2146.4, "stability": 0.6, "delay_ms": 1}
+{"text": "customer acquisition cost is around", "is_final": false, "t_start": 2144.6, "t_end": 2148.2, "stability": 0.6, "delay_ms": 2}
+{"text": "Customer acquisition cost is around one hundred twenty dollars.", "is_final": true, "t_start": 2144.6, "t_end": 2150.5, "stability": 1.0, "delay_ms": 1}
+{"text": "the brand", "is_final": false, "t_start": 2154.5, "t_end": 2155.9, "stability": 0.4, "delay_ms": 1}
+{"text": "the brand personality is", "is_final": false, "t_start": 2154.5, "t_end": 2157.4, "stability": 0.7, "delay_ms": 1}
+{"text": "The brand personality is modern, approachable, and trustworthy.", "is_final": true, "t_start": 2154.5, "t_end": 2159.3, "stability": 1.0, "delay_ms": 3}
+{"text": "how", "is_final": false, "t_start": 2161.5, "t_end": 2162.4, "stability": 0.5, "delay_ms": 2}
+{"text": "how do you", "is_final": false, "t_start": 2161.5, "t_end": 2163.3, "stability": 0.6, "delay_ms": 1}
+{"text": "How do you handle customer feedback?", "is_final": true, "t_start": 2161.5, "t_end": 2164.6, "stability": 1.0, "delay_ms": 2}
+{"text": "our mission is", "is_final": false, "t_start": 2167.1, "t_end": 2168.2, "stability": 0.5, "delay_ms": 3}
+{"text": "our mission is to make technology", "is_final": false, "t_start": 2167.1, "t_end": 2169.4, "stability": 0.6, "delay_ms": 3}
+{"text": "Our mission is to make technology accessible for small businesses.", "is_final": true, "t_start": 2167.1, "t_end": 2171.0, "stability": 1.0, "delay_ms": 1}
+{"text": "our average deal", "is_final": false, "t_start": 2174.2, "t_end": 2175.6, "stability": 0.7, "delay_ms": 3}
+{"text": "our average deal size is about", "is_final": false, "t_start": 2174.2, "t_end": 2177.1, "stability": 0.7, "delay_ms": 2}
+{"text": "Our average deal size is about five hundred dollars annually.", "is_final": true, "t_start": 2174.2, "t_end": 2179.0, "stability": 1.0, "delay_ms": 1}
+{"text": "tell", "is_final": false, "t_start": 2181.5, "t_end": 2182.5, "stability": 0.6, "delay_ms": 3}
+{"text": "tell me about", "is_final": false, "t_start": 2181.5, "t_end": 2183.5, "stability": 0.8, "delay_ms": 2}
+{"text": "Tell me about your pricing strategy.", "is_final": true, "t_start": 2181.5, "t_end": 2184.8, "stability": 1.0, "delay_ms": 3}
+{"text": "we recently", "is_final": false, "t_start": 2188.1, "t_end": 2189.6, "stability": 0.5, "delay_ms": 1}
+{"text": "we recently expanded into", "is_final": false, "t_start": 2188.1, "t_end": 2191.2, "stability": 0.8, "delay_ms": 1}
+{"text": "We recently expanded into three new regional markets.", "is_final": true, "t_start": 2188.1, "t_end": 2193.2, "stability": 1.0, "delay_ms": 2}
+{"text": "in five years", "is_final": false, "t_start": 2195.6, "t_end": 2196.4, "stability": 0.6, "delay_ms": 1}
+{"text": "in five years we want to be", "is_final": false, "t_start": 2195.6, "t_end": 2197.3, "stability": 0.8, "delay_ms": 2}
+{"text": "In five years we want to be the leading platform in our vertical.", "is_final": true, "t_start": 2195.6, "t_end": 2198.4, "stability": 1.0, "delay_ms": 1}
+{"text": "we currently", "is_final": false, "t_start": 2202.0, "t_end": 2203.4, "stability": 0.5, "delay_ms": 2}
+{"text": "we currently serve about", "is_final": false, "t_start": 2202.0, "t_end": 2204.8, "stability": 0.7, "delay_ms": 3}
+{"text": "We currently serve about three thousand active customers.", "is_final": true, "t_start": 2202.0, "t_end": 2206.6, "stability": 1.0, "delay_ms": 1}
+{"text": "our customer", "is_final": false, "t_start": 2207.8, "t_end": 2209.2, "stability": 0.5, "delay_ms": 3}
+{"text": "our customer lifetime value is", "is_final": false, "t_start": 2207.8, "t_end": 2210.7, "stability": 0.6, "delay_ms": 1}
+{"text": "Our customer lifetime value is roughly two thousand dollars.", "is_final": true, "t_start": 2207.8, "t_end": 2212.6, "stability": 1.0, "delay_ms": 1}
+{"text": "where do", "is_final": false, "t_start": 2214.2, "t_end": 2215.1, "stability": 0.6, "delay_ms": 1}
+{"text": "where do you see the", "is_final": false, "t_start": 2214.2, "t_end": 2215.9, "stability": 0.6, "delay_ms": 2}
+{"text": "Where do you see the brand in five years?", "is_final": true, "t_start": 2214.2, "t_end": 2217.1, "stability": 1.0, "delay_ms": 1}
+{"text": "what makes", "is_final": false, "t_start": 2221.1, "t_end": 2222.3, "stability": 0.5, "delay_ms": 1}
+{"text": "what makes your product", "is_final": false, "t_start": 2221.1, "t_end": 2223.4, "stability": 0.7, "delay_ms": 1}
+{"text": "What makes your product unique compared to alternatives?", "is_final": true, "t_start": 2221.1, "t_end": 2225.0, "stability": 1.0, "delay_ms": 1}
+{"text": "what makes", "is_final": false, "t_start": 2226.9, "t_end": 2228.0, "stability": 0.6, "delay_ms": 1}
+{"text": "what makes your product", "is_final": false, "t_start": 2226.9, "t_end": 2229.0, "stability": 0.7, "delay_ms": 3}
+{"text": "What makes your product unique compared to alternatives?", "is_final": true, "t_start": 2226.9, "t_end": 2230.5, "stability": 1.0, "delay_ms": 1}
+{"text": "what social", "is_final": false, "t_start": 2231.7, "t_end": 2233.1, "stability": 0.5, "delay_ms": 3}
+{"text": "what social media platforms are", "is_final": false, "t_start": 2231.7, "t_end": 2234.5, "stability": 0.6, "delay_ms": 3}
+{"text": "What social media platforms are most effective for you?", "is_final": true, "t_start": 2231.7, "t_end": 2236.3, "stability": 1.0, "delay_ms": 1}
+{"text": "what are", "is_final": false, "t_start": 2240.1, "t_end": 2241.7, "stability": 0.4, "delay_ms": 1}
+{"text": "what are the biggest", "is_final": false, "t_start": 2240.1, "t_end": 2243.4, "stability": 0.6, "delay_ms": 1}
+{"text": "What are the biggest challenges your brand faces?", "is_final": true, "t_start": 2240.1, "t_end": 2245.5, "stability": 1.0, "delay_ms": 3}
+{"text": "in five years", "is_final": false, "t_start": 2248.7, "t_end": 2249.7, "stability": 0.4, "delay_ms": 2}
+{"text": "in five years we want to be", "is_final": false, "t_start": 2248.7, "t_end": 2250.7, "stability": 0.7, "delay_ms": 1}
+{"text": "In five years we want to be the leading platform in our vertical.", "is_final": true, "t_start": 2248.7, "t_end": 2251.9, "stability": 1.0, "delay_ms": 3}
+{"text": "the team is", "is_final": false, "t_start": 2254.7, "t_end": 2256.2, "stability": 0.6, "delay_ms": 3}
+{"text": "the team is twenty people across", "is_final": false, "t_start": 2254.7, "t_end": 2257.8, "stability": 0.8, "delay_ms": 1}
+{"text": "The team is twenty people across engineering, sales, and support.", "is_final": true, "t_start": 2254.7, "t_end": 2259.8, "stability": 1.0, "delay_ms": 3}
+{"text": "what does", "is_final": false, "t_start": 2262.6, "t_end": 2263.6, "stability": 0.4, "delay_ms": 1}
+{"text": "what does your competitive", "is_final": false, "t_start": 2262.6, "t_end": 2264.5, "stability": 0.7, "delay_ms": 1}
+{"text": "What does your competitive landscape look like?", "is_final": true, "t_start": 2262.6, "t_end": 2265.8, "stability": 1.0, "delay_ms": 1}
+{"text": "what", "is_final": false, "t_start": 2268.3, "t_end": 2270.0, "stability": 0.4, "delay_ms": 2}
+{"text": "what is your", "is_final": false, "t_start": 2268.3, "t_end": 2271.6, "stability": 0.8, "delay_ms": 1}
+{"text": "What is your brand mission statement?", "is_final": true, "t_start": 2268.3, "t_end": 2273.9, "stability": 1.0, "delay_ms": 2}
+{"text": "how do", "is_final": false, "t_start": 2277.5, "t_end": 2278.8, "stability": 0.5, "delay_ms": 2}
+{"text": "how do you measure", "is_final": false, "t_start": 2277.5, "t_end": 2280.0, "stability": 0.8, "delay_ms": 1}
+{"text": "How do you measure brand awareness today?", "is_final": true, "t_start": 2277.5, "t_end": 2281.7, "stability": 1.0, "delay_ms": 1}
+{"text": "most customers find", "is_final": false, "t_start": 2284.5, "t_end": 2285.1, "stability": 0.4, "delay_ms": 2}
+{"text": "most customers find us through organic", "is_final": false, "t_start": 2284.5, "t_end": 2285.8, "stability": 0.7, "delay_ms": 3}
+{"text": "Most customers find us through organic search and word of mouth.", "is_final": true, "t_start": 2284.5, "t_end": 2286.6, "stability": 1.0, "delay_ms": 3}
+{"text": "we use a", "is_final": false, "t_start": 2289.1, "t_end": 2290.2, "stability": 0.6, "delay_ms": 3}
+{"text": "we use a combination of content", "is_final": false, "t_start": 2289.1, "t_end": 2291.3, "stability": 0.7, "delay_ms": 2}
+{"text": "We use a combination of content marketing and paid search.", "is_final": true, "t_start": 2289.1, "t_end": 2292.7, "stability": 1.0, "delay_ms": 1}
+{"text": "most customers find", "is_final": false, "t_start": 2294.6, "t_end": 2296.4, "stability": 0.4, "delay_ms": 2}
+{"text": "most customers find us through organic", "is_final": false, "t_start": 2294.6, "t_end": 2298.1, "stability": 0.7, "delay_ms": 3}
+{"text": "Most customers find us through organic search and word of mouth.", "is_final": true, "t_start": 2294.6, "t_end": 2300.5, "stability": 1.0, "delay_ms": 3}
+{"text": "tell", "is_final": false, "t_start": 2303.5, "t_end": 2304.6, "stability": 0.7, "delay_ms": 1}
+{"text": "tell me about", "is_final": false, "t_start": 2303.5, "t_end": 2305.7, "stability": 0.6, "delay_ms": 1}
+{"text": "Tell me about your team structure.", "is_final": true, "t_start": 2303.5, "t_end": 2307.3, "stability": 1.0, "delay_ms": 2}
+{"text": "what", "is_final": false, "t_start": 2308.6, "t_end": 2309.6, "stability": 0.6, "delay_ms": 3}
+{"text": "what year was", "is_final": false, "t_start": 2308.6, "t_end": 2310.5, "stability": 0.6, "delay_ms": 1}
+{"text": "What year was the business founded?", "is_final": true, "t_start": 2308.6, "t_end": 2311.9, "stability": 1.0, "delay_ms": 3}
+{"text": "we do quarterly", "is_final": false, "t_start": 2313.3, "t_end": 2315.0, "stability": 0.6, "delay_ms": 3}
+{"text": "we do quarterly nps surveys and", "is_final": false, "t_start": 2313.3, "t_end": 2316.8, "stability": 0.7, "delay_ms": 2}
+{"text": "We do quarterly NPS surveys and weekly support ticket analysis.", "is_final": true, "t_start": 2313.3, "t_end": 2319.1, "stability": 1.0, "delay_ms": 1}
+{"text": "our customer", "is_final": false, "t_start": 2322.3, "t_end": 2324.0, "stability": 0.6, "delay_ms": 1}
+{"text": "our customer lifetime value is", "is_final": false, "t_start": 2322.3, "t_end": 2325.6, "stability": 0.7, "delay_ms": 2}
+{"text": "Our customer lifetime value is roughly two thousand dollars.", "is_final": true, "t_start": 2322.3, "t_end": 2327.9, "stability": 1.0, "delay_ms": 2}
+{"text": "where do", "is_final": false, "t_start": 2330.5, "t_end": 2331.9, "stability": 0.5, "delay_ms": 3}
+{"text": "where do you see the", "is_final": false, "t_start": 2330.5, "t_end": 2333.2, "stability": 0.7, "delay_ms": 2}
+{"text": "Where do you see the brand in five years?", "is_final": true, "t_start": 2330.5, "t_end": 2335.0, "stability": 1.0, "delay_ms": 3}
+{"text": "we have", "is_final": false, "t_start": 2336.5, "t_end": 2337.2, "stability": 0.6, "delay_ms": 3}
+{"text": "we have partnerships with", "is_final": false, "t_start": 2336.5, "t_end": 2337.9, "stability": 0.6, "delay_ms": 3}
+{"text": "We have partnerships with several industry associations.", "is_final": true, "t_start": 2336.5, "t_end": 2338.9, "stability": 1.0, "delay_ms": 3}
+{"text": "we were founded", "is_final": false, "t_start": 2339.9, "t_end": 2340.8, "stability": 0.5, "delay_ms": 2}
+{"text": "we were founded in 2018 by", "is_final": false, "t_start": 2339.9, "t_end": 2341.7, "stability": 0.8, "delay_ms": 1}
+{"text": "We were founded in 2018 by two former tech executives.", "is_final": true, "t_start": 2339.9, "t_end": 2342.9, "stability": 1.0, "delay_ms": 1}
+{"text": "our customer", "is_final": false, "t_start": 2345.6, "t_end": 2347.0, "stability": 0.5, "delay_ms": 1}
+{"text": "our customer lifetime value is", "is_final": false, "t_start": 2345.6, "t_end": 2348.4, "stability": 0.7, "delay_ms": 3}
+{"text": "Our customer lifetime value is roughly two thousand dollars.", "is_final": true, "t_start": 2345.6, "t_end": 2350.2, "stability": 1.0, "delay_ms": 2}
+{"text": "how do", "is_final": false, "t_start": 2352.0, "t_end": 2352.7, "stability": 0.6, "delay_ms": 1}
+{"text": "how do you measure", "is_final": false, "t_start": 2352.0, "t_end": 2353.5, "stability": 0.6, "delay_ms": 3}
+{"text": "How do you measure brand awareness today?", "is_final": true, "t_start": 2352.0, "t_end": 2354.5, "stability": 1.0, "delay_ms": 1}
+{"text": "instagram and", "is_final": false, "t_start": 2358.4, "t_end": 2360.0, "stability": 0.6, "delay_ms": 2}
+{"text": "instagram and linkedin are", "is_final": false, "t_start": 2358.4, "t_end": 2361.7, "stability": 0.7, "delay_ms": 3}
+{"text": "Instagram and LinkedIn are our most effective channels.", "is_final": true, "t_start": 2358.4, "t_end": 2363.8, "stability": 1.0, "delay_ms": 2}
+{"text": "where do", "is_final": false, "t_start": 2364.8, "t_end": 2366.3, "stability": 0.6, "delay_ms": 1}
+{"text": "where do you see the", "is_final": false, "t_start": 2364.8, "t_end": 2367.9, "stability": 0.7, "delay_ms": 3}
+{"text": "Where do you see the brand in five years?", "is_final": true, "t_start": 2364.8, "t_end": 2370.0, "stability": 1.0, "delay_ms": 2}
+{"text": "how", "is_final": false, "t_start": 2374.0, "t_end": 2375.7, "stability": 0.6, "delay_ms": 1}
+{"text": "how do you", "is_final": false, "t_start": 2374.0, "t_end": 2377.4, "stability": 0.6, "delay_ms": 2}
+{"text": "How do you onboard new customers?", "is_final": true, "t_start": 2374.0, "t_end": 2379.6, "stability": 1.0, "delay_ms": 1}
+{"text": "we use a", "is_final": false, "t_start": 2381.3, "t_end": 2383.0, "stability": 0.7, "delay_ms": 1}
+{"text": "we use a combination of content", "is_final": false, "t_start": 2381.3, "t_end": 2384.6, "stability": 0.8, "delay_ms": 2}
+{"text": "We use a combination of content marketing and paid search.", "is_final": true, "t_start": 2381.3, "t_end": 2386.8, "stability": 1.0, "delay_ms": 3}
+{"text": "what", "is_final": false, "t_start": 2390.0, "t_end": 2391.8, "stability": 0.5, "delay_ms": 1}
+{"text": "what is your", "is_final": false, "t_start": 2390.0, "t_end": 2393.6, "stability": 0.8, "delay_ms": 1}
+{"text": "What is your brand mission statement?", "is_final": true, "t_start": 2390.0, "t_end": 2395.9, "stability": 1.0, "delay_ms": 3}
+{"text": "our target audience", "is_final": false, "t_start": 2397.7, "t_end": 2399.4, "stability": 0.6, "delay_ms": 3}
+{"text": "our target audience is small business", "is_final": false, "t_start": 2397.7, "t_end": 2401.1, "stability": 0.8, "delay_ms": 2}
+{"text": "Our target audience is small business owners aged 30 to 55.", "is_final": true, "t_start": 2397.7, "t_end": 2403.3, "stability": 1.0, "delay_ms": 3}
+{"text": "what makes", "is_final": false, "t_start": 2404.6, "t_end": 2406.0, "stability": 0.5, "delay_ms": 3}
+{"text": "what makes your product", "is_final": false, "t_start": 2404.6, "t_end": 2407.3, "stability": 0.7, "delay_ms": 2}
+{"text": "What makes your product unique compared to alternatives?", "is_final": true, "t_start": 2404.6, "t_end": 2409.1, "stability": 1.0, "delay_ms": 3}
+{"text": "we spend about", "is_final": false, "t_start": 2413.0, "t_end": 2414.6, "stability": 0.7, "delay_ms": 2}
+{"text": "we spend about fifteen thousand dollars", "is_final": false, "t_start": 2413.0, "t_end": 2416.2, "stability": 0.7, "delay_ms": 3}
+{"text": "We spend about fifteen thousand dollars per month on marketing.", "is_final": true, "t_start": 2413.0, "t_end": 2418.4, "stability": 1.0, "delay_ms": 2}
+{"text": "who are", "is_final": false, "t_start": 2420.4, "t_end": 2422.1, "stability": 0.4, "delay_ms": 3}
+{"text": "who are your primary", "is_final": false, "t_start": 2420.4, "t_end": 2423.9, "stability": 0.6, "delay_ms": 1}
+{"text": "Who are your primary competitors in this space?", "is_final": true, "t_start": 2420.4, "t_end": 2426.1, "stability": 1.0, "delay_ms": 1}
+{"text": "our biggest competitor", "is_final": false, "t_start": 2428.4, "t_end": 2429.6, "stability": 0.7, "delay_ms": 1}
+{"text": "our biggest competitor is acme corp, but", "is_final": false, "t_start": 2428.4, "t_end": 2430.9, "stability": 0.7, "delay_ms": 2}
+{"text": "Our biggest competitor is Acme Corp, but we focus on a different niche.", "is_final": true, "t_start": 2428.4, "t_end": 2432.6, "stability": 1.0, "delay_ms": 2}
+{"text": "what is", "is_final": false, "t_start": 2436.2, "t_end": 2437.2, "stability": 0.6, "delay_ms": 3}
+{"text": "what is your current", "is_final": false, "t_start": 2436.2, "t_end": 2438.1, "stability": 0.6, "delay_ms": 2}
+{"text": "What is your current monthly marketing budget?", "is_final": true, "t_start": 2436.2, "t_end": 2439.4, "stability": 1.0, "delay_ms": 1}
+{"text": "our mission is", "is_final": false, "t_start": 2440.7, "t_end": 2441.8, "stability": 0.4, "delay_ms": 2}
+{"text": "our mission is to make technology", "is_final": false, "t_start": 2440.7, "t_end": 2442.9, "stability": 0.7, "delay_ms": 1}
+{"text": "Our mission is to make technology accessible for small businesses.", "is_final": true, "t_start": 2440.7, "t_end": 2444.3, "stability": 1.0, "delay_ms": 1}
+{"text": "our retention", "is_final": false, "t_start": 2448.2, "t_end": 2449.7, "stability": 0.5, "delay_ms": 2}
+{"text": "our retention rate is", "is_final": false, "t_start": 2448.2, "t_end": 2451.2, "stability": 0.6, "delay_ms": 1}
+{"text": "Our retention rate is about ninety-two percent annually.", "is_final": true, "t_start": 2448.2, "t_end": 2453.1, "stability": 1.0, "delay_ms": 1}
+{"text": "our target audience", "is_final": false, "t_start": 2454.1, "t_end": 2454.9, "stability": 0.6, "delay_ms": 2}
+{"text": "our target audience is small business", "is_final": false, "t_start": 2454.1, "t_end": 2455.6, "stability": 0.7, "delay_ms": 3}
+{"text": "Our target audience is small business owners aged 30 to 55.", "is_final": true, "t_start": 2454.1, "t_end": 2456.7, "stability": 1.0, "delay_ms": 1}
+{"text": "who are", "is_final": false, "t_start": 2459.4, "t_end": 2460.0, "stability": 0.4, "delay_ms": 3}
+{"text": "who are your primary", "is_final": false, "t_start": 2459.4, "t_end": 2460.7, "stability": 0.7, "delay_ms": 1}
+{"text": "Who are your primary competitors in this space?", "is_final": true, "t_start": 2459.4, "t_end": 2461.5, "stability": 1.0, "delay_ms": 1}
+{"text": "what channels", "is_final": false, "t_start": 2465.2, "t_end": 2465.9, "stability": 0.7, "delay_ms": 1}
+{"text": "what channels do you", "is_final": false, "t_start": 2465.2, "t_end": 2466.7, "stability": 0.6, "delay_ms": 3}
+{"text": "What channels do you use for customer acquisition?", "is_final": true, "t_start": 2465.2, "t_end": 2467.7, "stability": 1.0, "delay_ms": 2}
+{"text": "we were founded", "is_final": false, "t_start": 2471.2, "t_end": 2472.3, "stability": 0.5, "delay_ms": 2}
+{"text": "we were founded in 2018 by", "is_final": false, "t_start": 2471.2, "t_end": 2473.3, "stability": 0.6, "delay_ms": 1}
+{"text": "We were founded in 2018 by two former tech executives.", "is_final": true, "t_start": 2471.2, "t_end": 2474.7, "stability": 1.0, "delay_ms": 2}
+{"text": "our main product", "is_final": false, "t_start": 2476.5, "t_end": 2477.8, "stability": 0.6, "delay_ms": 3}
+{"text": "our main product is a saas", "is_final": false, "t_start": 2476.5, "t_end": 2479.2, "stability": 0.7, "delay_ms": 2}
+{"text": "Our main product is a SaaS platform for small businesses.", "is_final": true, "t_start": 2476.5, "t_end": 2481.0, "stability": 1.0, "delay_ms": 3}
+{"text": "what does", "is_final": false, "t_start": 2483.4, "t_end": 2484.2, "stability": 0.5, "delay_ms": 3}
+{"text": "what does your competitive", "is_final": false, "t_start": 2483.4, "t_end": 2484.9, "stability": 0.6, "delay_ms": 3}
+{"text": "What does your competitive landscape look like?", "is_final": true, "t_start": 2483.4, "t_end": 2486.0, "stability": 1.0, "delay_ms": 1}
+{"text": "how do", "is_final": false, "t_start": 2490.0, "t_end": 2491.2, "stability": 0.6, "delay_ms": 2}
+{"text": "how do you measure", "is_final": false, "t_start": 2490.0, "t_end": 2492.4, "stability": 0.8, "delay_ms": 3}
+{"text": "How do you measure brand awareness today?", "is_final": true, "t_start": 2490.0, "t_end": 2493.9, "stability": 1.0, "delay_ms": 2}
+{"text": "we differentiate", "is_final": false, "t_start": 2496.1, "t_end": 2497.4, "stability": 0.4, "delay_ms": 2}
+{"text": "we differentiate by offering personalized", "is_final": false, "t_start": 2496.1, "t_end": 2498.7, "stability": 0.6, "delay_ms": 2}
+{"text": "We differentiate by offering personalized onboarding for every client.", "is_final": true, "t_start": 2496.1, "t_end": 2500.5, "stability": 1.0, "delay_ms": 3}
+{"text": "our target audience", "is_final": false, "t_start": 2502.6, "t_end": 2504.4, "stability": 0.4, "delay_ms": 3}
+{"text": "our target audience is small business", "is_final": false, "t_start": 2502.6, "t_end": 2506.1, "stability": 0.6, "delay_ms": 3}
+{"text": "Our target audience is small business owners aged 30 to 55.", "is_final": true, "t_start": 2502.6, "t_end": 2508.5, "stability": 1.0, "delay_ms": 3}
+{"text": "our target audience", "is_final": false, "t_start": 2509.7, "t_end": 2511.0, "stability": 0.7, "delay_ms": 2}
+{"text": "our target audience is small business", "is_final": false, "t_start": 2509.7, "t_end": 2512.3, "stability": 0.7, "delay_ms": 1}
+{"text": "Our target audience is small business owners aged 30 to 55.", "is_final": true, "t_start": 2509.7, "t_end": 2514.0, "stability": 1.0, "delay_ms": 1}
+{"text": "how", "is_final": false, "t_start": 2515.7, "t_end": 2517.1, "stability": 0.7, "delay_ms": 1}
+{"text": "how do you", "is_final": false, "t_start": 2515.7, "t_end": 2518.6, "stability": 0.7, "delay_ms": 2}
+{"text": "How do you onboard new customers?", "is_final": true, "t_start": 2515.7, "t_end": 2520.5, "stability": 1.0, "delay_ms": 3}
+{"text": "what", "is_final": false, "t_start": 2523.2, "t_end": 2524.8, "stability": 0.6, "delay_ms": 2}
+{"text": "what is your", "is_final": false, "t_start": 2523.2, "t_end": 2526.4, "stability": 0.7, "delay_ms": 1}
+{"text": "What is your current marketing strategy?", "is_final": true, "t_start": 2523.2, "t_end": 2528.5, "stability": 1.0, "delay_ms": 2}
+{"text": "the biggest", "is_final": false, "t_start": 2529.6, "t_end": 2530.5, "stability": 0.6, "delay_ms": 1}
+{"text": "the biggest challenge is scaling", "is_final": false, "t_start": 2529.6, "t_end": 2531.3, "stability": 0.7, "delay_ms": 3}
+{"text": "The biggest challenge is scaling support while maintaining quality.", "is_final": true, "t_start": 2529.6, "t_end": 2532.5, "stability": 1.0, "delay_ms": 1}
+{"text": "can you", "is_final": false, "t_start": 2535.9, "t_end": 2537.6, "stability": 0.7, "delay_ms": 2}
+{"text": "can you walk me through", "is_final": false, "t_start": 2535.9, "t_end": 2539.3, "stability": 0.6, "delay_ms": 1}
+{"text": "Can you walk me through your target customer profile?", "is_final": true, "t_start": 2535.9, "t_end": 2541.6, "stability": 1.0, "delay_ms": 3}
+{"text": "our biggest competitor", "is_final": false, "t_start": 2544.7, "t_end": 2546.3, "stability": 0.7, "delay_ms": 1}
+{"text": "our biggest competitor is acme corp, but", "is_final": false, "t_start": 2544.7, "t_end": 2547.9, "stability": 0.7, "delay_ms": 3}
+{"text": "Our biggest competitor is Acme Corp, but we focus on a different niche.", "is_final": true, "t_start": 2544.7, "t_end": 2550.1, "stability": 1.0, "delay_ms": 2}
+{"text": "what channels", "is_final": false, "t_start": 2552.9, "t_end": 2553.7, "stability": 0.4, "delay_ms": 2}
+{"text": "what channels do you", "is_final": false, "t_start": 2552.9, "t_end": 2554.4, "stability": 0.8, "delay_ms": 2}
+{"text": "What channels do you use for customer acquisition?", "is_final": true, "t_start": 2552.9, "t_end": 2555.4, "stability": 1.0, "delay_ms": 3}
+{"text": "tell", "is_final": false, "t_start": 2557.4, "t_end": 2558.8, "stability": 0.7, "delay_ms": 2}
+{"text": "tell me about", "is_final": false, "t_start": 2557.4, "t_end": 2560.3, "stability": 0.6, "delay_ms": 3}
+{"text": "Tell me about your company values.", "is_final": true, "t_start": 2557.4, "t_end": 2562.1, "stability": 1.0, "delay_ms": 1}
+{"text": "tell", "is_final": false, "t_start": 2564.2, "t_end": 2565.0, "stability": 0.6, "delay_ms": 3}
+{"text": "tell me about", "is_final": false, "t_start": 2564.2, "t_end": 2565.7, "stability": 0.8, "delay_ms": 2}
+{"text": "Tell me about your pricing strategy.", "is_final": true, "t_start": 2564.2, "t_end": 2566.7, "stability": 1.0, "delay_ms": 3}
+{"text": "what social", "is_final": false, "t_start": 2567.8, "t_end": 2568.7, "stability": 0.6, "delay_ms": 2}
+{"text": "what social media platforms are", "is_final": false, "t_start": 2567.8, "t_end": 2569.5, "stability": 0.6, "delay_ms": 3}
+{"text": "What social media platforms are most effective for you?", "is_final": true, "t_start": 2567.8, "t_end": 2570.7, "stability": 1.0, "delay_ms": 1}
+{"text": "can you", "is_final": false, "t_start": 2572.4, "t_end": 2573.8, "stability": 0.7, "delay_ms": 3}
+{"text": "can you walk me through", "is_final": false, "t_start": 2572.4, "t_end": 2575.1, "stability": 0.7, "delay_ms": 3}
+{"text": "Can you walk me through your target customer profile?", "is_final": true, "t_start": 2572.4, "t_end": 2577.0, "stability": 1.0, "delay_ms": 2}
+{"text": "our target audience", "is_final": false, "t_start": 2579.3, "t_end": 2580.7, "stability": 0.5, "delay_ms": 1}
+{"text": "our target audience is small business", "is_final": false, "t_start": 2579.3, "t_end": 2582.2, "stability": 0.7, "delay_ms": 1}
+{"text": "Our target audience is small business owners aged 30 to 55.", "is_final": true, "t_start": 2579.3, "t_end": 2584.1, "stability": 1.0, "delay_ms": 2}
+{"text": "we price competitively", "is_final": false, "t_start": 2586.4, "t_end": 2588.1, "stability": 0.5, "delay_ms": 2}
+{"text": "we price competitively at forty-nine dollars per", "is_final": false, "t_start": 2586.4, "t_end": 2589.7, "stability": 0.7, "delay_ms": 2}
+{"text": "We price competitively at forty-nine dollars per month for the base plan.", "is_final": true, "t_start": 2586.4, "t_end": 2592.0, "stability": 1.0, "delay_ms": 1}
+{"text": "we launched a", "is_final": false, "t_start": 2595.5, "t_end": 2596.9, "stability": 0.6, "delay_ms": 1}
+{"text": "we launched a referral program that drives", "is_final": false, "t_start": 2595.5, "t_end": 2598.3, "stability": 0.7, "delay_ms": 1}
+{"text": "We launched a referral program that drives thirty percent of new signups.", "is_final": true, "t_start": 2595.5, "t_end": 2600.1, "stability": 1.0, "delay_ms": 2}
+{"text": "how would", "is_final": false, "t_start": 2601.2, "t_end": 2601.9, "stability": 0.5, "delay_ms": 2}
+{"text": "how would you describe", "is_final": false, "t_start": 2601.2, "t_end": 2602.6, "stability": 0.6, "delay_ms": 1}
+{"text": "How would you describe your brand personality?", "is_final": true, "t_start": 2601.2, "t_end": 2603.5, "stability": 1.0, "delay_ms": 3}
+{"text": "what channels", "is_final": false, "t_start": 2607.3, "t_end": 2608.6, "stability": 0.6, "delay_ms": 2}
+{"text": "what channels do you", "is_final": false, "t_start": 2607.3, "t_end": 2609.9, "stability": 0.7, "delay_ms": 2}
+{"text": "What channels do you use for customer acquisition?", "is_final": true, "t_start": 2607.3, "t_end": 2611.7, "stability": 1.0, "delay_ms": 3}
+{"text": "can you", "is_final": false, "t_start": 2613.2, "t_end": 2613.9, "stability": 0.5, "delay_ms": 1}
+{"text": "can you walk me through", "is_final": false, "t_start": 2613.2, "t_end": 2614.5, "stability": 0.7, "delay_ms": 3}
+{"text": "Can you walk me through your target customer profile?", "is_final": true, "t_start": 2613.2, "t_end": 2615.4, "stability": 1.0, "delay_ms": 3}
+{"text": "what is", "is_final": false, "t_start": 2619.2, "t_end": 2620.1, "stability": 0.5, "delay_ms": 1}
+{"text": "what is your current", "is_final": false, "t_start": 2619.2, "t_end": 2621.1, "stability": 0.7, "delay_ms": 3}
+{"text": "What is your current monthly marketing budget?", "is_final": true, "t_start": 2619.2, "t_end": 2622.3, "stability": 1.0, "delay_ms": 2}
+{"text": "in five years", "is_final": false, "t_start": 2623.8, "t_end": 2624.5, "stability": 0.6, "delay_ms": 3}
+{"text": "in five years we want to be", "is_final": false, "t_start": 2623.8, "t_end": 2625.2, "stability": 0.7, "delay_ms": 1}
+{"text": "In five years we want to be the leading platform in our vertical.", "is_final": true, "t_start": 2623.8, "t_end": 2626.1, "stability": 1.0, "delay_ms": 1}
+{"text": "tell", "is_final": false, "t_start": 2627.2, "t_end": 2629.0, "stability": 0.5, "delay_ms": 1}
+{"text": "tell me about", "is_final": false, "t_start": 2627.2, "t_end": 2630.7, "stability": 0.7, "delay_ms": 2}
+{"text": "Tell me about your pricing strategy.", "is_final": true, "t_start": 2627.2, "t_end": 2633.1, "stability": 1.0, "delay_ms": 2}
+{"text": "who are", "is_final": false, "t_start": 2635.6, "t_end": 2637.0, "stability": 0.5, "delay_ms": 2}
+{"text": "who are your primary", "is_final": false, "t_start": 2635.6, "t_end": 2638.3, "stability": 0.8, "delay_ms": 2}
+{"text": "Who are your primary competitors in this space?", "is_final": true, "t_start": 2635.6, "t_end": 2640.1, "stability": 1.0, "delay_ms": 1}
+{"text": "instagram and", "is_final": false, "t_start": 2642.4, "t_end": 2643.3, "stability": 0.7, "delay_ms": 3}
+{"text": "instagram and linkedin are", "is_final": false, "t_start": 2642.4, "t_end": 2644.2, "stability": 0.6, "delay_ms": 3}
+{"text": "Instagram and LinkedIn are our most effective channels.", "is_final": true, "t_start": 2642.4, "t_end": 2645.5, "stability": 1.0, "delay_ms": 3}
+{"text": "our retention", "is_final": false, "t_start": 2646.8, "t_end": 2647.9, "stability": 0.6, "delay_ms": 1}
+{"text": "our retention rate is", "is_final": false, "t_start": 2646.8, "t_end": 2649.0, "stability": 0.7, "delay_ms": 2}
+{"text": "Our retention rate is about ninety-two percent annually.", "is_final": true, "t_start": 2646.8, "t_end": 2650.4, "stability": 1.0, "delay_ms": 3}
+{"text": "we do quarterly", "is_final": false, "t_start": 2652.7, "t_end": 2654.0, "stability": 0.5, "delay_ms": 2}
+{"text": "we do quarterly nps surveys and", "is_final": false, "t_start": 2652.7, "t_end": 2655.3, "stability": 0.6, "delay_ms": 3}
+{"text": "We do quarterly NPS surveys and weekly support ticket analysis.", "is_final": true, "t_start": 2652.7, "t_end": 2656.9, "stability": 1.0, "delay_ms": 1}
+{"text": "we launched a", "is_final": false, "t_start": 2659.4, "t_end": 2660.8, "stability": 0.6, "delay_ms": 1}
+{"text": "we launched a referral program that drives", "is_final": false, "t_start": 2659.4, "t_end": 2662.2, "stability": 0.8, "delay_ms": 2}
+{"text": "We launched a referral program that drives thirty percent of new signups.", "is_final": true, "t_start": 2659.4, "t_end": 2664.1, "stability": 1.0, "delay_ms": 1}
+{"text": "what", "is_final": false, "t_start": 2667.9, "t_end": 2669.5, "stability": 0.4, "delay_ms": 2}
+{"text": "what is your", "is_final": false, "t_start": 2667.9, "t_end": 2671.0, "stability": 0.6, "delay_ms": 3}
+{"text": "What is your current marketing strategy?", "is_final": true, "t_start": 2667.9, "t_end": 2673.2, "stability": 1.0, "delay_ms": 2}
+{"text": "what makes", "is_final": false, "t_start": 2674.8, "t_end": 2676.4, "stability": 0.5, "delay_ms": 3}
+{"text": "what makes your product", "is_final": false, "t_start": 2674.8, "t_end": 2678.0, "stability": 0.8, "delay_ms": 1}
+{"text": "What makes your product unique compared to alternatives?", "is_final": true, "t_start": 2674.8, "t_end": 2680.1, "stability": 1.0, "delay_ms": 1}
+{"text": "we differentiate", "is_final": false, "t_start": 2682.3, "t_end": 2683.9, "stability": 0.6, "delay_ms": 1}
+{"text": "we differentiate by offering personalized", "is_final": false, "t_start": 2682.3, "t_end": 2685.6, "stability": 0.8, "delay_ms": 3}
+{"text": "We differentiate by offering personalized onboarding for every client.", "is_final": true, "t_start": 2682.3, "t_end": 2687.7, "stability": 1.0, "delay_ms": 3}
+{"text": "in five years", "is_final": false, "t_start": 2690.3, "t_end": 2691.1, "stability": 0.6, "delay_ms": 3}
+{"text": "in five years we want to be", "is_final": false, "t_start": 2690.3, "t_end": 2691.9, "stability": 0.8, "delay_ms": 1}
+{"text": "In five years we want to be the leading platform in our vertical.", "is_final": true, "t_start": 2690.3, "t_end": 2692.9, "stability": 1.0, "delay_ms": 1}
+{"text": "tell", "is_final": false, "t_start": 2695.6, "t_end": 2697.2, "stability": 0.7, "delay_ms": 2}
+{"text": "tell me about", "is_final": false, "t_start": 2695.6, "t_end": 2698.9, "stability": 0.7, "delay_ms": 3}
+{"text": "Tell me about your pricing strategy.", "is_final": true, "t_start": 2695.6, "t_end": 2701.1, "stability": 1.0, "delay_ms": 2}
