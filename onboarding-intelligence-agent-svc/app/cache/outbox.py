@@ -19,7 +19,7 @@ import asyncio
 import json
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 from app.cache.redis_manager import KEY_PREFIX, TTL_OUTBOX, RedisManager
 from app.circuit_breaker.breaker import CircuitBreaker, State
@@ -79,7 +79,7 @@ class OutboxWriter:
         if length > self._max_entries:
             excess = length - self._max_entries
             for _ in range(excess):
-                await self._redis.client.lpop(key)  # type: ignore[misc]
+                await cast(Any, self._redis.client.lpop(key))
             logger.warning(
                 "outbox_overflow",
                 tenant=tenant_id,
@@ -156,7 +156,7 @@ class OutboxWriter:
         """Drain one tenant's outbox. Returns (count_drained, hit_failure)."""
         drained = 0
         while True:
-            raw = await self._redis.client.lpop(key)  # type: ignore[misc]
+            raw: bytes | str | None = await cast(Any, self._redis.client.lpop(key))
             if raw is None:
                 break
             if isinstance(raw, bytes):
@@ -181,7 +181,7 @@ class OutboxWriter:
                     tenant=entry.get("tenant_id"),
                 )
             else:
-                await self._redis.client.lpush(key, raw)  # type: ignore[misc]
+                await cast(Any, self._redis.client.lpush(key, raw))
                 return drained, True
         return drained, False
 
@@ -195,7 +195,7 @@ class OutboxWriter:
                 cursor=cursor, match=pattern, count=100
             )
             for key in found_keys:
-                total += await self._redis.client.llen(key)  # type: ignore[misc]
+                total += await cast(Any, self._redis.client.llen(key))
             if cursor == 0:
                 break
         return total
