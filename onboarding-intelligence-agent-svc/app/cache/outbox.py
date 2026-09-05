@@ -21,7 +21,7 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
-from app.cache.redis_manager import KEY_PREFIX, TTL_OUTBOX, RedisManager
+from app.cache.redis_manager import BACKEND_OUTBOX_SCAN, TTL_OUTBOX, RedisManager
 from app.circuit_breaker.breaker import CircuitBreaker, State
 from app.core.logging import get_logger
 
@@ -38,10 +38,12 @@ class OutboxWriter:
         redis: RedisManager,
         *,
         max_entries: int = MAX_ENTRIES_DEFAULT,
+        on_overflow: Callable[[str, int], Awaitable[None]] | None = None,
     ) -> None:
         self._redis = redis
         self._max_entries = max_entries
         self._draining = False
+        self._on_overflow = on_overflow
 
     async def enqueue(
         self,
@@ -55,7 +57,7 @@ class OutboxWriter:
         """Append a write to the tenant's outbox list.
 
         Bounded at ``max_entries``. When the list exceeds the bound, the
-        oldest entries are dropped (LPOP) and a warning is logged.
+        oldest entries are trimmed atomically via LTRIM.
         """
         keys = self._redis.keys_for(tenant_id)
         key = keys.backend_outbox()
@@ -72,20 +74,24 @@ class OutboxWriter:
 
         pipe = self._redis.client.pipeline()
         pipe.rpush(key, entry)
+        pipe.ltrim(key, -self._max_entries, -1)
         pipe.expire(key, TTL_OUTBOX)
         results = await pipe.execute()
         length: int = results[0]
 
         if length > self._max_entries:
             excess = length - self._max_entries
-            for _ in range(excess):
-                await cast(Any, self._redis.client.lpop(key))
             logger.warning(
                 "outbox_overflow",
                 tenant=tenant_id,
                 dropped=excess,
                 bound=self._max_entries,
             )
+            if self._on_overflow is not None:
+                try:
+                    await self._on_overflow(tenant_id, excess)
+                except Exception:
+                    pass
 
         logger.info(
             "outbox_enqueued",
@@ -103,7 +109,8 @@ class OutboxWriter:
 
         ``replay_fn`` receives a dict with keys ``method``, ``path``,
         ``payload``, ``tenant_id``, ``timeout`` and returns True on success,
-        False on failure (which stops the drain for that tenant).
+        False on failure (which stops the drain for that tenant but continues
+        to the next).
 
         Returns the total number of entries successfully replayed.
         """
@@ -120,9 +127,8 @@ class OutboxWriter:
         self,
         replay_fn: Callable[[dict[str, Any]], Awaitable[bool]],
     ) -> int:
-        pattern = f"{KEY_PREFIX}*:outbox:backend"
+        pattern = BACKEND_OUTBOX_SCAN
         total = 0
-        stopped = False
         cursor: int = 0
 
         while True:
@@ -135,13 +141,12 @@ class OutboxWriter:
                 total += count
                 if failed:
                     logger.info(
-                        "outbox_drain_stopped",
+                        "outbox_drain_tenant_stopped",
+                        key=key_str,
                         reason="replay_failed",
-                        total_drained=total,
+                        tenant_drained=count,
                     )
-                    stopped = True
-                    break
-            if stopped or cursor == 0:
+            if cursor == 0:
                 break
 
         if total:
@@ -187,7 +192,7 @@ class OutboxWriter:
 
     async def pending_count(self) -> int:
         """Total entries across all tenants (for monitoring)."""
-        pattern = f"{KEY_PREFIX}*:outbox:backend"
+        pattern = BACKEND_OUTBOX_SCAN
         total = 0
         cursor: int = 0
         while True:
@@ -208,6 +213,12 @@ def register_outbox_drain(
 ) -> None:
     """Wire the backend breaker's recovery to drain the outbox."""
 
+    async def _safe_drain() -> None:
+        try:
+            await outbox.drain_all(replay_fn)
+        except Exception:
+            logger.exception("outbox_drain_failed")
+
     def _on_backend_recovered(dep: str, old: State, new: State) -> None:
         if new != State.CLOSED:
             return
@@ -216,6 +227,6 @@ def register_outbox_drain(
         except RuntimeError:
             logger.warning("outbox_drain_no_loop")
             return
-        loop.create_task(outbox.drain_all(replay_fn))
+        loop.create_task(_safe_drain())
 
     breaker.add_on_state_change(_on_backend_recovered)

@@ -166,8 +166,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Phase B: backend write outbox — buffers writes while the breaker is open,
     # drains on recovery. Created before BackendClient so the client can use it.
     from app.cache.outbox import OutboxWriter, register_outbox_drain
+    from app.events.catalog import EventType
 
-    app.state.outbox = OutboxWriter(app.state.redis)
+    async def _emit_overflow(tenant_id: str, dropped: int) -> None:
+        if hasattr(app.state, "events") and app.state.events is not None:
+            import uuid
+
+            await app.state.events.emit(
+                EventType.AGENT_OUTBOX_OVERFLOW,
+                tenant_id=uuid.UUID(tenant_id) if tenant_id else uuid.uuid4(),
+                correlation_id=f"outbox-overflow-{tenant_id}",
+                payload={"tenant_id": tenant_id, "dropped": dropped},
+            )
+
+    app.state.outbox = OutboxWriter(
+        app.state.redis,
+        on_overflow=_emit_overflow,
+    )
 
     # C-02. Built once: loading the registry parses YAML and imports sixteen
     # modules, which is startup work rather than per-request work. The

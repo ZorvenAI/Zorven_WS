@@ -197,6 +197,31 @@ async def test_overflow_drops_oldest(live_redis):
         await _cleanup_outbox(live_redis, TENANT)
 
 
+# ── Overflow callback ────────────────────────────────────────────────
+
+
+@pytest.mark.integration
+async def test_overflow_fires_callback(live_redis):
+    overflow_calls = []
+
+    async def on_overflow(tenant_id, dropped):
+        overflow_calls.append((tenant_id, dropped))
+
+    outbox = OutboxWriter(live_redis, max_entries=2, on_overflow=on_overflow)
+
+    try:
+        for i in range(4):
+            await outbox.enqueue(
+                method="POST", path=f"/item-{i}/", payload={}, tenant_id=TENANT
+            )
+
+        assert len(overflow_calls) == 2
+        assert overflow_calls[0] == (TENANT, 1)
+        assert overflow_calls[1] == (TENANT, 1)
+    finally:
+        await _cleanup_outbox(live_redis, TENANT)
+
+
 # ── Multi-tenant drain ──────────────────────────────────────────────
 
 
@@ -219,6 +244,37 @@ async def test_drain_covers_multiple_tenants(live_redis):
         assert set(replayed) == {TENANT, TENANT_2}
     finally:
         await _cleanup_outbox(live_redis, TENANT, TENANT_2)
+
+
+# ── Cross-tenant drain continues ───────────────────────────────────
+
+
+@pytest.mark.integration
+async def test_drain_continues_to_next_tenant_on_failure(live_redis):
+    """A replay failure for one tenant must not block other tenants."""
+    outbox = OutboxWriter(live_redis)
+    FAIL_TENANT = "t-outbox-fail"
+    OK_TENANT = "t-outbox-ok"
+
+    async def replay_fn(entry):
+        return entry["tenant_id"] != FAIL_TENANT
+
+    try:
+        await outbox.enqueue(
+            method="POST", path="/a/", payload={}, tenant_id=FAIL_TENANT
+        )
+        await outbox.enqueue(method="POST", path="/b/", payload={}, tenant_id=OK_TENANT)
+
+        count = await outbox.drain_all(replay_fn)
+
+        assert count >= 1
+        ok_key = live_redis.keys_for(OK_TENANT).backend_outbox()
+        assert await live_redis.client.llen(ok_key) == 0
+
+        fail_key = live_redis.keys_for(FAIL_TENANT).backend_outbox()
+        assert await live_redis.client.llen(fail_key) == 1
+    finally:
+        await _cleanup_outbox(live_redis, FAIL_TENANT, OK_TENANT)
 
 
 # ── TTL is set ───────────────────────────────────────────────────────

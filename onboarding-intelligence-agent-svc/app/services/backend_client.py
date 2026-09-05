@@ -334,6 +334,7 @@ class BackendClient:
         payload: dict[str, Any],
         *,
         tenant_id: str,
+        timeout: float = TIMEOUT_S,
     ) -> dict[str, Any] | None:
         if not self.configured:
             logger.warning(
@@ -351,6 +352,7 @@ class BackendClient:
                     path=path,
                     payload=payload,
                     tenant_id=tenant_id,
+                    timeout=timeout,
                 )
                 logger.info(
                     "backend_write_buffered",
@@ -361,7 +363,7 @@ class BackendClient:
                 logger.warning("backend_breaker_open", path=path)
             return None
 
-        client = self._client or httpx.AsyncClient(timeout=TIMEOUT_S)
+        client = self._client or httpx.AsyncClient(timeout=timeout)
         owns_client = self._client is None
         try:
             response = await client.patch(
@@ -371,7 +373,7 @@ class BackendClient:
                     "X-Service-Token": self._token,
                     "X-Tenant-ID": tenant_id,
                 },
-                timeout=TIMEOUT_S,
+                timeout=timeout,
             )
             response.raise_for_status()
             body = response.json()
