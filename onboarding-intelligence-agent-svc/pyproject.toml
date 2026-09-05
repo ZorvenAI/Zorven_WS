@@ -7,6 +7,7 @@ markers = [
     "property: hypothesis property tests",
     "integration: requires Redis",
     "e2e: requires Docker",
+    "load: performance tests requiring a deployed target (set OIA_LOAD_TARGET)",
 ]
 
 [tool.black]

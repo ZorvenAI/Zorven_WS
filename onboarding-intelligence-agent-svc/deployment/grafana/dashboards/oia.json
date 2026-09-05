@@ -238,6 +238,68 @@
           }
         }
       }
+    },
+    {
+      "title": "Sufficiency Drop Rate",
+      "description": "Sufficiency signals dropped due to timeout (Panel 9, §18.3, N-02 AC-3). Any non-zero rate indicates load-induced drops.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "rate(oia_sufficiency_drops_total[5m])",
+          "legendFormat": "drops/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.001 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "title": "Analysis Drop Rate",
+      "description": "SKL-OIA-04 transcript-to-question mapping timeouts (Panel 10). Distinct from sufficiency drops — tracks analysis pipeline timeouts.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        {
+          "expr": "rate(oia_analysis_drops_total[5m])",
+          "legendFormat": "drops/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.001 }
+            ]
+          }
+        }
+      }
     }
   ],
   "schemaVersion": 39,

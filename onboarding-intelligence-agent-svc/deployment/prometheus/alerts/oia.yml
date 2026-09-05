@@ -66,3 +66,14 @@ groups:
           summary: "OIA event queue is overflowing"
           description: "Events are being dropped due to queue overflow. Check Kafka connectivity and event emission rate."
           runbook: "docs/runbook.md#event-queue-overflow"
+
+      - alert: OIA_SufficiencyDropsActive
+        expr: rate(oia_sufficiency_drops_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: onboarding-intelligence-agent
+        annotations:
+          summary: "OIA is dropping sufficiency signals"
+          description: "Sufficiency signals are being dropped due to timeout. Drop rate: {{ $value }}/s. This indicates the service is under load or Gemini latency has increased."
+          runbook: "docs/runbook.md#sufficiency-drops"

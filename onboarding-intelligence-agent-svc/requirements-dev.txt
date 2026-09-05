@@ -8,3 +8,4 @@ black>=24.0.0
 flake8>=7.0.0
 mypy>=1.11.0
 types-PyYAML>=6.0.12
+websockets>=13.0

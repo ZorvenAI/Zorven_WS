@@ -20,6 +20,9 @@ from app.providers.stt import FakeSTTAdapter
 from app.services.backend_client import BackendClient
 
 FIXTURE_PATH = Path(__file__).parent.parent / "fixtures" / "two_speaker_2min.jsonl"
+FIXTURE_45MIN_PATH = (
+    Path(__file__).parent.parent / "fixtures" / "two_speaker_45min.jsonl"
+)
 
 
 @pytest.fixture
@@ -90,6 +93,17 @@ def e2e_client(app_with_live_redis, django_stub, live_company):
     """TestClient with FakeSTTAdapter injected and fast polling."""
     with TestClient(app_with_live_redis) as tc:
         app_with_live_redis.state.stt = FakeSTTAdapter(FIXTURE_PATH)
+        app_with_live_redis.state.backend = BackendClient(django_stub["url"], "tok")
+        app_with_live_redis.state.live_poll_s = 0.05
+        django_stub["company_id"] = live_company
+        yield tc
+
+
+@pytest.fixture
+def e2e_client_45min(app_with_live_redis, django_stub, live_company):
+    """TestClient with FakeSTTAdapter loaded with the 45-minute fixture."""
+    with TestClient(app_with_live_redis) as tc:
+        app_with_live_redis.state.stt = FakeSTTAdapter(FIXTURE_45MIN_PATH)
         app_with_live_redis.state.backend = BackendClient(django_stub["url"], "tok")
         app_with_live_redis.state.live_poll_s = 0.05
         django_stub["company_id"] = live_company
