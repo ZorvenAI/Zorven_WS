@@ -128,9 +128,12 @@ class RegisterMeetingAssets(BaseSkill):
         if raw is None:
             return None
         try:
-            return json.loads(raw)
+            parsed = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
             return None
+        if isinstance(parsed, dict):
+            return parsed
+        return None
 
     async def _store_idempotency(
         self, tenant_id: str, session_id: str, output: dict[str, Any]
