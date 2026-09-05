@@ -91,6 +91,9 @@ class EvidenceAssembler:
                 tenant_id, session_id, self._settings.OCR_AWAIT_TIMEOUT_S
             )
             missing_media.extend(await_result)
+            refreshed = await self._fetch_from_django(tenant_id, session_id)
+            if refreshed is not None:
+                django_data = refreshed
 
         blocks, valid_rec_ids, valid_media_ids = self._build_blocks(
             django_data, redis_questions
