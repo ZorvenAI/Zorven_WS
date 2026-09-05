@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.api.schemas import EvidenceSpan
 from app.logic.evidence_assembler import EvidenceBlock
 from app.logic.field_extractor import ExtractionResult, FieldExtractor
 from app.providers.llm import LLMProvider
@@ -19,14 +20,32 @@ from app.skills.base import BaseSkill
 from app.skills.models import SkillContext, SkillResult
 
 
+def _coerce_spans(raw_spans: list[Any]) -> list[EvidenceSpan]:
+    """Convert dicts to EvidenceSpan instances."""
+    spans: list[EvidenceSpan] = []
+    for s in raw_spans:
+        if isinstance(s, EvidenceSpan):
+            spans.append(s)
+        elif isinstance(s, dict):
+            spans.append(EvidenceSpan(**s))
+        else:
+            spans.append(s)
+    return spans
+
+
 def _coerce_evidence_blocks(raw: list[Any]) -> list[EvidenceBlock]:
     """Convert dicts from JSON deserialization to EvidenceBlock instances."""
     blocks: list[EvidenceBlock] = []
     for item in raw:
         if isinstance(item, EvidenceBlock):
+            item.spans = _coerce_spans(item.spans)
             blocks.append(item)
         elif isinstance(item, dict):
-            blocks.append(EvidenceBlock(**item))
+            raw_spans = item.get("spans", [])
+            kwargs = {k: v for k, v in item.items() if k != "spans"}
+            block = EvidenceBlock(**kwargs)
+            block.spans = _coerce_spans(raw_spans)
+            blocks.append(block)
         else:
             blocks.append(item)
     return blocks
@@ -62,8 +81,8 @@ class ExtractAndMapFields(BaseSkill):
         result: ExtractionResult = await extractor.extract_all(
             evidence_blocks=evidence_blocks,
             existing_provenance=existing_provenance,
-            valid_recording_ids=set(raw_rec) if raw_rec else None,
-            valid_media_ids=set(raw_med) if raw_med else None,
+            valid_recording_ids=set(raw_rec) if raw_rec is not None else None,
+            valid_media_ids=set(raw_med) if raw_med is not None else None,
             tenant_id=context.tenant_context.tenant_id,
         )
 

@@ -321,14 +321,18 @@ async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
         if payload.session_id:
             import json as _json
 
+            from app.cache.redis_manager import TTL_SESSION
+
             keys = request.app.state.redis.keys_for(tenant_id)
             session_key = keys.session(payload.session_id)
-            await request.app.state.redis.client.hset(
+            pipe = request.app.state.redis.client.pipeline(transaction=False)
+            pipe.hset(
                 session_key,
                 "prompt_versions",
                 _json.dumps(prompt_versions),
             )
-            await request.app.state.redis.client.expire(session_key, 14400, nx=True)
+            pipe.expire(session_key, TTL_SESSION)
+            await pipe.execute()
         if degraded:
             events = getattr(request.app.state, "events", None)
             if events is not None:

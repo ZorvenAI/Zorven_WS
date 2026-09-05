@@ -15,7 +15,7 @@ import uuid
 from typing import Any, Literal
 
 from app.api.schemas import EvidenceManifest, ProcessResponse
-from app.cache.redis_manager import RedisManager, TTL_IDEMPOTENCY
+from app.cache.redis_manager import RedisManager, TTL_IDEMPOTENCY, TTL_SESSION
 from app.core.logging import get_logger
 from app.events.catalog import EventType
 from app.events.emitter import EventEmitter
@@ -172,12 +172,14 @@ class ProcessExecutor:
                 )
                 prompt_versions = {pid: r.version for pid, r in resolved.items()}
                 session_key = keys.session(session_id)
-                await self._redis.client.hset(
+                pipe = self._redis.client.pipeline(transaction=False)
+                pipe.hset(
                     session_key,
                     "prompt_versions",
                     json.dumps(prompt_versions),
                 )
-                await self._redis.client.expire(session_key, JOB_TTL, nx=True)
+                pipe.expire(session_key, TTL_SESSION)
+                await pipe.execute()
                 if degraded and self._events is not None:
                     from app.events.catalog import EventType
 
