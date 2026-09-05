@@ -1,26 +1,19 @@
-"""Error taxonomy (Design §18.4).
+"""Error taxonomy (Design §18.4, extended by ERRATA-02).
 
 Defined once, here, so every failure surfaces as a typed condition a runbook
 can reference rather than an untyped 500. Each code carries its HTTP status,
 its WebSocket close code where §10.2.3 assigns one, and whether a caller
 should retry.
 
-Two documentation conflicts are resolved here rather than propagated.
+ERR-01 through ERR-16 are the original §18.4 rows. ERR-17 through ERR-21
+were added when the implementation discovered five conditions the taxonomy
+had no row for, and five acceptance criteria that cited codes §18.4 assigns
+to something else. The full reconciliation is in
+``docs/Onboarding_Intelligence/ERRATA-02-error-taxonomy.md``.
 
-**ERR-06 is claimed twice.** §5 PG-02 says an unknown skill id "raises
-SkillNotFound and emits ERR-06", but §18.4 assigns ERR-06 to "Live session
-already active for company" (409/4409). Emitting it for a bad skill id would
-tell an operator that a meeting is already running. :class:`SkillNotFound`
-therefore carries a provisional **ERR-17** with a 404, and the documents need
-reconciling — either PG-02 names the wrong code or the taxonomy needs a row.
-
-A note on ERR-03 and ERR-04, because A-06's AC-3 conflates them. AC-3 asks for
-"the typed ERR-03 authorization error" on an RBAC denial, but §18.4 assigns
-ERR-03 to *consent* (IG-08) and **ERR-04 to role denial (PG-03)**. The two have
-different operator behaviour — "Consent modal re-presented" versus "Action
-hidden or disabled in UI" — so collapsing them would make a permissions bug
-look like a consent bug to whoever is on call. ERR-04 is used; the AC wording
-is the thing that is wrong.
+This module is the single source of truth for error codes, HTTP statuses,
+and operator behaviour. The errata records the reasoning; this code is the
+reference.
 """
 
 from __future__ import annotations
@@ -49,25 +42,9 @@ class ErrorCode(StrEnum):
     IDEMPOTENCY_CONFLICT = "ERR-15"
     SPOOL_BOUND_EXCEEDED = "ERR-16"
 
-    #: Provisional — see the module docstring. §5 PG-02 asks for ERR-06 here,
-    #: but §18.4 has already spent ERR-06 on live-session-active.
     SKILL_NOT_IN_ALLOWLIST = "ERR-17"
-
-    #: Provisional (C-01). Django could not reach this service — 503 or a
-    #: timeout. C-01's AC-3 asks for ERR-13, which §18.4 spends on a field
-    #: conflict requiring a human (202, SKL-OIA-14) — a different thing with a
-    #: different remedy. Nothing existing fits either: ERR-07/08/09 are *this*
-    #: service's own degraded dependencies and ERR-10 is a buffered write in
-    #: the agent-to-Django direction. There is no code for the reverse.
+    ILLEGAL_STATE_TRANSITION = "ERR-18"
     AGENT_UNAVAILABLE = "ERR-19"
-
-    #: Provisional (C-01 review). §10.2 authenticates the agent endpoints with
-    #: X-Service-Token, but §18.4 has no code for one — so C-01 reached for
-    #: ERR-01, which the taxonomy defines as "Invalid or expired JWT" at 401.
-    #: That misreports a service-token problem as an end-user auth problem,
-    #: and on the unconfigured path it pairs a 401 code with a 503 response.
-    #: These are two distinct conditions with different operator remedies, so
-    #: they get two codes rather than one shared "auth failed".
     SERVICE_TOKEN_INVALID = "ERR-20"
     SERVICE_TOKEN_NOT_CONFIGURED = "ERR-21"
 
@@ -221,6 +198,14 @@ ERROR_SPECS: dict[ErrorCode, ErrorSpec] = {
         False,
         "Indicates a caller or configuration bug, not a user error",
     ),
+    ErrorCode.ILLEGAL_STATE_TRANSITION: ErrorSpec(
+        ErrorCode.ILLEGAL_STATE_TRANSITION,
+        "Illegal session-state transition (B-04)",
+        409,
+        None,
+        False,
+        "State diagram violation; debug the caller",
+    ),
     ErrorCode.SERVICE_TOKEN_INVALID: ErrorSpec(
         ErrorCode.SERVICE_TOKEN_INVALID,
         "Missing or incorrect X-Service-Token on an internal endpoint",
@@ -320,14 +305,7 @@ class TenantMismatchError(OIAError):
 
 
 class SkillNotFound(OIAError):
-    """An unknown skill id — PG-02's tool allowlist rejected it.
-
-    Carries the provisional ERR-17 rather than the ERR-06 that PG-02 names,
-    because §18.4 assigns ERR-06 to "Live session already active for company"
-    with 409/4409. Reusing it would tell an operator a meeting is already
-    running when the truth is that a skill id is wrong. See the module
-    docstring; the documents need reconciling.
-    """
+    """ERR-17 — unknown skill id, not in the PG-02 tool allowlist."""
 
     code = ErrorCode.SKILL_NOT_IN_ALLOWLIST
 

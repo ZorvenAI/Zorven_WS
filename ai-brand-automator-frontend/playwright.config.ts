@@ -17,7 +17,7 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
-  testMatch: ['**/meeting-view.spec.ts', '**/recorder.spec.ts'],
+  testMatch: ['**/meeting-view.spec.ts', '**/recorder.spec.ts', '**/resumable-upload.spec.ts'],
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

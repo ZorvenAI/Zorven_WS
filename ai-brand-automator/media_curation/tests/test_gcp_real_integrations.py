@@ -31,12 +31,25 @@ def get_credentials_path():
 
 
 def setup_gcp_credentials():
-    """Set up GCP credentials for testing."""
+    """Set up GCP credentials for testing.
+
+    Validates the JSON file contains a ``client_email`` — a 0-byte or
+    corrupt file should skip, not half-configure the run.
+    """
+    import json as _json
+
     creds_path = get_credentials_path()
-    if os.path.exists(creds_path):
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
-        return True
-    return False
+    if not os.path.exists(creds_path):
+        return False
+    try:
+        with open(creds_path) as f:
+            data = _json.load(f)
+        if not isinstance(data, dict) or "client_email" not in data:
+            return False
+    except (ValueError, OSError):
+        return False
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
+    return True
 
 
 # Test file URIs in the real GCS bucket
@@ -82,7 +95,10 @@ class TestGCSAdapterRealConnection:
     def setup_credentials(self):
         """Set up credentials before each test."""
         if not setup_gcp_credentials():
-            pytest.skip("GCP credentials not available")
+            pytest.skip(
+                f"GCP credentials not available — need valid JSON with "
+                f"client_email at {get_credentials_path()}"
+            )
 
     @pytest.fixture
     def gcs_adapter(self):
@@ -173,7 +189,10 @@ class TestVisionAdapterRealConnection:
     def setup_credentials(self):
         """Set up credentials before each test."""
         if not setup_gcp_credentials():
-            pytest.skip("GCP credentials not available")
+            pytest.skip(
+                f"GCP credentials not available — need valid JSON with "
+                f"client_email at {get_credentials_path()}"
+            )
 
     @pytest.fixture
     def vision_adapter(self):
@@ -257,7 +276,10 @@ class TestDLPAdapterRealConnection:
     def setup_credentials(self):
         """Set up credentials before each test."""
         if not setup_gcp_credentials():
-            pytest.skip("GCP credentials not available")
+            pytest.skip(
+                f"GCP credentials not available — need valid JSON with "
+                f"client_email at {get_credentials_path()}"
+            )
 
     @pytest.fixture
     def dlp_adapter(self):
@@ -324,7 +346,10 @@ class TestVertexAIAdapterRealConnection:
     def setup_credentials(self):
         """Set up credentials before each test."""
         if not setup_gcp_credentials():
-            pytest.skip("GCP credentials not available")
+            pytest.skip(
+                f"GCP credentials not available — need valid JSON with "
+                f"client_email at {get_credentials_path()}"
+            )
 
     @pytest.fixture
     def vertex_adapter(self):
@@ -408,7 +433,10 @@ class TestFullPipelineRealGCP:
     def setup_credentials(self):
         """Set up credentials before each test."""
         if not setup_gcp_credentials():
-            pytest.skip("GCP credentials not available")
+            pytest.skip(
+                f"GCP credentials not available — need valid JSON with "
+                f"client_email at {get_credentials_path()}"
+            )
 
     def test_full_document_processing_pipeline(self):
         """Test full pipeline: GCS download -> DLP redact."""

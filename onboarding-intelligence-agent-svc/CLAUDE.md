@@ -81,22 +81,15 @@ IG → RBAC → PG → OG.
 
 ## Error codes
 
-`app/core/errors.py` is the §18.4 taxonomy. Five codes deviate from the
-documents, deliberately:
+`app/core/errors.py` is the single source of truth for the §18.4 taxonomy
+(ERR-01 … ERR-21). The original 16 codes from the design document are
+extended with ERR-17 through ERR-21 for conditions the taxonomy had no row
+for, and five backlog acceptance criteria that cited the wrong code are
+corrected. The full reconciliation — including the reasoning behind each
+deviation — is in `docs/Onboarding_Intelligence/ERRATA-02-error-taxonomy.md`.
 
-| Situation | Docs say | We use | Why |
-|---|---|---|---|
-| Role denied | A-06 AC-3 says ERR-03 | **ERR-04** | §18.4 assigns ERR-03 to *consent* (IG-08). Collapsing them makes a permissions bug look like a consent bug on call. |
-| Unknown skill id | §5 PG-02 says ERR-06 | **ERR-17** (provisional) | §18.4 already spends ERR-06 on "live session already active" (409/4409). Reusing it would tell an operator a meeting is running when a skill id is simply wrong. |
-| Django cannot reach this service | C-01 AC-3 says ERR-13 | **ERR-19** (provisional) | §18.4 spends ERR-13 on a field conflict needing a human (202). ERR-07/08/09 are *this* service's degraded dependencies; nothing covers the reverse direction. |
-| Bad `X-Service-Token` | *(no code exists)* | **ERR-20** (provisional) | C-01 reached for ERR-01, which §18.4 defines as "Invalid or expired JWT" at 401. These endpoints have no JWT to be invalid. |
-| `SERVICE_TOKEN` unset | *(no code exists)* | **ERR-21** (provisional) | Distinct from ERR-20: a 503 the operator fixes by setting a secret, not a 401 the caller fixes. C-01 returned the 401-coded ERR-01 with a 503 status. |
-
-All five need reconciling in the design; until then the code is right and the
-documents are not. The pattern behind them is worth naming: the documents were
-written before the taxonomy was, so cards cite codes §18.4 later spent on
-something else, and three conditions have no code at all. When a card names a
-code, check §18.4 before using it.
+When a card or design section names an error code, check `errors.py` before
+using it — the cards were written before the taxonomy was finalised.
 
 ## Circuit breakers (§18.2)
 
