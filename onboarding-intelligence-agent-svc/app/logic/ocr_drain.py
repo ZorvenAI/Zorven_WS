@@ -33,11 +33,11 @@ async def _drain_all_tenants(redis: "Redis") -> int:
     pattern = f"{KEY_PREFIX}*:retry:{QUEUE_NAME}"
     drained = 0
 
-    cursor: int | str = 0
+    cursor: int = 0
     while True:
         cursor, keys = await redis.scan(cursor=cursor, match=pattern, count=100)
         for key in keys:
-            key_str = key.decode() if isinstance(key, bytes) else key
+            key_str = key.decode() if isinstance(key, bytes) else str(key)
             tenant_id = key_str.removeprefix(KEY_PREFIX).split(":")[0]
             if not tenant_id:
                 continue
@@ -65,15 +65,11 @@ async def _force_drain_queue(redis: "Redis", queue_key: str) -> int:
     enqueued them) will re-process each item on its next invocation
     when it finds the queue empty and the breaker closed.
     """
-    all_members = await redis.zrangebyscore(queue_key, 0, "+inf")
-    if not all_members:
+    count: int = await redis.zcard(queue_key)
+    if not count:
         return 0
 
-    removed = 0
-    for member in all_members:
-        await redis.zrem(queue_key, member)
-        removed += 1
-
+    removed: int = await redis.zremrangebyscore(queue_key, 0, "+inf")
     return removed
 
 

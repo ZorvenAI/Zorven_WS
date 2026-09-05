@@ -595,7 +595,7 @@ async def replay_dlq(
     """
     from app.messaging.dlq_replay import replay_batch
 
-    kafka: object = getattr(request.app.state, "kafka", None)
+    kafka = request.app.state.kafka
     if kafka is None or not getattr(kafka, "configured", False):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
