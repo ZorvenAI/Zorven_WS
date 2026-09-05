@@ -210,6 +210,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
         )
 
+    # N-03: OCR retry queue drain on vision breaker recovery.
+    from app.logic.ocr_drain import register_drain_callback
+
+    register_drain_callback(
+        app.state.breakers.get("vision"),
+        app.state.redis.client,
+    )
+
     # L-01: prompt resolution chain. Built after the breaker registry so POI
     # calls are protected by the poi breaker (§18.2, circuit_breakers.yaml).
     from app.prompts.loader import PromptLoader

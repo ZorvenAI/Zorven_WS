@@ -67,6 +67,11 @@ GOLDEN_CANDIDATES = TopicSpec(
     retention_ms=30 * DAY_MS,
     purpose="Admin-edit flywheel consumed by prompt-optimization-svc (§17.3)",
 )
+ARCHIVE = TopicSpec(
+    name=f"agent.archive.{AGENT_NAME}",
+    retention_ms=90 * DAY_MS,
+    purpose="Poison messages archived after exhausting DLQ replay attempts",
+)
 
 FLEET_TOPICS: Final[tuple[TopicSpec, ...]] = (
     COMMANDS,
@@ -75,6 +80,7 @@ FLEET_TOPICS: Final[tuple[TopicSpec, ...]] = (
     DLQ,
     MEMORY_EVICTION,
     GOLDEN_CANDIDATES,
+    ARCHIVE,
 )
 
 

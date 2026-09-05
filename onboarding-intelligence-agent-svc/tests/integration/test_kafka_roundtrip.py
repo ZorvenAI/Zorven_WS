@@ -33,6 +33,7 @@ from app.messaging.consumer import CommandConsumer
 from app.messaging.producer import KafkaProducer
 from app.messaging.provision import provision, retention_of, verify
 from app.messaging.topics import (
+    ARCHIVE,
     COMMANDS,
     DLQ,
     FLEET_TOPICS,
@@ -620,3 +621,175 @@ async def test_golden_candidate_roundtrip(producer, broker):
     assert received["payload"]["prompt_id"] == "oia.extract_fields"
     assert received["payload"]["prompt_version"] == "v3.1"
     assert received["payload"]["edit_distance"] == 0.34
+
+
+# ── N-03 AC-3: DLQ replay tool ──────────────────────────────────────
+
+
+async def test_archive_topic_provisioned(broker):
+    """AC-3: the archive topic is created by provision()."""
+    report = await provision(broker)
+    assert ARCHIVE.name in report.all_present
+
+
+async def test_archive_topic_retention(broker):
+    """AC-3: 90-day retention for poison messages."""
+    await provision(broker)
+    actual = await retention_of(broker, ARCHIVE.name)
+    assert actual == str(ARCHIVE.retention_ms)
+
+
+async def test_replay_preserves_idempotency_key(settings, producer, broker):
+    """AC-3: replayed messages keep the same idempotency_key."""
+    from app.messaging.dlq_replay import replay_batch
+
+    await provision(broker)
+
+    idempotency_key = f"idem-replay-{uuid.uuid4().hex[:8]}"
+    dead_letter = {
+        "original_topic": COMMANDS.name,
+        "original_key": "t-replay:s-replay",
+        "payload": {
+            "job_id": "job-replay-1",
+            "session_id": str(uuid.uuid4()),
+            "evidence_manifest": {"manifest_hash": "abc"},
+        },
+        "error_code": "ERR-CMD-01",
+        "error_message": "handler exploded",
+        "attempts": 3,
+        "failed_at": "2026-09-04T00:00:00Z",
+        "idempotency_key": idempotency_key,
+    }
+
+    await producer.send(DLQ.name, key="t:s", value=json.dumps(dead_letter).encode())
+
+    offsets_cmd = await end_offsets(COMMANDS.name)
+
+    summary = await replay_batch(
+        producer,
+        bootstrap_servers=broker,
+        batch_size=10,
+    )
+
+    assert summary.replayed >= 1
+    assert summary.archived == 0
+
+    received = await read_since(
+        COMMANDS.name,
+        offsets_cmd,
+        lambda b: b.get("idempotency_key") == idempotency_key,
+    )
+    assert received is not None, "replayed message not found on commands topic"
+    assert received["idempotency_key"] == idempotency_key
+    assert received["job_id"] == "job-replay-1"
+    assert received["_replay_attempts"] == 1
+
+
+async def test_poison_message_archived_after_three_replays(settings, producer, broker):
+    """AC-3: messages with _replay_attempts >= 3 go to the archive."""
+    from app.messaging.dlq_replay import replay_batch
+
+    await provision(broker)
+
+    idempotency_key = f"idem-poison-{uuid.uuid4().hex[:8]}"
+    poison = {
+        "original_topic": COMMANDS.name,
+        "original_key": "t-poison:s-poison",
+        "payload": {
+            "job_id": "job-poison-1",
+            "session_id": str(uuid.uuid4()),
+            "evidence_manifest": {"manifest_hash": "xyz"},
+            "_replay_attempts": 3,
+        },
+        "error_code": "ERR-CMD-01",
+        "error_message": "permanently broken",
+        "attempts": 3,
+        "failed_at": "2026-09-04T00:00:00Z",
+        "idempotency_key": idempotency_key,
+    }
+
+    await producer.send(DLQ.name, key="t:s", value=json.dumps(poison).encode())
+
+    offsets_archive = await end_offsets(ARCHIVE.name)
+    offsets_cmd = await end_offsets(COMMANDS.name)
+
+    summary = await replay_batch(
+        producer,
+        bootstrap_servers=broker,
+        batch_size=10,
+    )
+
+    assert summary.archived >= 1
+    assert summary.replayed == 0
+
+    archived = await read_since(
+        ARCHIVE.name,
+        offsets_archive,
+        lambda b: b.get("idempotency_key") == idempotency_key,
+    )
+    assert archived is not None, "poison message not found on archive topic"
+
+    replayed = await read_since(
+        COMMANDS.name,
+        offsets_cmd,
+        lambda b: b.get("idempotency_key") == idempotency_key,
+        timeout=5,
+    )
+    assert replayed is None, "poison message should NOT appear on commands topic"
+
+
+async def test_dlq_replay_no_duplicate_writes(settings, producer, broker):
+    """AC-3: replaying twice with the same idempotency_key does not duplicate."""
+    from app.messaging.dlq_replay import replay_batch
+
+    await provision(broker)
+
+    idempotency_key = f"idem-nodup-{uuid.uuid4().hex[:8]}"
+    dead_letter = {
+        "original_topic": COMMANDS.name,
+        "original_key": "t-nodup:s-nodup",
+        "payload": {
+            "job_id": "job-nodup-1",
+            "session_id": str(uuid.uuid4()),
+            "evidence_manifest": {"manifest_hash": "abc"},
+        },
+        "error_code": "ERR-CMD-01",
+        "error_message": "handler exploded",
+        "attempts": 3,
+        "failed_at": "2026-09-04T00:00:00Z",
+        "idempotency_key": idempotency_key,
+    }
+
+    await producer.send(DLQ.name, key="t:s", value=json.dumps(dead_letter).encode())
+
+    offsets_cmd = await end_offsets(COMMANDS.name)
+
+    s1 = await replay_batch(producer, bootstrap_servers=broker, batch_size=10)
+    s2 = await replay_batch(producer, bootstrap_servers=broker, batch_size=10)
+
+    assert s1.replayed >= 1
+    assert s2.replayed == 0, "second replay should find nothing — consumer committed"
+
+    seen: list[dict] = []
+    consumer = AIOKafkaConsumer(bootstrap_servers=broker, enable_auto_commit=False)
+    await consumer.start()
+    try:
+        assignment = await partitions_for(COMMANDS.name)
+        consumer.assign(assignment)
+        for tp, offset in offsets_cmd.items():
+            consumer.seek(tp, offset)
+
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + 10
+        while loop.time() < deadline:
+            try:
+                msg = await asyncio.wait_for(consumer.getone(), timeout=3)
+                body = json.loads(msg.value)
+                if body.get("idempotency_key") == idempotency_key:
+                    seen.append(body)
+            except asyncio.TimeoutError:
+                break
+    finally:
+        await stop(consumer)
+
+    assert len(seen) == 1, f"expected exactly 1 replayed message, got {len(seen)}"
