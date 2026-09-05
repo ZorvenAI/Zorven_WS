@@ -361,7 +361,7 @@ class FieldExtractor:
                 med_ok = (
                     med_id in valid_media_ids
                     if med_id and valid_media_ids is not None
-                    else bool(med_id)
+                    else False
                 )
 
                 if not rec_ok and not med_ok:

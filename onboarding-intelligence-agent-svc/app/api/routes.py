@@ -322,11 +322,13 @@ async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
             import json as _json
 
             keys = request.app.state.redis.keys_for(tenant_id)
+            session_key = keys.session(payload.session_id)
             await request.app.state.redis.client.hset(
-                keys.session(payload.session_id),
+                session_key,
                 "prompt_versions",
                 _json.dumps(prompt_versions),
             )
+            await request.app.state.redis.client.expire(session_key, 14400, nx=True)
         if degraded:
             events = getattr(request.app.state, "events", None)
             if events is not None:

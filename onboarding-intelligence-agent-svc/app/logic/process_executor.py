@@ -160,11 +160,7 @@ class ProcessExecutor:
         prompt_versions: dict[str, str] = {}
 
         try:
-            await self._redis.client.set(
-                job_key,
-                json.dumps({"job_id": job_id, "status": JOB_STATUS_RUNNING}),
-                ex=JOB_TTL,
-            )
+            await self._update_job_status(job_key, job_id, JOB_STATUS_RUNNING)
 
             # L-01: resolve and pin prompt versions before processing.
             loader = getattr(self, "_prompt_loader", None)
@@ -175,11 +171,13 @@ class ProcessExecutor:
                     PROCESS_PROMPTS, tenant.tenant_id
                 )
                 prompt_versions = {pid: r.version for pid, r in resolved.items()}
+                session_key = keys.session(session_id)
                 await self._redis.client.hset(
-                    keys.session(session_id),
+                    session_key,
                     "prompt_versions",
                     json.dumps(prompt_versions),
                 )
+                await self._redis.client.expire(session_key, JOB_TTL, nx=True)
                 if degraded and self._events is not None:
                     from app.events.catalog import EventType
 
@@ -411,12 +409,13 @@ class ProcessExecutor:
             )
             summary = {"error": f"Cancelled: {exc}"}
             cb_status = JOB_STATUS_FAILED
+            # Decrement the cancellation counter so the cleanup awaits
+            # below do not re-raise CancelledError (Python 3.12+).
+            task = asyncio.current_task()
+            if task is not None:
+                task.uncancel()
 
-        await self._redis.client.set(
-            job_key,
-            json.dumps({"job_id": job_id, "status": cb_status}),
-            ex=JOB_TTL,
-        )
+        await self._update_job_status(job_key, job_id, cb_status)
 
         if self._backend is not None and callback_url:
             await self._callback(
@@ -428,6 +427,21 @@ class ProcessExecutor:
                 prompt_versions=prompt_versions,
             )
 
+    async def _update_job_status(
+        self, job_key: str, job_id: str, status: JobStatus
+    ) -> None:
+        """Merge status into existing job state so accept()-time fields survive."""
+        existing_raw = await self._redis.client.get(job_key)
+        merged: dict[str, Any] = {}
+        if existing_raw is not None:
+            try:
+                merged = json.loads(existing_raw)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        merged["job_id"] = job_id
+        merged["status"] = status
+        await self._redis.client.set(job_key, json.dumps(merged), ex=JOB_TTL)
+
     async def _handle_conflicts(
         self,
         *,
@@ -437,9 +451,14 @@ class ProcessExecutor:
         job_id: str,
     ) -> None:
         """J-05: create CONFLICT provenance, publish escalations, emit EVT-007."""
-        # Fail-fast: parse UUIDs before any writes to avoid partial state
-        tenant_uuid = uuid.UUID(tenant.tenant_id)
-        session_uuid = uuid.UUID(session_id) if session_id else None
+        try:
+            tenant_uuid = uuid.UUID(tenant.tenant_id)
+        except (ValueError, AttributeError):
+            tenant_uuid = uuid.uuid5(uuid.NAMESPACE_URL, tenant.tenant_id)
+        try:
+            session_uuid = uuid.UUID(session_id) if session_id else None
+        except (ValueError, AttributeError):
+            session_uuid = uuid.uuid5(uuid.NAMESPACE_URL, session_id)
 
         # 1. Create CONFLICT provenance records
         if self._backend is not None:
@@ -651,10 +670,10 @@ class ProcessExecutor:
             logger.error("process_callback_no_backend", job_id=job_id)
             return
 
-        from urllib.parse import urlparse
+        from urllib.parse import urlparse, urlunparse
 
         parsed = urlparse(callback_url)
-        path = parsed.path
+        path = urlunparse(("", "", parsed.path, parsed.params, parsed.query, ""))
         payload: dict[str, Any] = {
             "job_id": job_id,
             "status": status,
@@ -662,7 +681,7 @@ class ProcessExecutor:
         }
         if prompt_versions:
             payload["prompt_versions"] = prompt_versions
-        result = await self._backend._post(
+        result = await self._backend.send_callback(
             path,
             payload,
             tenant_id=tenant_id,

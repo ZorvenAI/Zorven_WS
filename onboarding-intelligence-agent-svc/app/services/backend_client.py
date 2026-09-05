@@ -159,6 +159,17 @@ class BackendClient:
         self._breaker.record_success()
         return body if isinstance(body, dict) else None
 
+    async def send_callback(
+        self,
+        path: str,
+        payload: dict[str, Any],
+        *,
+        tenant_id: str,
+        timeout: float = 30.0,
+    ) -> dict[str, Any] | None:
+        """POST a callback payload to Django with an appropriate timeout."""
+        return await self._post(path, payload, tenant_id=tenant_id, timeout=timeout)
+
     async def store_research_brief(
         self,
         *,

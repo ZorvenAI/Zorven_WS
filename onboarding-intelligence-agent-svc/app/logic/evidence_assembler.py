@@ -91,6 +91,8 @@ class EvidenceAssembler:
                 tenant_id, session_id, self._settings.OCR_AWAIT_TIMEOUT_S
             )
             missing_media.extend(await_result)
+            # Re-fetch after OCR wait so newly processed text is included.
+            django_data = await self._fetch_from_django(tenant_id, session_id)
 
         blocks, valid_rec_ids, valid_media_ids = self._build_blocks(
             django_data, redis_questions

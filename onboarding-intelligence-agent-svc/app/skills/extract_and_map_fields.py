@@ -12,10 +12,24 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.logic.evidence_assembler import EvidenceBlock
 from app.logic.field_extractor import ExtractionResult, FieldExtractor
 from app.providers.llm import LLMProvider
 from app.skills.base import BaseSkill
 from app.skills.models import SkillContext, SkillResult
+
+
+def _coerce_evidence_blocks(raw: list[Any]) -> list[EvidenceBlock]:
+    """Convert dicts from JSON deserialization to EvidenceBlock instances."""
+    blocks: list[EvidenceBlock] = []
+    for item in raw:
+        if isinstance(item, EvidenceBlock):
+            blocks.append(item)
+        elif isinstance(item, dict):
+            blocks.append(EvidenceBlock(**item))
+        else:
+            blocks.append(item)
+    return blocks
 
 
 class ExtractAndMapFields(BaseSkill):
@@ -37,7 +51,9 @@ class ExtractAndMapFields(BaseSkill):
         settings = get_settings()
         extractor = FieldExtractor(llm=self._llm, settings=settings)
 
-        evidence_blocks = context.input_context.get("evidence_blocks", [])
+        evidence_blocks = _coerce_evidence_blocks(
+            context.input_context.get("evidence_blocks", [])
+        )
         existing_provenance = context.input_context.get("existing_provenance", [])
 
         raw_rec = context.input_context.get("valid_recording_ids")
