@@ -201,6 +201,8 @@ IMPLEMENTED_BODIES = {
     "app.skills.autogen_strategy_identity",  # J-06: SKL-OIA-12
     "app.skills.fetch_prompts",  # L-01: SKL-OIA-15
     "app.skills.record_golden_candidates",  # L-02: SKL-OIA-13
+    "app.skills.refine_questionnaire",  # C-04: SKL-OIA-03
+    "app.skills.register_meeting_assets",  # J-03: SKL-OIA-11
 }
 
 

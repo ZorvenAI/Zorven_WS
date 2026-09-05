@@ -32,6 +32,7 @@ from app.core.logging import get_logger
 logger = get_logger(__name__)
 
 DEPENDENCY = "backend"
+ASSET_REGISTER_PATH = "/api/v1/internal/assets/register/"
 OCR_UPDATE_PATH = "/api/v1/internal/assets/{asset_id}/ocr/"
 RECORDING_SUMMARY_PATH = (
     "/api/v1/onboarding/internal/recordings/{recording_id}/summary/"
@@ -483,6 +484,32 @@ class BackendClient:
         return await self._post(
             path,
             {"reason": "watchdog_stuck_session"},
+            tenant_id=tenant_id,
+        )
+
+    async def register_brand_asset(
+        self,
+        *,
+        tenant_id: str,
+        file_name: str,
+        file_type: str,
+        file_size: int,
+        gcs_uri: str,
+    ) -> dict[str, Any] | None:
+        """Register a BrandAsset and trigger the data pipeline (SKL-OIA-11).
+
+        Returns ``{"asset_id": ..., "company_id": ..., ...}`` on success,
+        or None on failure. Failure is logged and swallowed — the caller
+        aggregates results and reports partial success.
+        """
+        return await self._post(
+            ASSET_REGISTER_PATH,
+            {
+                "file_name": file_name,
+                "file_type": file_type,
+                "file_size": file_size,
+                "gcs_uri": gcs_uri,
+            },
             tenant_id=tenant_id,
         )
 
