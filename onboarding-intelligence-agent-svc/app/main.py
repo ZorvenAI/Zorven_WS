@@ -163,6 +163,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # callbacks observe the real state across all callers.
     app.state.breakers = BreakerRegistry()
 
+    # Phase B: backend write outbox — buffers writes while the breaker is open,
+    # drains on recovery. Created before BackendClient so the client can use it.
+    from app.cache.outbox import OutboxWriter, register_outbox_drain
+
+    app.state.outbox = OutboxWriter(app.state.redis)
+
     # C-02. Built once: loading the registry parses YAML and imports sixteen
     # modules, which is startup work rather than per-request work. The
     # providers are constructed here so a missing key is visible at boot in
@@ -171,6 +177,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings.BACKEND_BASE_URL,
         settings.SERVICE_TOKEN,
         breaker=app.state.breakers.get("backend"),
+        outbox=app.state.outbox,
     )
 
     # J-01: PROCESS mode executor. Shares the BackendClient and Redis.
@@ -209,6 +216,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 dep, _STATE_ORDINAL.get(str(new), 0)
             )
         )
+
+    # Phase B: drain outbox on backend breaker recovery, and on startup.
+    register_outbox_drain(
+        app.state.breakers.get("backend"),
+        app.state.outbox,
+        app.state.backend.replay_entry,
+    )
+    startup_drained = await app.state.outbox.drain_all(
+        app.state.backend.replay_entry,
+    )
+    if startup_drained:
+        logger.info("outbox_startup_drain", replayed=startup_drained)
 
     # N-03: OCR retry queue drain on vision breaker recovery.
     from app.logic.ocr_drain import register_drain_callback

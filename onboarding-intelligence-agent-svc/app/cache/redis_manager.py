@@ -172,6 +172,10 @@ class TenantKeys:
         """List · 24 h · Django writes buffered while the backend breaker is open."""
         return f"{self._scope}outbox:{session_id}"
 
+    def backend_outbox(self) -> str:
+        """List · 24 h · tenant-level backend write queue for breaker-open replay."""
+        return f"{self._scope}outbox:backend"
+
     # ── Tenant control ───────────────────────────────────────
     def ratelimit(self, user_id: str) -> str:
         """Counter · 1 min · PREP 10/min per user, WS control-frame throttle."""
