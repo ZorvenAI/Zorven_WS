@@ -512,7 +512,7 @@ jobs:
       - name: Run tests
         run: |
           cd ai-brand-automator-frontend
-          npm test -- --coverage || echo "No tests configured yet"
+          npm test -- --coverage
 
       # Browser tests, added by E-02 for claims jsdom cannot make. Its AC-2 is
       # about rendered geometry — no horizontal scrolling at a 13-inch

@@ -100,12 +100,23 @@ class TestGCSAdapterRealOperations:
         from django.conf import settings
         import os
 
+        import json as _json
+
         base_dir = settings.BASE_DIR
         credentials_path = os.path.join(base_dir, "credentials", "gcs-credentials.json")
 
-        # Skip if credentials file doesn't exist
         if not os.path.exists(credentials_path):
-            pytest.skip("GCS credentials file not found - skipping real GCS tests")
+            pytest.skip(f"GCS credentials not found at {credentials_path}")
+
+        try:
+            with open(credentials_path) as f:
+                data = _json.load(f)
+            if not isinstance(data, dict) or "client_email" not in data:
+                pytest.skip(
+                    f"GCS credentials at {credentials_path} missing client_email"
+                )
+        except (ValueError, OSError):
+            pytest.skip(f"GCS credentials at {credentials_path} not valid JSON")
 
         return GCSAdapter(
             project_id="zorven-503517",
@@ -778,12 +789,23 @@ class TestGCSAdapterSaveJson:
         from django.conf import settings
         import os
 
+        import json as _json
+
         base_dir = settings.BASE_DIR
         credentials_path = os.path.join(base_dir, "credentials", "gcs-credentials.json")
 
-        # Skip if credentials file doesn't exist
         if not os.path.exists(credentials_path):
-            pytest.skip("GCS credentials file not found - skipping real GCS tests")
+            pytest.skip(f"GCS credentials not found at {credentials_path}")
+
+        try:
+            with open(credentials_path) as f:
+                data = _json.load(f)
+            if not isinstance(data, dict) or "client_email" not in data:
+                pytest.skip(
+                    f"GCS credentials at {credentials_path} missing client_email"
+                )
+        except (ValueError, OSError):
+            pytest.skip(f"GCS credentials at {credentials_path} not valid JSON")
 
         return GCSAdapter(
             project_id="zorven-503517",
