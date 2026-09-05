@@ -187,7 +187,7 @@ Run the automated drill to verify every degraded mode and recovery path:
 
 ```bash
 # Unit drill (no network dependencies)
-pytest tests/test_circuit_breakers.py -k "Drill or Recovery" -v
+pytest tests/test_circuit_breakers.py -k "Drill or Recovery" -m "not integration" -v
 
 # Integration drill (requires Redis + Kafka/Redpanda)
 pytest tests/test_circuit_breakers.py -k "vision_recovery_drains" -v
@@ -202,7 +202,7 @@ pytest tests/integration/test_kafka_roundtrip.py -k "replay or archive" -v
 | `llm` | `MANUAL_CHECKBOXES` | Force open → call `generate()` | Yes | `LLMUnavailable` raised |
 | `vision` | `GEMINI_ONLY_OCR` | Force open → call `analyze()` | Yes | `VisionUnavailable` raised |
 | `ocr` | `GEMINI_ONLY_OCR` | Force open (vision breaker) → call `detect_text()` | Yes | `OCRUnavailable` raised; OCR drain on recovery verified |
-| `backend` | `REDIS_OUTBOX` | Force open → call any write | Yes | Returns `None` (swallowed); **outbox buffering not yet implemented** |
+| `backend` | `REDIS_OUTBOX` | Force open → call any write | Yes | Returns `False` (swallowed); **outbox buffering not yet implemented** |
 | `poi` | `CACHED_THEN_HARDCODED` | Force open → `before_call()` | Yes | `user_message` is `null` by design |
 | `gcs` | `LOCAL_DISK_SPOOL` | Force open → `before_call()` | Mechanism only | **Provider is a stub (F-02)**; `LOCAL_DISK_SPOOL` not exercisable end-to-end |
 | `tavily` | `SKIP_RESEARCH` | Force open → call `search()` | Yes | `TavilyUnavailable` raised |

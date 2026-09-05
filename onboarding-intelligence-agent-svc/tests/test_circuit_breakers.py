@@ -398,13 +398,11 @@ EXPECTED_DEGRADED_MODES = {
     ),
     "llm": (
         "MANUAL_CHECKBOXES",
-        "Suggestions paused."
-        " Check questions off manually — nothing is lost.",
+        "Suggestions paused." " Check questions off manually — nothing is lost.",
     ),
     "vision": (
         "GEMINI_ONLY_OCR",
-        "Reduced document-reading accuracy"
-        " — captures still saved.",
+        "Reduced document-reading accuracy" " — captures still saved.",
     ),
     "backend": (
         "REDIS_OUTBOX",
@@ -603,7 +601,11 @@ class TestRecoveryDrill:
     async def test_vision_recovery_drains_ocr_queue(self, redis_client):
         """When the vision breaker recovers, the OCR retry queue is drained."""
         from app.cache.redis_manager import TenantKeys
-        from app.cache.retry_queue import OCRRetryItem, dequeue_due, enqueue_retry
+        from app.cache.retry_queue import (
+            OCRRetryItem,
+            enqueue_retry,
+            queue_size,
+        )
         from app.logic.ocr_drain import register_drain_callback
 
         tenant_id = "t-drain-drill"
@@ -618,28 +620,18 @@ class TestRecoveryDrill:
         )
         await enqueue_retry(redis_client, keys, item)
 
+        size_before = await queue_size(redis_client, keys)
+        assert size_before >= 1, "item not enqueued"
+
         breaker = make(
-            failure_threshold=1, reset_timeout_seconds=1, success_threshold=1
+            failure_threshold=1,
+            reset_timeout_seconds=1,
+            success_threshold=1,
         )
         register_drain_callback(breaker, redis_client)
 
         breaker.record_failure()
         assert breaker.state is State.OPEN
-
-        await asyncio.sleep(0.1)
-
-        await dequeue_due(redis_client, keys)
-        await enqueue_retry(
-            redis_client,
-            keys,
-            OCRRetryItem(
-                media_id="media-drill-2",
-                gcs_uri="gs://test/drill2.png",
-                usage_tag="drill",
-                tenant_id=tenant_id,
-                attempt=0,
-            ),
-        )
 
         time.sleep(1.1)
         breaker.before_call()
@@ -648,7 +640,5 @@ class TestRecoveryDrill:
 
         await asyncio.sleep(0.5)
 
-        remaining = await dequeue_due(redis_client, keys)
-        assert (
-            len(remaining) == 0
-        ), f"expected 0 items after drain, got {len(remaining)}"
+        size_after = await queue_size(redis_client, keys)
+        assert size_after == 0, f"expected 0 items after drain, got {size_after}"

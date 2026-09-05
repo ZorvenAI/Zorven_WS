@@ -2,25 +2,32 @@
 
 Reads a batch from the DLQ topic, re-publishes each to its original topic
 with the same idempotency_key (which is what makes replay safe by
-construction), and archives poison messages after three replay attempts.
+construction), and archives poison messages after exhausting replay
+attempts.
+
+The threshold is based on ``_replay_attempts`` (carried in the command
+payload through re-dead-lettering), NOT on the original handler
+``attempts`` — CommandConsumer writes ``attempts=max_attempts`` when
+dead-lettering, so using that field would archive every message on
+first replay.
 """
 
 from __future__ import annotations
 
 import json
-import logging
 from dataclasses import dataclass, field
 
-from aiokafka import AIOKafkaConsumer
+from aiokafka import AIOKafkaConsumer, TopicPartition
 
+from app.core.logging import get_logger
 from app.messaging.producer import KafkaProducer
 from app.messaging.schemas import DeadLetter
 from app.messaging.topics import ARCHIVE, DLQ
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 DEFAULT_BATCH_SIZE = 10
-POISON_THRESHOLD = 3
+POISON_REPLAY_THRESHOLD = 3
 
 
 @dataclass
@@ -56,7 +63,8 @@ async def replay_batch(
         for _tp, messages in records.items():
             for message in messages:
                 await _handle_one(producer, message, summary)
-                await consumer.commit()
+                tp = TopicPartition(message.topic, message.partition)
+                await consumer.commit({tp: message.offset + 1})
     finally:
         await consumer.stop()
 
@@ -69,8 +77,6 @@ async def _handle_one(
     summary: ReplaySummary,
 ) -> None:
     raw = getattr(message, "value", b"")
-    key_bytes = getattr(message, "key", None)
-    key = key_bytes.decode() if key_bytes else None
 
     try:
         body = json.loads(raw)
@@ -81,40 +87,49 @@ async def _handle_one(
         summary.details.append({"action": "error", "reason": str(exc)})
         return
 
-    if letter.attempts >= POISON_THRESHOLD:
+    replay_attempts = 0
+    if isinstance(letter.payload, dict):
+        replay_attempts = letter.payload.get("_replay_attempts", 0)
+
+    if replay_attempts >= POISON_REPLAY_THRESHOLD:
         await producer.send(
             ARCHIVE.name,
-            key=key,
+            key=letter.original_key,
             value=raw,
         )
         logger.info(
             "dlq_message_archived",
             error_code=letter.error_code,
-            attempts=letter.attempts,
+            replay_attempts=replay_attempts,
         )
         summary.archived += 1
         summary.details.append(
             {
                 "action": "archived",
                 "error_code": letter.error_code,
-                "attempts": str(letter.attempts),
+                "replay_attempts": str(replay_attempts),
             }
         )
         return
 
-    replay_payload = letter.payload
-    if letter.idempotency_key and isinstance(replay_payload, dict):
-        replay_payload["idempotency_key"] = letter.idempotency_key
+    replay_payload = (
+        letter.payload.copy() if isinstance(letter.payload, dict) else letter.payload
+    )
+    if isinstance(replay_payload, dict):
+        if letter.idempotency_key:
+            replay_payload["idempotency_key"] = letter.idempotency_key
+        replay_payload["_replay_attempts"] = replay_attempts + 1
 
     await producer.send(
         letter.original_topic,
-        key=key,
+        key=letter.original_key,
         value=json.dumps(replay_payload).encode(),
     )
     logger.info(
         "dlq_message_replayed",
         original_topic=letter.original_topic,
         idempotency_key=letter.idempotency_key,
+        replay_attempt=replay_attempts + 1,
     )
     summary.replayed += 1
     summary.details.append(

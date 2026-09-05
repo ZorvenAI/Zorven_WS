@@ -601,6 +601,11 @@ async def replay_dlq(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Kafka producer not configured",
         )
+    if not getattr(kafka, "started", False):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Kafka producer not started",
+        )
 
     settings = request.app.state.settings
     summary = await replay_batch(

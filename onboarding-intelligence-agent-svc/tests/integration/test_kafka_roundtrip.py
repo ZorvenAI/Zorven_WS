@@ -648,7 +648,7 @@ async def test_replay_preserves_idempotency_key(settings, producer, broker):
     idempotency_key = f"idem-replay-{uuid.uuid4().hex[:8]}"
     dead_letter = {
         "original_topic": COMMANDS.name,
-        "original_key": "t:s",
+        "original_key": "t-replay:s-replay",
         "payload": {
             "job_id": "job-replay-1",
             "session_id": str(uuid.uuid4()),
@@ -656,7 +656,7 @@ async def test_replay_preserves_idempotency_key(settings, producer, broker):
         },
         "error_code": "ERR-CMD-01",
         "error_message": "handler exploded",
-        "attempts": 1,
+        "attempts": 3,
         "failed_at": "2026-09-04T00:00:00Z",
         "idempotency_key": idempotency_key,
     }
@@ -682,10 +682,11 @@ async def test_replay_preserves_idempotency_key(settings, producer, broker):
     assert received is not None, "replayed message not found on commands topic"
     assert received["idempotency_key"] == idempotency_key
     assert received["job_id"] == "job-replay-1"
+    assert received["_replay_attempts"] == 1
 
 
-async def test_poison_message_archived_after_three_attempts(settings, producer, broker):
-    """AC-3: messages with attempts >= 3 go to the archive, not back to commands."""
+async def test_poison_message_archived_after_three_replays(settings, producer, broker):
+    """AC-3: messages with _replay_attempts >= 3 go to the archive."""
     from app.messaging.dlq_replay import replay_batch
 
     await provision(broker)
@@ -693,11 +694,12 @@ async def test_poison_message_archived_after_three_attempts(settings, producer, 
     idempotency_key = f"idem-poison-{uuid.uuid4().hex[:8]}"
     poison = {
         "original_topic": COMMANDS.name,
-        "original_key": "t:s",
+        "original_key": "t-poison:s-poison",
         "payload": {
             "job_id": "job-poison-1",
             "session_id": str(uuid.uuid4()),
             "evidence_manifest": {"manifest_hash": "xyz"},
+            "_replay_attempts": 3,
         },
         "error_code": "ERR-CMD-01",
         "error_message": "permanently broken",
@@ -745,7 +747,7 @@ async def test_dlq_replay_no_duplicate_writes(settings, producer, broker):
     idempotency_key = f"idem-nodup-{uuid.uuid4().hex[:8]}"
     dead_letter = {
         "original_topic": COMMANDS.name,
-        "original_key": "t:s",
+        "original_key": "t-nodup:s-nodup",
         "payload": {
             "job_id": "job-nodup-1",
             "session_id": str(uuid.uuid4()),
@@ -753,7 +755,7 @@ async def test_dlq_replay_no_duplicate_writes(settings, producer, broker):
         },
         "error_code": "ERR-CMD-01",
         "error_message": "handler exploded",
-        "attempts": 1,
+        "attempts": 3,
         "failed_at": "2026-09-04T00:00:00Z",
         "idempotency_key": idempotency_key,
     }
