@@ -22,6 +22,8 @@ from app.api.deps import verify_service_token
 from app.api.schemas import (
     CacheBustRequest,
     CacheBustResponse,
+    DLQReplayRequest,
+    DLQReplayResponse,
     ErasureRequest,
     ErasureResponse,
     ExecuteRequest,
@@ -570,6 +572,47 @@ async def cache_bust(
         cleared=cleared,
         prompt_ids=[payload.prompt_id] if payload.prompt_id else list(ALL_PROMPT_IDS),
         tenant_id=payload.tenant_id,
+    )
+
+
+# ── N-03: DLQ replay ─────────────────────────────────────────
+
+
+@router.post(
+    "/v1/admin/dlq/replay",
+    response_model=DLQReplayResponse,
+    dependencies=[Depends(verify_service_token)],
+)
+async def replay_dlq(
+    request: Request,
+    payload: DLQReplayRequest,
+) -> DLQReplayResponse:
+    """Replay dead-lettered commands (N-03, §20).
+
+    Re-publishes each DLQ message to its original topic with the same
+    idempotency_key.  Messages that have already failed ≥ 3 replay
+    attempts are archived to the poison-message topic instead.
+    """
+    from app.messaging.dlq_replay import replay_batch
+
+    kafka: object = getattr(request.app.state, "kafka", None)
+    if kafka is None or not getattr(kafka, "configured", False):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Kafka producer not configured",
+        )
+
+    settings = request.app.state.settings
+    summary = await replay_batch(
+        kafka,
+        bootstrap_servers=settings.KAFKA_BOOTSTRAP_SERVERS,
+        batch_size=payload.batch_size,
+    )
+    return DLQReplayResponse(
+        replayed=summary.replayed,
+        archived=summary.archived,
+        errors=summary.errors,
+        details=summary.details,
     )
 
 

@@ -181,6 +181,56 @@ When a prompt version causes unexpected behaviour:
 
 ---
 
+## Circuit Breaker Drill (N-03)
+
+Run the automated drill to verify every degraded mode and recovery path:
+
+```bash
+# Unit drill (no network dependencies)
+pytest tests/test_circuit_breakers.py -k "Drill or Recovery" -v
+
+# Integration drill (requires Redis + Kafka/Redpanda)
+pytest tests/test_circuit_breakers.py -k "vision_recovery_drains" -v
+pytest tests/integration/test_kafka_roundtrip.py -k "replay or archive" -v
+```
+
+### Drill checklist
+
+| Dependency | Degraded Mode | How to Induce | Drilled? | Notes |
+|------------|---------------|---------------|----------|-------|
+| `stt` | `RECORD_ONLY` | Force open → call `stream()` | Yes | `STTUnavailable` raised |
+| `llm` | `MANUAL_CHECKBOXES` | Force open → call `generate()` | Yes | `LLMUnavailable` raised |
+| `vision` | `GEMINI_ONLY_OCR` | Force open → call `analyze()` | Yes | `VisionUnavailable` raised |
+| `ocr` | `GEMINI_ONLY_OCR` | Force open (vision breaker) → call `detect_text()` | Yes | `OCRUnavailable` raised; OCR drain on recovery verified |
+| `backend` | `REDIS_OUTBOX` | Force open → call any write | Yes | Returns `None` (swallowed); **outbox buffering not yet implemented** |
+| `poi` | `CACHED_THEN_HARDCODED` | Force open → `before_call()` | Yes | `user_message` is `null` by design |
+| `gcs` | `LOCAL_DISK_SPOOL` | Force open → `before_call()` | Mechanism only | **Provider is a stub (F-02)**; `LOCAL_DISK_SPOOL` not exercisable end-to-end |
+| `tavily` | `SKIP_RESEARCH` | Force open → call `search()` | Yes | `TavilyUnavailable` raised |
+
+### DLQ replay procedure
+
+1. Check the DLQ depth:
+   ```bash
+   rpk topic consume agent.dlq.onboarding-intelligence --offset end -n 0
+   ```
+
+2. Replay via admin endpoint:
+   ```bash
+   curl -X POST http://localhost:8120/v1/admin/dlq/replay \
+     -H "X-Service-Token: $OIA_SERVICE_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"batch_size": 10}'
+   ```
+
+3. Review the response: `replayed` messages go back to their original topic with the same `idempotency_key`; `archived` messages (3+ attempts) go to `agent.archive.onboarding-intelligence`.
+
+4. Check the archive topic for poison messages:
+   ```bash
+   rpk topic consume agent.archive.onboarding-intelligence --offset start
+   ```
+
+---
+
 ## Event Queue Overflow
 
 **Alert**: `OIA_EventsDropped`

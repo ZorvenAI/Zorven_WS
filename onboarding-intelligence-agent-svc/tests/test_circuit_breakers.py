@@ -8,10 +8,15 @@ No mocks, and no patched clocks either. Timing is exercised by configuring a
 breaker with a short reset timeout and actually waiting, because the thing
 worth proving is that the state machine reads a real monotonic clock
 correctly. A frozen clock would prove only that the arithmetic matches itself.
+
+N-03 adds the drill tests: AC-1 (every breaker's degraded mode exercised at
+the provider level) and AC-2 (recovery verified, buffered work drains with no
+duplicates).
 """
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
 from pathlib import Path
@@ -29,6 +34,13 @@ from app.circuit_breaker.breaker import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.fixture
+async def redis_client(live_redis):
+    """Raw Redis client from the live_redis manager fixture."""
+    return live_redis.client
+
 
 #: §18.2 names exactly these. A missing one is a dependency with no defined
 #: degraded behaviour, which is the outage the section exists to prevent.
@@ -373,3 +385,270 @@ def test_wf2_failure_does_not_fail_process():
     # The BackendClient catches CircuitBreakerOpen and returns None,
     # which _auto_generate treats as "did not generate" — not as a job
     # failure. This is tested end-to-end in test_autogen.py.
+
+
+# ── N-03 AC-1: every breaker's degraded mode drilled at the provider ────
+
+
+EXPECTED_DEGRADED_MODES = {
+    "stt": (
+        "RECORD_ONLY",
+        "Live assist paused — recording continues."
+        " Transcript will be ready after the meeting.",
+    ),
+    "llm": (
+        "MANUAL_CHECKBOXES",
+        "Suggestions paused."
+        " Check questions off manually — nothing is lost.",
+    ),
+    "vision": (
+        "GEMINI_ONLY_OCR",
+        "Reduced document-reading accuracy"
+        " — captures still saved.",
+    ),
+    "backend": (
+        "REDIS_OUTBOX",
+        "Saving is delayed — your meeting data is"
+        " buffered and will sync automatically.",
+    ),
+    "poi": ("CACHED_THEN_HARDCODED", None),
+    "gcs": ("LOCAL_DISK_SPOOL", "Upload delayed — recording continues locally."),
+    "tavily": (
+        "SKIP_RESEARCH",
+        "Web research unavailable — questionnaire generated from what you provided.",
+    ),
+}
+
+
+class TestDegradedModeDrill:
+    """N-03 AC-1: every dependency's degraded mode exercised."""
+
+    def _force_open(self, breaker: CircuitBreaker) -> None:
+        for _ in range(breaker.config.failure_threshold):
+            breaker.record_failure()
+        assert breaker.is_open, f"{breaker.config.name} did not open"
+
+    def test_every_dependency_has_drilled_mode(self):
+        registry = BreakerRegistry()
+        for name in EXPECTED_DEPENDENCIES:
+            breaker = registry.get(name)
+            mode, msg = EXPECTED_DEGRADED_MODES[name]
+            assert (
+                breaker.config.degraded_mode == mode
+            ), f"{name}: expected {mode}, got {breaker.config.degraded_mode}"
+            assert breaker.config.user_message == msg, f"{name}: user_message mismatch"
+
+    def test_tavily_drill(self):
+        breaker = BreakerRegistry().get("tavily")
+        self._force_open(breaker)
+
+        from app.providers.tavily import TavilyProvider, TavilyUnavailable
+
+        provider = TavilyProvider("fake-key", breaker=breaker)
+
+        with pytest.raises(TavilyUnavailable) as exc_info:
+            asyncio.run(provider.search("test"))
+
+        assert exc_info.value.degraded_mode == "SKIP_RESEARCH"
+
+    def test_llm_drill(self):
+        breaker = BreakerRegistry().get("llm")
+        self._force_open(breaker)
+
+        from app.providers.llm import LLMProvider, LLMUnavailable
+
+        provider = LLMProvider("fake-key", breaker=breaker)
+
+        with pytest.raises(LLMUnavailable) as exc_info:
+            asyncio.run(provider.generate("test prompt"))
+
+        assert exc_info.value.degraded_mode == "MANUAL_CHECKBOXES"
+
+    def test_stt_drill(self):
+        breaker = BreakerRegistry().get("stt")
+        self._force_open(breaker)
+
+        from app.providers.stt import GoogleSTTAdapter, STTUnavailable
+
+        adapter = GoogleSTTAdapter(project="test-project", breaker=breaker)
+
+        async def _empty_audio():
+            yield b"\x00" * 320
+            return
+
+        with pytest.raises(STTUnavailable) as exc_info:
+            asyncio.run(adapter.stream(_empty_audio()).__anext__())
+
+        assert exc_info.value.degraded_mode == "RECORD_ONLY"
+
+    def test_vision_drill(self):
+        breaker = BreakerRegistry().get("vision")
+        self._force_open(breaker)
+
+        from app.providers.vision import VisionProvider, VisionUnavailable
+
+        provider = VisionProvider("fake-key", breaker=breaker)
+
+        with pytest.raises(VisionUnavailable):
+            asyncio.run(provider.analyze(b"\x89PNG", "test text"))
+
+    def test_ocr_drill(self):
+        breaker = BreakerRegistry().get("vision")
+        self._force_open(breaker)
+
+        from app.providers.ocr import OCRProvider, OCRUnavailable
+
+        provider = OCRProvider(breaker=breaker)
+
+        with pytest.raises(OCRUnavailable) as exc_info:
+            asyncio.run(provider.detect_text(b"\x89PNG"))
+
+        assert exc_info.value.degraded_mode == "GEMINI_ONLY_OCR"
+
+    def test_backend_drill(self):
+        breaker = BreakerRegistry().get("backend")
+        self._force_open(breaker)
+
+        from app.services.backend_client import BackendClient
+
+        client = BackendClient("http://localhost:9999", "fake-token", breaker=breaker)
+
+        result = asyncio.run(
+            client.store_research_brief(
+                tenant_id="t-drill",
+                company_name="Drill Corp",
+                brief={"summary": "drill"},
+            )
+        )
+        assert result is False
+
+    def test_poi_drill(self):
+        breaker = BreakerRegistry().get("poi")
+        self._force_open(breaker)
+
+        with pytest.raises(CircuitBreakerOpen) as exc_info:
+            breaker.before_call()
+
+        assert exc_info.value.degraded_mode == "CACHED_THEN_HARDCODED"
+        assert exc_info.value.user_message is None
+
+    def test_gcs_drill(self):
+        breaker = BreakerRegistry().get("gcs")
+        self._force_open(breaker)
+
+        with pytest.raises(CircuitBreakerOpen) as exc_info:
+            breaker.before_call()
+
+        assert exc_info.value.degraded_mode == "LOCAL_DISK_SPOOL"
+        assert (
+            exc_info.value.user_message
+            == "Upload delayed — recording continues locally."
+        )
+
+
+# ── N-03 AC-2: recovery verified, buffered work drains without duplicates ──
+
+
+class TestRecoveryDrill:
+    """N-03 AC-2: recovery drains buffered work, no duplicates."""
+
+    def test_every_breaker_recovers_from_open(self):
+        registry = BreakerRegistry()
+        for name in registry.names():
+            config = registry.get(name).config
+            breaker = CircuitBreaker(
+                BreakerConfig(
+                    name=config.name,
+                    failure_threshold=1,
+                    window_seconds=config.window_seconds,
+                    success_threshold=config.success_threshold,
+                    half_open_max_calls=config.half_open_max_calls,
+                    reset_timeout_seconds=1,
+                    degraded_mode=config.degraded_mode,
+                    user_message=config.user_message,
+                )
+            )
+
+            breaker.record_failure()
+            assert breaker.state is State.OPEN, f"{name} did not open"
+
+            for _ in range(config.success_threshold):
+                time.sleep(1.1)
+                breaker.before_call()
+                breaker.record_success()
+
+            assert breaker.state is State.CLOSED, f"{name} did not recover"
+
+    def test_state_change_callback_fires_on_recovery(self):
+        breaker = make(
+            failure_threshold=1, reset_timeout_seconds=1, success_threshold=1
+        )
+        transitions: list[tuple[State, State]] = []
+
+        breaker.add_on_state_change(
+            lambda dep, old, new: transitions.append((old, new))
+        )
+
+        breaker.record_failure()
+        assert (State.CLOSED, State.OPEN) in transitions
+
+        time.sleep(1.1)
+        breaker.before_call()
+        breaker.record_success()
+
+        assert (State.HALF_OPEN, State.CLOSED) in transitions
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_vision_recovery_drains_ocr_queue(self, redis_client):
+        """When the vision breaker recovers, the OCR retry queue is drained."""
+        from app.cache.redis_manager import TenantKeys
+        from app.cache.retry_queue import OCRRetryItem, dequeue_due, enqueue_retry
+        from app.logic.ocr_drain import register_drain_callback
+
+        tenant_id = "t-drain-drill"
+        keys = TenantKeys(tenant_id)
+
+        item = OCRRetryItem(
+            media_id="media-drill-1",
+            gcs_uri="gs://test/drill.png",
+            usage_tag="drill",
+            tenant_id=tenant_id,
+            attempt=0,
+        )
+        await enqueue_retry(redis_client, keys, item)
+
+        breaker = make(
+            failure_threshold=1, reset_timeout_seconds=1, success_threshold=1
+        )
+        register_drain_callback(breaker, redis_client)
+
+        breaker.record_failure()
+        assert breaker.state is State.OPEN
+
+        await asyncio.sleep(0.1)
+
+        await dequeue_due(redis_client, keys)
+        await enqueue_retry(
+            redis_client,
+            keys,
+            OCRRetryItem(
+                media_id="media-drill-2",
+                gcs_uri="gs://test/drill2.png",
+                usage_tag="drill",
+                tenant_id=tenant_id,
+                attempt=0,
+            ),
+        )
+
+        time.sleep(1.1)
+        breaker.before_call()
+        breaker.record_success()
+        assert breaker.state is State.CLOSED
+
+        await asyncio.sleep(0.5)
+
+        remaining = await dequeue_due(redis_client, keys)
+        assert (
+            len(remaining) == 0
+        ), f"expected 0 items after drain, got {len(remaining)}"

@@ -408,6 +408,23 @@ class CacheBustResponse(BaseModel):
     tenant_id: str | None
 
 
+class DLQReplayRequest(BaseModel):
+    """N-03 · DLQ replay request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    batch_size: int = Field(default=10, ge=1, le=100)
+
+
+class DLQReplayResponse(BaseModel):
+    """N-03 · DLQ replay result."""
+
+    replayed: int
+    archived: int
+    errors: int
+    details: list[dict[str, str]]
+
+
 class ErasureRequest(BaseModel):
     """M-02 · GDPR erasure request from Django."""
 
