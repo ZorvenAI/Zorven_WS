@@ -16,7 +16,7 @@ detail.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from urllib.parse import quote
 
@@ -28,6 +28,9 @@ from app.circuit_breaker.breaker import (
     CircuitBreakerOpen,
 )
 from app.core.logging import get_logger
+
+if TYPE_CHECKING:
+    from app.cache.outbox import OutboxWriter
 
 logger = get_logger(__name__)
 
@@ -81,11 +84,13 @@ class BackendClient:
         *,
         breaker: CircuitBreaker | None = None,
         client: httpx.AsyncClient | None = None,
+        outbox: OutboxWriter | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._token = service_token
         self._breaker = breaker or BreakerRegistry().get(DEPENDENCY)
         self._client = client
+        self._outbox = outbox
 
     @property
     def configured(self) -> bool:
@@ -115,8 +120,22 @@ class BackendClient:
 
         try:
             self._breaker.before_call()
-        except CircuitBreakerOpen:
-            logger.warning("backend_breaker_open", path=path)
+        except CircuitBreakerOpen as exc:
+            if self._outbox is not None:
+                await self._outbox.enqueue(
+                    method="POST",
+                    path=path,
+                    payload=payload,
+                    tenant_id=tenant_id,
+                    timeout=timeout,
+                )
+                logger.info(
+                    "backend_write_buffered",
+                    path=path,
+                    user_message=exc.user_message,
+                )
+            else:
+                logger.warning("backend_breaker_open", path=path)
             return None
 
         client = self._client or httpx.AsyncClient(timeout=timeout)
@@ -315,6 +334,7 @@ class BackendClient:
         payload: dict[str, Any],
         *,
         tenant_id: str,
+        timeout: float = TIMEOUT_S,
     ) -> dict[str, Any] | None:
         if not self.configured:
             logger.warning(
@@ -325,11 +345,25 @@ class BackendClient:
 
         try:
             self._breaker.before_call()
-        except CircuitBreakerOpen:
-            logger.warning("backend_breaker_open", path=path)
+        except CircuitBreakerOpen as exc:
+            if self._outbox is not None:
+                await self._outbox.enqueue(
+                    method="PATCH",
+                    path=path,
+                    payload=payload,
+                    tenant_id=tenant_id,
+                    timeout=timeout,
+                )
+                logger.info(
+                    "backend_write_buffered",
+                    path=path,
+                    user_message=exc.user_message,
+                )
+            else:
+                logger.warning("backend_breaker_open", path=path)
             return None
 
-        client = self._client or httpx.AsyncClient(timeout=TIMEOUT_S)
+        client = self._client or httpx.AsyncClient(timeout=timeout)
         owns_client = self._client is None
         try:
             response = await client.patch(
@@ -339,7 +373,7 @@ class BackendClient:
                     "X-Service-Token": self._token,
                     "X-Tenant-ID": tenant_id,
                 },
-                timeout=TIMEOUT_S,
+                timeout=timeout,
             )
             response.raise_for_status()
             body = response.json()
@@ -521,3 +555,75 @@ class BackendClient:
         return await self._post(
             path, {}, tenant_id=tenant_id, timeout=GENERATE_TIMEOUT_S
         )
+
+    async def replay_entry(self, entry: dict[str, Any]) -> bool:
+        """Replay a buffered outbox entry. Returns True on success.
+
+        Used by the outbox drain — goes through the breaker but does NOT
+        re-enqueue on failure (that would loop). Non-retryable failures
+        (4xx) are logged and discarded.
+        """
+        method = entry.get("method", "POST")
+        path = entry.get("path", "")
+        payload = entry.get("payload", {})
+        tenant_id = entry.get("tenant_id", "")
+        timeout = float(entry.get("timeout", TIMEOUT_S))
+
+        if not self.configured or not path or not tenant_id:
+            return False
+
+        try:
+            self._breaker.before_call()
+        except CircuitBreakerOpen:
+            return False
+
+        client = self._client or httpx.AsyncClient(timeout=timeout)
+        owns_client = self._client is None
+        try:
+            if method == "PATCH":
+                response = await client.patch(
+                    f"{self._base_url}{path}",
+                    json=payload,
+                    headers={
+                        "X-Service-Token": self._token,
+                        "X-Tenant-ID": tenant_id,
+                    },
+                    timeout=timeout,
+                )
+            else:
+                response = await client.post(
+                    f"{self._base_url}{path}",
+                    json=payload,
+                    headers={
+                        "X-Service-Token": self._token,
+                        "X-Tenant-ID": tenant_id,
+                    },
+                    timeout=timeout,
+                )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code < 500:
+                self._breaker.record_success()
+                logger.warning(
+                    "outbox_replay_client_error",
+                    path=path,
+                    status=exc.response.status_code,
+                )
+                return True
+            self._breaker.record_failure()
+            logger.warning("outbox_replay_server_error", path=path)
+            return False
+        except Exception as exc:
+            self._breaker.record_failure()
+            logger.warning(
+                "outbox_replay_failed",
+                path=path,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            return False
+        finally:
+            if owns_client:
+                await client.aclose()
+
+        self._breaker.record_success()
+        return True

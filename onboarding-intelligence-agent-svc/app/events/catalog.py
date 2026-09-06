@@ -47,6 +47,7 @@ class EventType(StrEnum):
     AGENT_CIRCUIT_OPENED = "agent.circuit.opened"  # EVT-011
     AGENT_CIRCUIT_CLOSED = "agent.circuit.closed"  # EVT-011
     AGENT_RATE_LIMITED = "agent.rate_limited"  # EVT-012
+    AGENT_OUTBOX_OVERFLOW = "agent.outbox.overflow"  # EVT-013
 
     # ── §12.2 Domain events ──────────────────────────────────
     CONSENT_VERIFIED = "onboarding.consent.verified"  # EVT-101
@@ -77,6 +78,7 @@ EVENT_IDS: dict[EventType, str] = {
     EventType.AGENT_CIRCUIT_OPENED: "EVT-011",
     EventType.AGENT_CIRCUIT_CLOSED: "EVT-011",
     EventType.AGENT_RATE_LIMITED: "EVT-012",
+    EventType.AGENT_OUTBOX_OVERFLOW: "EVT-013",
     EventType.CONSENT_VERIFIED: "EVT-101",
     EventType.RECORDING_STARTED: "EVT-102",
     EventType.RECORDING_STOPPED: "EVT-102",

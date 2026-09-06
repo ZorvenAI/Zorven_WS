@@ -33,6 +33,10 @@ KEY_PREFIX: Final[str] = "oia:v1:"
 #: POI writes prompt:{name}:production and prompt:{name}:tenant:{tid} keys.
 PROMPT_CACHE_PREFIX: Final[str] = "prompt:"
 
+#: SCAN glob matching all tenants' backend outbox keys. Derived from KEY_PREFIX
+#: so drain_all/pending_count stay in sync with TenantKeys.backend_outbox().
+BACKEND_OUTBOX_SCAN: Final[str] = f"{KEY_PREFIX}*:outbox:backend"
+
 # TTLs from Design §14. Nothing is written without one — on a shared instance
 # an untrimmed key creates pressure on every other service's data.
 TTL_SESSION: Final[int] = 4 * 60 * 60  # sliding
@@ -171,6 +175,10 @@ class TenantKeys:
     def outbox(self, session_id: str) -> str:
         """List · 24 h · Django writes buffered while the backend breaker is open."""
         return f"{self._scope}outbox:{session_id}"
+
+    def backend_outbox(self) -> str:
+        """List · 24 h · tenant-level backend write queue for breaker-open replay."""
+        return f"{self._scope}outbox:backend"
 
     # ── Tenant control ───────────────────────────────────────
     def ratelimit(self, user_id: str) -> str:

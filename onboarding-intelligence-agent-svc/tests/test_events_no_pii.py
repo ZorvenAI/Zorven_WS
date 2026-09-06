@@ -75,18 +75,18 @@ def test_occurred_at_is_accepted_as_an_alias_for_timestamp():
 
 
 def test_event_type_enum_complete():
-    """All 22 event IDs from §12 are present in the enum."""
+    """All 23 event IDs from §12 + Phase B are present in the enum."""
     ids = set(EVENT_IDS.values())
-    expected = {f"EVT-{n:03d}" for n in range(1, 13)} | {
+    expected = {f"EVT-{n:03d}" for n in range(1, 14)} | {
         f"EVT-{n}" for n in range(101, 111)
     }
     assert ids == expected, sorted(expected.symmetric_difference(ids))
-    assert len(ids) == 22
+    assert len(ids) == 23
 
 
-def test_enum_has_24_members_for_22_ids():
+def test_enum_has_25_members_for_23_ids():
     """EVT-011 and EVT-102 each name a pair, so members exceed IDs by two."""
-    assert len(list(EventType)) == 24
+    assert len(list(EventType)) == 25
     assert EVENT_IDS[EventType.AGENT_CIRCUIT_OPENED] == "EVT-011"
     assert EVENT_IDS[EventType.AGENT_CIRCUIT_CLOSED] == "EVT-011"
     assert EVENT_IDS[EventType.RECORDING_STARTED] == "EVT-102"
