@@ -230,7 +230,7 @@ class RedisManager:
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._client: redis.Redis[str] | None = None
+        self._client: redis.Redis | None = None
 
     async def connect(self) -> None:
         self._client = redis.Redis.from_url(
@@ -247,7 +247,7 @@ class RedisManager:
             self._client = None
 
     @property
-    def client(self) -> redis.Redis[str]:
+    def client(self) -> redis.Redis:
         if self._client is None:
             raise RuntimeError("RedisManager.connect() has not been called")
         return self._client
@@ -261,7 +261,7 @@ class RedisManager:
         if self._client is None:
             return False
         try:
-            return bool(await cast("Awaitable[bool]", self._client.ping()))
+            return bool(await cast(Awaitable[bool], self._client.ping()))
         except Exception:
             return False
 
