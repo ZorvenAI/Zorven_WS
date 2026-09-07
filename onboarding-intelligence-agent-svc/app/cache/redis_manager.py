@@ -20,8 +20,7 @@ have dropped live session state silently, mid-meeting. See CLAUDE.md.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable
-from typing import Final, cast
+from typing import Final
 
 import redis.asyncio as redis
 
@@ -261,7 +260,7 @@ class RedisManager:
         if self._client is None:
             return False
         try:
-            return bool(await cast(Awaitable[bool], self._client.ping()))
+            return bool(await self._client.ping())
         except Exception:
             return False
 
