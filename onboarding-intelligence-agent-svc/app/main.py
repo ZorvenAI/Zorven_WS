@@ -245,11 +245,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.outbox,
         app.state.backend.replay_entry,
     )
-    startup_drained = await app.state.outbox.drain_all(
-        app.state.backend.replay_entry,
-    )
-    if startup_drained:
-        logger.info("outbox_startup_drain", replayed=startup_drained)
+    try:
+        startup_drained = await app.state.outbox.drain_all(
+            app.state.backend.replay_entry,
+        )
+        if startup_drained:
+            logger.info("outbox_startup_drain", replayed=startup_drained)
+    except Exception as exc:  # noqa: BLE001 — reported via /health
+        logger.warning("outbox_startup_drain_failed", error=str(exc))
 
     # N-03: OCR retry queue drain on vision breaker recovery.
     from app.logic.ocr_drain import register_drain_callback
