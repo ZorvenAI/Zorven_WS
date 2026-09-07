@@ -237,7 +237,7 @@ def test_ig04_passes_clean_text():
         input_prompt="p",
         tenant_context=TenantContext(tenant_id="t-1", role="ADMIN"),
     )
-    verdict = ig04_redact("No PII here.", ctx)
+    verdict = ig04_redact("The brand focuses on sustainable packaging.", ctx)
     assert verdict.action.value == "PASS"
 
 
