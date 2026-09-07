@@ -394,7 +394,11 @@ class FieldExtractor:
     def _check_protected(
         candidates: list[ExtractedField],
         protected: dict[str, dict[str, Any]],
-    ) -> tuple[list[ExtractedField], list[dict[str, Any]], list[dict[str, Any]],]:
+    ) -> tuple[
+        list[ExtractedField],
+        list[dict[str, Any]],
+        list[dict[str, Any]],
+    ]:
         """PG-06: skip EDITED/CONFIRMED fields, report conflicts."""
         writable: list[ExtractedField] = []
         skipped: list[dict[str, Any]] = []
