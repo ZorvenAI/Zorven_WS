@@ -741,3 +741,53 @@ export async function triggerProcess(
   }
   return (await response.json()) as ProcessDispatchResponse;
 }
+
+// ── Retention configuration (M-03) ────────────────────────────────────
+
+export interface RetentionConfig {
+  retention_days: number;
+  is_default: boolean;
+  next_enforcement_run: string;
+}
+
+export interface RetentionUpdateResponse extends RetentionConfig {
+  previous_days: number;
+  impact?: {
+    subjects: number;
+    sessions: number;
+    enforced_at: string;
+  };
+}
+
+export async function getRetentionConfig(): Promise<RetentionConfig> {
+  const response = await apiClient.get(`${BASE}/retention/`);
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as RetentionConfig;
+}
+
+export async function previewRetentionConfig(
+  retentionDays: number,
+): Promise<RetentionUpdateResponse> {
+  const response = await apiClient.patch(
+    `${BASE}/retention/?preview=true`,
+    { retention_days: retentionDays },
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as RetentionUpdateResponse;
+}
+
+export async function updateRetentionConfig(
+  retentionDays: number,
+): Promise<RetentionUpdateResponse> {
+  const response = await apiClient.patch(`${BASE}/retention/`, {
+    retention_days: retentionDays,
+  });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as RetentionUpdateResponse;
+}
