@@ -610,9 +610,9 @@ async def test_delete_recording(tmp_path: object) -> None:
     )
 
     for i in range(3):
-        bucket.blobs[f"{LANDING_PREFIX}/{TENANT}/{RECORDING}/chunk_{i:06d}.opus"] = (
-            b"data"
-        )
+        bucket.blobs[
+            f"{LANDING_PREFIX}/{TENANT}/{RECORDING}/chunk_{i:06d}.opus"
+        ] = b"data"
     bucket.blobs[f"{LANDING_PREFIX}/{TENANT}/{RECORDING}.opus"] = b"final"
 
     count = await p.delete_recording(TENANT, RECORDING)

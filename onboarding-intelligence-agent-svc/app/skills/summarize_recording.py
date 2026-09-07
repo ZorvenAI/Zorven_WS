@@ -6,7 +6,8 @@ Design §8.1 · implemented by story I-02.
 from __future__ import annotations
 
 import json
-from typing import Any
+from collections.abc import Awaitable
+from typing import Any, cast
 
 from app.core.logging import get_logger
 
@@ -126,7 +127,9 @@ class SummarizeRecording(BaseSkill):
         assert self._redis is not None
         keys = self._redis.keys_for(tenant_id)
         key = keys.live_frames(session_id)
-        raw_frames = await self._redis.client.lrange(key, 0, -1)
+        raw_frames = await cast(
+            "Awaitable[list[Any]]", self._redis.client.lrange(key, 0, -1)
+        )
         return extract_transcript_segments(raw_frames, started_at, stopped_at)
 
     @staticmethod

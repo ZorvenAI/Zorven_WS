@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any
+from collections.abc import Awaitable
+from typing import Any, cast
 
 from app.cache.redis_manager import RedisManager
 from app.core.logging import get_logger
@@ -147,7 +148,10 @@ class RecordGoldenCandidates(BaseSkill):
         try:
             keys = self._redis.keys_for(tenant_id)
             session_key = keys.session(session_id)
-            raw = await self._redis.client.hget(session_key, "prompt_versions")
+            raw = await cast(
+                "Awaitable[str | None]",
+                self._redis.client.hget(session_key, "prompt_versions"),
+            )
             if raw:
                 versions = json.loads(raw)
                 return str(versions.get(prompt_id, "unknown"))
