@@ -212,9 +212,22 @@ class RetentionConfigView(APIView):
         config = RetentionConfig.objects.filter(tenant=tenant).first()
         old_days = config.retention_days if config else RETENTION_DAYS_DEFAULT
 
+        preview = request.query_params.get("preview") == "true"
+
         impact = None
         if new_days < old_days:
             impact = _compute_impact(tenant, new_days, old_days)
+
+        if preview:
+            data = {
+                "retention_days": new_days,
+                "previous_days": old_days,
+                "is_default": config is None,
+                "next_enforcement_run": _next_enforcement_run().isoformat(),
+            }
+            if impact is not None:
+                data["impact"] = impact
+            return Response(data)
 
         if config:
             config.retention_days = new_days

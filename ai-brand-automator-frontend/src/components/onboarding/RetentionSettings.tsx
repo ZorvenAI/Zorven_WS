@@ -5,9 +5,9 @@
  *
  * The backlog is explicit about what this component prevents: "we lost eight
  * months of onboarding data by changing a dropdown." When the new value is
- * shorter than the current one, the backend's PATCH returns an `impact` block
- * counting subjects and sessions that will be deleted at the next enforcement
- * run. This component shows that count and asks for confirmation before saving.
+ * shorter, the component previews the impact (subjects and sessions that would
+ * be deleted) without persisting the change. The actual PATCH only fires when
+ * the operator clicks Confirm — so Revert is a real cancel, not a lie.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -15,11 +15,17 @@ import { AlertTriangle, Clock, Loader2, ShieldCheck } from 'lucide-react';
 
 import {
   getRetentionConfig,
+  previewRetentionConfig,
   updateRetentionConfig,
   type RetentionConfig,
   type RetentionUpdateResponse,
 } from '@/lib/onboarding-sessions';
 import { useTenantRole } from '@/hooks/useTenantRole';
+
+function isValidDays(value: string): boolean {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 1 && n <= 3650;
+}
 
 export default function RetentionSettings() {
   const { isAdmin } = useTenantRole();
@@ -28,7 +34,7 @@ export default function RetentionSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingResult, setPendingResult] = useState<RetentionUpdateResponse | null>(null);
+  const [pendingPreview, setPendingPreview] = useState<RetentionUpdateResponse | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,47 +58,60 @@ export default function RetentionSettings() {
   }, []);
 
   const handleSave = useCallback(async () => {
-    const days = Number(inputDays);
-    if (!Number.isInteger(days) || days < 1 || days > 3650) {
+    if (!isValidDays(inputDays)) {
       setError('Retention must be between 1 and 3,650 days.');
       return;
     }
 
+    const days = Number(inputDays);
+    const currentDays = config?.retention_days ?? 365;
+
     setError(null);
     setSaving(true);
     try {
-      const result = await updateRetentionConfig(days);
-      if (result.impact && result.impact.subjects > 0) {
-        setPendingResult(result);
-        setSaving(false);
-        return;
+      if (days < currentDays) {
+        const preview = await previewRetentionConfig(days);
+        if (preview.impact && preview.impact.subjects > 0) {
+          setPendingPreview(preview);
+          return;
+        }
       }
+      const result = await updateRetentionConfig(days);
       setConfig({
         retention_days: result.retention_days,
         is_default: result.is_default,
         next_enforcement_run: result.next_enforcement_run,
       });
-      setPendingResult(null);
+      setPendingPreview(null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to update retention');
     } finally {
       setSaving(false);
     }
-  }, [inputDays]);
+  }, [inputDays, config]);
 
-  const handleConfirm = useCallback(() => {
-    if (!pendingResult) return;
-    setConfig({
-      retention_days: pendingResult.retention_days,
-      is_default: pendingResult.is_default,
-      next_enforcement_run: pendingResult.next_enforcement_run,
-    });
-    setInputDays(String(pendingResult.retention_days));
-    setPendingResult(null);
-  }, [pendingResult]);
+  const handleConfirm = useCallback(async () => {
+    if (!pendingPreview) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await updateRetentionConfig(pendingPreview.retention_days);
+      setConfig({
+        retention_days: result.retention_days,
+        is_default: result.is_default,
+        next_enforcement_run: result.next_enforcement_run,
+      });
+      setInputDays(String(result.retention_days));
+      setPendingPreview(null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update retention');
+    } finally {
+      setSaving(false);
+    }
+  }, [pendingPreview]);
 
   const handleCancel = useCallback(() => {
-    setPendingResult(null);
+    setPendingPreview(null);
     if (config) setInputDays(String(config.retention_days));
   }, [config]);
 
@@ -122,10 +141,10 @@ export default function RetentionSettings() {
   }
 
   const currentDays = config?.retention_days ?? 365;
+  const valid = isValidDays(inputDays);
   const parsed = Number(inputDays);
-  const isShortening =
-    Number.isInteger(parsed) && parsed > 0 && parsed < currentDays;
-  const isDirty = String(parsed) !== String(currentDays);
+  const isShortening = valid && parsed < currentDays;
+  const isDirty = valid && parsed !== currentDays;
 
   return (
     <div className="glass-card space-y-4 p-6">
@@ -148,7 +167,7 @@ export default function RetentionSettings() {
             onChange={(e) => {
               setInputDays(e.target.value);
               setError(null);
-              setPendingResult(null);
+              setPendingPreview(null);
             }}
             className="w-24 rounded border border-white/15 bg-transparent px-3 py-2 text-sm text-white"
           />
@@ -161,7 +180,7 @@ export default function RetentionSettings() {
         )}
       </div>
 
-      {isShortening && !pendingResult && (
+      {isShortening && !pendingPreview && (
         <p className="flex items-start gap-2 rounded border border-yellow-500/30 bg-yellow-500/10 p-3 text-xs text-yellow-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden />
           Shortening retention may delete existing evidence. Save to see how many
@@ -169,7 +188,7 @@ export default function RetentionSettings() {
         </p>
       )}
 
-      {pendingResult?.impact && pendingResult.impact.subjects > 0 && (
+      {pendingPreview?.impact && pendingPreview.impact.subjects > 0 && (
         <div
           role="alert"
           className="space-y-2 rounded border border-rose-500/30 bg-rose-500/10 p-3"
@@ -177,25 +196,27 @@ export default function RetentionSettings() {
           <p className="flex items-start gap-2 text-sm text-rose-300">
             <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden />
             This will delete evidence for{' '}
-            <strong>{pendingResult.impact.subjects} subject(s)</strong> across{' '}
-            <strong>{pendingResult.impact.sessions} session(s)</strong>.
+            <strong>{pendingPreview.impact.subjects} subject(s)</strong> across{' '}
+            <strong>{pendingPreview.impact.sessions} session(s)</strong>.
           </p>
           <p className="text-xs text-rose-300/80">
             Deletion happens at the next enforcement run:{' '}
-            {new Date(pendingResult.impact.enforced_at).toLocaleString()}.
+            {new Date(pendingPreview.impact.enforced_at).toLocaleString()}.
             You can reverse this by increasing retention before then.
           </p>
           <div className="flex gap-2 pt-1">
             <button
               type="button"
               onClick={handleConfirm}
-              className="rounded bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-500"
+              disabled={saving}
+              className="rounded bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-500 disabled:opacity-50"
             >
-              Confirm shorter retention
+              {saving ? 'Saving…' : 'Confirm shorter retention'}
             </button>
             <button
               type="button"
               onClick={handleCancel}
+              disabled={saving}
               className="rounded px-3 py-1.5 text-xs text-brand-silver hover:text-white"
             >
               Revert
@@ -210,7 +231,7 @@ export default function RetentionSettings() {
         </p>
       )}
 
-      {!pendingResult && (
+      {!pendingPreview && (
         <div className="flex items-center gap-3">
           <button
             type="button"
