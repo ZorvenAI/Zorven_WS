@@ -14,9 +14,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Lightbulb, Sparkles, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Lightbulb, MessageSquare, Sparkles, TrendingUp } from 'lucide-react';
 
-export type FeedbackKind = 'follow_up' | 'fact' | 'coverage' | 'gap';
+export type FeedbackKind = 'transcript' | 'follow_up' | 'fact' | 'coverage' | 'gap';
 
 export interface FeedbackItem {
   id: string;
@@ -31,6 +31,7 @@ export interface AgentFeedbackStreamProps {
 }
 
 const ICONS = {
+  transcript: MessageSquare,
   follow_up: Lightbulb,
   fact: Sparkles,
   coverage: TrendingUp,
@@ -38,6 +39,7 @@ const ICONS = {
 } as const;
 
 const KIND_LABELS: Record<FeedbackKind, string> = {
+  transcript: 'Transcript',
   follow_up: 'Follow-up',
   fact: 'Noted',
   coverage: 'Coverage',
@@ -45,6 +47,7 @@ const KIND_LABELS: Record<FeedbackKind, string> = {
 };
 
 const KIND_STYLES: Record<FeedbackKind, string> = {
+  transcript: 'text-sky-300',
   follow_up: 'text-brand-electric',
   fact: 'text-brand-silver',
   coverage: 'text-emerald-300',
