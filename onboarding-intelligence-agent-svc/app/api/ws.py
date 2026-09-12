@@ -1629,7 +1629,9 @@ async def _hold(
                 )
                 refusal = consent_verdict(state)
                 if refusal.blocked:
-                    await websocket.close(code=CLOSE_FORBIDDEN, reason=refusal.detail[:120])
+                    await websocket.close(
+                        code=CLOSE_FORBIDDEN, reason=refusal.detail[:120]
+                    )
                     return
 
             # G-02: check batcher timer on each poll cycle
@@ -1673,7 +1675,10 @@ async def _hold(
         analysis_task = analysis_state.get("task")
         if analysis_task is not None and not analysis_task.done():
             try:
-                await asyncio.wait_for(asyncio.shield(analysis_task), timeout=get_settings().ANALYSIS_TIMEOUT_S)
+                await asyncio.wait_for(
+                    asyncio.shield(analysis_task),
+                    timeout=get_settings().ANALYSIS_TIMEOUT_S,
+                )
             except (
                 asyncio.TimeoutError,
                 asyncio.CancelledError,
