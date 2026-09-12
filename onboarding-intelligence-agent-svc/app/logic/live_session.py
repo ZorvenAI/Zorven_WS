@@ -752,7 +752,8 @@ return 1
             return None
         val = raw if isinstance(raw, str) else raw.decode()
         try:
-            return _json.loads(val)
+            parsed: dict[str, dict[str, str]] = _json.loads(val)
+            return parsed
         except (ValueError, TypeError):
             return None
 

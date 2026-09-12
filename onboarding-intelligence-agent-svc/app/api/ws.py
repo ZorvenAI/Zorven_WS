@@ -1349,12 +1349,16 @@ async def _handle_control(
     if frame_type == ClientFrameType.STOP.value:
         await _cancel_recovery(stt_state)
 
-        stream_queues = stt_state.get("stream_queues")
-        if stream_queues:
-            for sq in stream_queues.values():
+        stop_queues: dict[int, asyncio.Queue[bytes | None]] | None = stt_state.get(
+            "stream_queues"
+        )
+        if stop_queues:
+            for sq in stop_queues.values():
                 sq.put_nowait(None)
-            stream_tasks = stt_state.get("stream_tasks", {})
-            for st in stream_tasks.values():
+            stop_tasks: dict[int, asyncio.Task[None]] = stt_state.get(
+                "stream_tasks", {}
+            )
+            for st in stop_tasks.values():
                 if st is not None and not st.done():
                     try:
                         await asyncio.wait_for(st, timeout=5.0)
