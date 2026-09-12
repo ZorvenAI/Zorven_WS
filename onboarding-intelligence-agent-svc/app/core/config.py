@@ -120,12 +120,15 @@ class Settings(BaseSettings):
     # ── Batcher (G-02, Design §4.3) ────────────────────────
     BATCH_WINDOW_S: float = 3.0
     BATCH_MIN_DURATION_S: float = 0.4
+    ANALYSIS_TIMEOUT_S: float = 15.0
 
     # ── STT v2 (F-05) ───────────────────────────────────────
+    STT_PROVIDER: str = "google"
     STT_PROJECT: str = ""
     STT_LOCATION: str = "global"
     STT_RECOGNIZER: str = "_"
     STT_STREAM_LIMIT_S: int = 280
+    STT_FAKE_FIXTURE: str = ""
     PII_ENTITIES: str = (
         "PERSON,PHONE_NUMBER,EMAIL_ADDRESS,CREDIT_CARD,"
         "IBAN_CODE,US_SSN,US_ITIN,LOCATION"
