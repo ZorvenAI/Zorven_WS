@@ -350,6 +350,12 @@ class GoogleSTTAdapter(STTAdapter):
     def _encoding_for(codec: str) -> Any:
         from google.cloud.speech_v2.types import cloud_speech as cs
 
+        normalized = codec.lower().replace(" ", "")
+        if "webm" in normalized and "opus" in normalized:
+            return cs.ExplicitDecodingConfig.AudioEncoding.WEBM_OPUS
+        if "ogg" in normalized and "opus" in normalized:
+            return cs.ExplicitDecodingConfig.AudioEncoding.OGG_OPUS
+
         mapping = {
             "LINEAR16": cs.ExplicitDecodingConfig.AudioEncoding.LINEAR16,
             "WEBM_OPUS": cs.ExplicitDecodingConfig.AudioEncoding.WEBM_OPUS,

@@ -583,10 +583,14 @@ async def _run_analysis(
         origin=Origin.INTERNAL,
     )
 
+    from app.core.config import get_settings as _get_settings
+
+    _analysis_timeout = _get_settings().ANALYSIS_TIMEOUT_S
+
     try:
         chunks = await asyncio.wait_for(
             _collect_stream(registry, "SKL-OIA-04", context),
-            timeout=5.0,
+            timeout=_analysis_timeout,
         )
     except asyncio.TimeoutError:
         from app.metrics import record_analysis_drop
@@ -757,10 +761,11 @@ async def _evaluate_sufficiency(
     Captures the question version before scoring; applies the green signal
     only if the version hasn't changed (AC-3 ordering hazard).
     """
-    from app.core.config import get_settings
+    from app.core.config import get_settings as _gs
 
-    cfg = get_settings()
+    cfg = _gs()
     threshold = cfg.SUFFICIENCY_GREEN_THRESHOLD
+    _analysis_timeout = cfg.ANALYSIS_TIMEOUT_S
 
     for qid in question_ids:
         entry = await session.get_question_entry(qid)
@@ -793,7 +798,7 @@ async def _evaluate_sufficiency(
         try:
             chunks: list[dict[str, Any]] = await asyncio.wait_for(
                 _collect_stream(registry, "SKL-OIA-05", suf_context),
-                timeout=5.0,
+                timeout=_analysis_timeout,
             )
         except asyncio.TimeoutError:
             from app.metrics import record_sufficiency_drop
@@ -864,6 +869,9 @@ async def _generate_followups(
     tenant_context: TenantContext,
 ) -> None:
     """Invoke SKL-OIA-06 to generate follow-up suggestions (G-04)."""
+    from app.core.config import get_settings as _gs2
+
+    _analysis_timeout = _gs2().ANALYSIS_TIMEOUT_S
     already_asked = [
         s["text"] if isinstance(s, dict) else str(s)
         for s in entry.get("suggestions", [])
@@ -885,7 +893,7 @@ async def _generate_followups(
     try:
         chunks: list[dict[str, Any]] = await asyncio.wait_for(
             _collect_stream(registry, "SKL-OIA-06", fup_context),
-            timeout=5.0,
+            timeout=_analysis_timeout,
         )
     except asyncio.TimeoutError:
         logger.warning(
@@ -1496,21 +1504,12 @@ async def _hold(
                 "prompt_versions",
                 _json.dumps(prompt_versions),
             )
-            if degraded:
-                events_emitter = getattr(websocket.app.state, "events", None)
-                if events_emitter is not None:
-                    from app.events.catalog import EventType
-
-                    await events_emitter.emit(
-                        EventType.AGENT_INVOKED,
-                        tenant_id=verdict.tenant_id,
-                        correlation_id=session_id,
-                        session_id=session_id,
-                        payload={"prompt_source": "hardcoded_fallback"},
-                        outcome="DEGRADED",
-                    )
-        except Exception:  # noqa: BLE001
-            logger.warning("live_prompt_resolution_failed", session_id=session_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "live_prompt_resolution_failed",
+                session_id=session_id,
+                error=f"{type(exc).__name__}: {exc}",
+            )
 
     # G-02: batcher and analysis state
     from app.core.config import get_settings
@@ -1592,37 +1591,46 @@ async def _hold(
         _breaker_cb = _on_breaker_change
         _breaker_ref.add_on_state_change(_breaker_cb)
 
+    import time as _time
+
+    _SLOW_CHECK_INTERVAL = 10.0
+    _last_slow_check = 0.0
+
     try:
         while True:
-            if session is not None:
-                try:
-                    await session.write_heartbeat()
-                except Exception:  # noqa: BLE001
-                    pass
+            now = _time.monotonic()
+            if now - _last_slow_check >= _SLOW_CHECK_INTERVAL:
+                _last_slow_check = now
 
-            if expired(verdict.valid_until):
-                await websocket.close(
-                    code=CLOSE_UNAUTHORIZED,
-                    reason="Session authorisation expired.",
+                if session is not None:
+                    try:
+                        await session.write_heartbeat()
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                if expired(verdict.valid_until):
+                    await websocket.close(
+                        code=CLOSE_UNAUTHORIZED,
+                        reason="Session authorisation expired.",
+                    )
+                    return
+
+                if lock is not None and not await lock.refresh():
+                    await websocket.close(
+                        code=CLOSE_CONFLICT,
+                        reason="Another socket took over this session.",
+                    )
+                    return
+
+                state = await fetch_consent_state(
+                    backend,
+                    tenant_id=verdict.tenant_id,
+                    session_id=session_id,
                 )
-                return
-
-            if lock is not None and not await lock.refresh():
-                await websocket.close(
-                    code=CLOSE_CONFLICT,
-                    reason="Another socket took over this session.",
-                )
-                return
-
-            state = await fetch_consent_state(
-                backend,
-                tenant_id=verdict.tenant_id,
-                session_id=session_id,
-            )
-            refusal = consent_verdict(state)
-            if refusal.blocked:
-                await websocket.close(code=CLOSE_FORBIDDEN, reason=refusal.detail[:120])
-                return
+                refusal = consent_verdict(state)
+                if refusal.blocked:
+                    await websocket.close(code=CLOSE_FORBIDDEN, reason=refusal.detail[:120])
+                    return
 
             # G-02: check batcher timer on each poll cycle
             timer_batch = batcher.check_timer()
@@ -1665,7 +1673,7 @@ async def _hold(
         analysis_task = analysis_state.get("task")
         if analysis_task is not None and not analysis_task.done():
             try:
-                await asyncio.wait_for(asyncio.shield(analysis_task), timeout=5.0)
+                await asyncio.wait_for(asyncio.shield(analysis_task), timeout=get_settings().ANALYSIS_TIMEOUT_S)
             except (
                 asyncio.TimeoutError,
                 asyncio.CancelledError,
