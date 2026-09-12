@@ -76,7 +76,7 @@ export function useLiveSocket({
   onFrame,
 }: UseLiveSocketOptions): UseLiveSocketReturn {
   const onFrameRef = useRef(onFrame);
-  onFrameRef.current = onFrame;
+  useEffect(() => { onFrameRef.current = onFrame; });
   const [status, setStatus] = useState<LiveSocketStatus>('idle');
   const [error, setError] = useState<LiveSocketError | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -191,16 +191,12 @@ export function useLiveSocket({
       ws.onerror = () => {};
     };
 
-    // If the prior mount left a still-usable WebSocket (strict mode), reuse it
+    // If the prior mount left a still-usable WebSocket (strict mode), reuse it.
+    // Status is already correct from the previous mount (the deferred close's
+    // setStatus('idle') was cancelled above), so we only re-attach handlers.
     const existing = wsRef.current;
     if (existing && existing.readyState <= WebSocket.OPEN) {
-      if (existing.readyState === WebSocket.OPEN) {
-        retriesRef.current = 0;
-        setStatus('live');
-        setError(null);
-      } else {
-        setStatus('connecting');
-      }
+      retriesRef.current = 0;
       existing.onopen = () => {
         if (cancelled) { existing.close(); return; }
         retriesRef.current = 0;
