@@ -14,11 +14,12 @@
  * server-side too.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CloudOff, Mic, Square, UploadCloud } from 'lucide-react';
 
 import {
   useMeetingRecorder,
+  SAMPLE_RATE,
   type UseMeetingRecorder,
 } from '@/hooks/useMeetingRecorder';
 import {
@@ -33,6 +34,10 @@ export interface RecorderControlProps {
   onRecordConsent?: () => void;
   /** F-03: which session the recording attaches to. */
   sessionId?: string | null;
+  /** F-04: forward binary audio to the live WebSocket for STT. */
+  sendBinary?: (data: ArrayBuffer | Uint8Array) => void;
+  /** F-04: send start/stop control frames to the live WebSocket. */
+  sendControl?: (frame: Record<string, unknown>) => void;
   /** Injected in tests; the hook is the default. */
   recorder?: UseMeetingRecorder;
   /** Injected in tests; the hook is the default. */
@@ -51,6 +56,8 @@ export default function RecorderControl({
   consentGranted,
   onRecordConsent,
   sessionId,
+  sendBinary,
+  sendControl,
   recorder,
   uploader: injectedUploader,
 }: RecorderControlProps) {
@@ -74,6 +81,17 @@ export default function RecorderControl({
 
   const [recordingId, setRecordingId] = useState<string | null>(null);
   const elapsedAtStop = useRef(0);
+  const sentChunkIndex = useRef(0);
+
+  useEffect(() => {
+    if (!recording || !sendBinary) return;
+    const chunks = chunksRef.current;
+    while (sentChunkIndex.current < chunks.length) {
+      const chunk = chunks[sentChunkIndex.current];
+      chunk.blob.arrayBuffer().then((buf) => sendBinary(new Uint8Array(buf)));
+      sentChunkIndex.current += 1;
+    }
+  }, [recording, chunkCount, sendBinary, chunksRef]);
 
   const ownUploader = useChunkUploader({
     recordingId,
@@ -86,25 +104,31 @@ export default function RecorderControl({
   const uploader = injectedUploader ?? ownUploader;
 
   const begin = useCallback(async () => {
-    // The row is opened before the microphone, not after. A recording with
-    // audio and no row to attach it to has nowhere to be finalised, and the
-    // operator would have spoken for ten minutes into a queue with no
-    // destination.
+    sentChunkIndex.current = 0;
+    let rid: string | null = null;
     try {
       const opened = await openRecording(String(sessionId));
-      setRecordingId(opened.recording_id);
+      rid = opened.recording_id;
+      setRecordingId(rid);
     } catch {
-      // Recording still starts. F-03's durability is the point, but refusing
-      // to record because the *upload* could not be arranged would lose the
-      // meeting outright rather than degrade it — which is what AC-3's whole
-      // design is against. The uploader retries the session itself.
       setRecordingId(null);
     }
     await start();
-  }, [sessionId, start]);
+    if (sendControl && rid) {
+      sendControl({
+        type: 'start',
+        recording_id: rid,
+        codec: 'audio/webm;codecs=opus',
+        sample_rate: SAMPLE_RATE,
+      });
+    }
+  }, [sessionId, start, sendControl]);
 
   const end = useCallback(async () => {
     elapsedAtStop.current = elapsedSeconds;
+    if (sendControl) {
+      sendControl({ type: 'stop' });
+    }
     await stop();
     await uploader.finalise();
     if (recordingId) {
@@ -115,7 +139,7 @@ export default function RecorderControl({
         // they do. Throwing here would leave the UI stuck mid-stop.
       }
     }
-  }, [elapsedSeconds, stop, uploader, recordingId]);
+  }, [elapsedSeconds, stop, uploader, recordingId, sendControl]);
 
   if (!consentGranted) {
     return (
