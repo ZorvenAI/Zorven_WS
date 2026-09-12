@@ -26,13 +26,13 @@
  * all pushing updates into the pane, which is what the card says too.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, ArrowLeft } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ShieldCheck } from 'lucide-react';
 
 import { useCaptureQueue } from '@/hooks/useCaptureQueue';
 import { useLibraryPolling } from '@/hooks/useLibraryPolling';
-import { useLiveSocket } from '@/hooks/useLiveSocket';
+import { useLiveSocket, type ServerFrame } from '@/hooks/useLiveSocket';
 import { useTenantRole } from '@/hooks/useTenantRole';
 
 import AgentFeedbackStream, {
@@ -41,6 +41,8 @@ import AgentFeedbackStream, {
 import QuestionChecklist from '@/components/onboarding/QuestionChecklist';
 import RightRail from '@/components/onboarding/RightRail';
 import ConsentModal from '@/components/onboarding/ConsentModal';
+import MicSetup from '@/components/onboarding/MicSetup';
+import type { MicAssignment } from '@/hooks/useAudioDevices';
 import type { CapturedMedia, ConsentDraft, ConsentState, PreparedQuestion } from '@/lib/onboarding-sessions';
 
 function mergeCaptures(
@@ -80,6 +82,8 @@ export default function MeetingView({
   const [consentOpen, setConsentOpen] = useState(false);
   const [consentSaving, setConsentSaving] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
+  const [micSetupOpen, setMicSetupOpen] = useState(false);
+  const [micAssignments, setMicAssignments] = useState<MicAssignment[]>([]);
 
   const granted = consent?.granted === true;
 
@@ -128,9 +132,54 @@ export default function MeetingView({
     });
   }, []);
 
+  const [liveFeedback, setLiveFeedback] = useState<FeedbackItem[]>([]);
+  const seqRef = useRef(0);
+
+  const handleFrame = useCallback((frame: ServerFrame) => {
+    const id = `ws-${frame.seq ?? ++seqRef.current}`;
+    const at = new Date().toISOString();
+    const text = typeof frame.text === 'string' ? frame.text : '';
+
+    switch (frame.type) {
+      case 'transcript.final':
+        setLiveFeedback((prev) => [...prev, { id, kind: 'transcript', text, at }]);
+        break;
+      case 'notable_fact':
+        setLiveFeedback((prev) => [...prev, { id, kind: 'fact', text, at }]);
+        break;
+      case 'followups': {
+        const items = Array.isArray(frame.suggestions) ? frame.suggestions : [];
+        for (const s of items) {
+          const sText = typeof s === 'string' ? s : (s as Record<string, unknown>)?.text;
+          if (typeof sText === 'string') {
+            setLiveFeedback((prev) => [
+              ...prev,
+              { id: `${id}-${prev.length}`, kind: 'follow_up', text: sText, at },
+            ]);
+          }
+        }
+        break;
+      }
+      case 'coverage':
+        if (text) {
+          setLiveFeedback((prev) => [...prev, { id, kind: 'coverage', text, at }]);
+        }
+        break;
+      case 'green_signal':
+        if (typeof frame.question_id === 'string') {
+          setLiveFeedback((prev) => [
+            ...prev,
+            { id, kind: 'coverage', text: text || 'Question answered', at },
+          ]);
+        }
+        break;
+    }
+  }, []);
+
   const socket = useLiveSocket({
     sessionId: sessionId ?? null,
     enabled: granted,
+    onFrame: handleFrame,
   });
 
   const captureQueue = useCaptureQueue(sessionId ?? null);
@@ -185,6 +234,16 @@ export default function MeetingView({
         error={consentError}
       />
 
+      <MicSetup
+        open={micSetupOpen}
+        onCancel={() => setMicSetupOpen(false)}
+        onConfirm={(assignments) => {
+          setMicAssignments(assignments);
+          setMicSetupOpen(false);
+        }}
+        existing={micAssignments}
+      />
+
       {/*
         The back link lives here, not above this component.
         
@@ -204,9 +263,23 @@ export default function MeetingView({
             Session
           </Link>
         )}
-        <h1 className="text-lg font-semibold text-white">
-          Meeting{companyName ? ` · ${companyName}` : ''}
-        </h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-semibold text-white">
+            Meeting{companyName ? ` · ${companyName}` : ''}
+          </h1>
+          {granted && consent && (
+            <span
+              data-testid="consent-badge"
+              className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-300"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
+              Consent recorded
+              {consent.method === 'VERBAL_RECORDED' ? ' (verbal)' : ' (checkbox)'}
+              {consent.granted_at &&
+                ` · ${new Date(consent.granted_at).toLocaleDateString()}`}
+            </span>
+          )}
+        </div>
         <p className="text-sm text-brand-silver">
           Tick a question when it has been answered. The agent&rsquo;s
           suggestions appear below and never interrupt you.
@@ -233,7 +306,7 @@ export default function MeetingView({
             />
           </div>
 
-          <AgentFeedbackStream items={feedback} />
+          <AgentFeedbackStream items={[...feedback, ...liveFeedback]} />
         </div>
 
         <div className="min-h-0 min-w-0">
@@ -246,6 +319,10 @@ export default function MeetingView({
             captures={mergeCaptures(captureQueue.captures, library.captures)}
             canDelete={isAdmin}
             onRecordingDeleted={library.refresh}
+            sendBinary={socket.sendBinary}
+            sendControl={socket.sendControl}
+            micAssignments={micAssignments}
+            onOpenMicSetup={() => setMicSetupOpen(true)}
           />
         </div>
       </div>
