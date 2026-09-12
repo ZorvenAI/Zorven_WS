@@ -38,8 +38,15 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
+          prompt: |
+            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
 
+            Focus on:
+            - Multi-tenancy: ensure tenant-scoped queries use Q(tenant=tenant) | Q(tenant__isnull=True)
+            - Security: no os.environ (use decouple.config()), no raw fetch() in frontend (use apiClient)
+            - Django patterns: select_related on FK querysets, atomic callbacks, proper migration usage
+            - TypeScript: no 'any' types, strict mode compliance
+            - Service boundaries: check service-to-service auth headers (X-Service-Token, X-Callback-Token)
+            - Kafka topic naming consistency with existing conventions
+            - Redis DB allocation conflicts (DB 0-25 are assigned)
+            - Frontend: useAuth() guard, hydration-safe tenant-role UI, setTimeout polling (not setInterval)
