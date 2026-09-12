@@ -98,7 +98,18 @@ export default function RecorderControl({
     const chunks = chunksRef.current;
     while (sentChunkIndex.current < chunks.length) {
       const chunk = chunks[sentChunkIndex.current];
-      chunk.blob.arrayBuffer().then((buf) => sendBinary(new Uint8Array(buf)));
+      const streamIdx = 'streamIndex' in chunk ? (chunk as { streamIndex: number }).streamIndex : -1;
+      chunk.blob.arrayBuffer().then((buf) => {
+        if (streamIdx >= 0) {
+          const audio = new Uint8Array(buf);
+          const prefixed = new Uint8Array(1 + audio.length);
+          prefixed[0] = streamIdx;
+          prefixed.set(audio, 1);
+          sendBinary(prefixed);
+        } else {
+          sendBinary(new Uint8Array(buf));
+        }
+      });
       sentChunkIndex.current += 1;
     }
   }, [recording, chunkCount, sendBinary, chunksRef]);
@@ -125,14 +136,22 @@ export default function RecorderControl({
     }
     await start();
     if (sendControl && rid) {
-      sendControl({
+      const frame: Record<string, unknown> = {
         type: 'start',
         recording_id: rid,
         codec: 'audio/webm;codecs=opus',
         sample_rate: SAMPLE_RATE,
-      });
+      };
+      if (micAssignments.length > 0) {
+        frame.streams = micAssignments.map((a) => ({
+          stream_index: a.streamIndex,
+          speaker_name: a.label,
+          speaker_role: a.role,
+        }));
+      }
+      sendControl(frame);
     }
-  }, [sessionId, start, sendControl]);
+  }, [sessionId, start, sendControl, micAssignments]);
 
   const end = useCallback(async () => {
     elapsedAtStop.current = elapsedSeconds;

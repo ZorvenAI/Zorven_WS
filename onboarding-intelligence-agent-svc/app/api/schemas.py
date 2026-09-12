@@ -167,12 +167,14 @@ class TranscriptPartial(ServerFrame):
     )
     text: str
     speaker: int
+    speaker_name: str | None = None
 
 
 class TranscriptFinal(ServerFrame):
     type: Literal[ServerFrameType.TRANSCRIPT_FINAL] = ServerFrameType.TRANSCRIPT_FINAL
     text: str
     speaker: int
+    speaker_name: str | None = None
     t_start: float
     t_end: float
     redaction_applied: bool = False
@@ -263,6 +265,16 @@ class Resync(BaseModel):
     reason: str = "resume window exceeded"
 
 
+class StreamDescriptor(BaseModel):
+    """One audio stream in a multi-mic session (O-03)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    stream_index: int = Field(ge=0, le=255)
+    speaker_name: str
+    speaker_role: str
+
+
 class StartFrame(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -271,6 +283,7 @@ class StartFrame(BaseModel):
     codec: str
     sample_rate: int
     operator_speaker: int | None = None
+    streams: list[StreamDescriptor] | None = None
 
 
 class ResumeFrame(BaseModel):
