@@ -14,7 +14,7 @@
  * server-side too.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CloudOff, Mic, Square, UploadCloud } from 'lucide-react';
 
 import {
@@ -23,10 +23,16 @@ import {
   type UseMeetingRecorder,
 } from '@/hooks/useMeetingRecorder';
 import {
+  useMultiMicRecorder,
+  type StreamDevice,
+  type UseMultiMicRecorder,
+} from '@/hooks/useMultiMicRecorder';
+import {
   useChunkUploader,
   type UseChunkUploader,
 } from '@/hooks/useChunkUploader';
 import { finaliseRecording, openRecording } from '@/lib/onboarding-sessions';
+import type { MicAssignment } from '@/hooks/useAudioDevices';
 
 export interface RecorderControlProps {
   /** F-01: false keeps the control inert and pointing at the consent modal. */
@@ -38,6 +44,8 @@ export interface RecorderControlProps {
   sendBinary?: (data: ArrayBuffer | Uint8Array) => void;
   /** F-04: send start/stop control frames to the live WebSocket. */
   sendControl?: (frame: Record<string, unknown>) => void;
+  /** O-01: mic assignments from MicSetup. When present, multi-mic recording is used. */
+  micAssignments?: MicAssignment[];
   /** Injected in tests; the hook is the default. */
   recorder?: UseMeetingRecorder;
   /** Injected in tests; the hook is the default. */
@@ -58,22 +66,24 @@ export default function RecorderControl({
   sessionId,
   sendBinary,
   sendControl,
+  micAssignments = [],
   recorder,
   uploader: injectedUploader,
 }: RecorderControlProps) {
-  /*
-   * The hook is always called and the injection only chooses which result to
-   * use. `recorder ?? useMeetingRecorder()` would read more directly and is a
-   * rules-of-hooks violation that happens to be safe today — the kind that
-   * stops being safe the moment someone makes the prop conditional. An
-   * eslint-disable on that rule is not worth the two lines it saves.
-   *
-   * Injection rather than a context provider: a context to hand one hook to
-   * one component is more machinery than this seam needs, and F-03 and F-04
-   * will consume the hook directly rather than through this component.
-   */
-  const own = useMeetingRecorder();
-  const live = recorder ?? own;
+  const multiDevices: StreamDevice[] = useMemo(
+    () =>
+      micAssignments.map((a) => ({
+        deviceId: a.deviceId,
+        streamIndex: a.streamIndex,
+        label: a.label,
+      })),
+    [micAssignments],
+  );
+  const useMulti = micAssignments.length > 0;
+
+  const singleMic = useMeetingRecorder();
+  const multiMic = useMultiMicRecorder(multiDevices);
+  const live: UseMeetingRecorder | UseMultiMicRecorder = recorder ?? (useMulti ? multiMic : singleMic);
 
   const { state, error, elapsedSeconds, chunksRef, chunkCount, start, stop } = live;
   const recording = state === 'recording';

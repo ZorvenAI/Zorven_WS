@@ -104,6 +104,7 @@ export default function RightRail({
           onRecordConsent={onRecordConsent}
           sendBinary={sendBinary}
           sendControl={sendControl}
+          micAssignments={micAssignments}
         />
 
         <CaptureControl
