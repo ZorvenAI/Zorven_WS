@@ -1,0 +1,10 @@
+{"event": "soak_start", "minutes": 3.0, "url": "ws://127.0.0.1:64905", "t": 1785464325.0716422}
+{"event": "heartbeat", "elapsed_s": 20.0, "sent": 1050, "acked": 1000, "t": 1785464345.111748}
+{"event": "heartbeat", "elapsed_s": 40.1, "sent": 2050, "acked": 2001, "t": 1785464365.1461492}
+{"event": "heartbeat", "elapsed_s": 60.1, "sent": 3050, "acked": 3002, "t": 1785464385.1772501}
+{"event": "heartbeat", "elapsed_s": 80.1, "sent": 4050, "acked": 4003, "t": 1785464405.209161}
+{"event": "heartbeat", "elapsed_s": 100.2, "sent": 5050, "acked": 5004, "t": 1785464425.245774}
+{"event": "heartbeat", "elapsed_s": 120.2, "sent": 6050, "acked": 6005, "t": 1785464445.300993}
+{"event": "heartbeat", "elapsed_s": 140.3, "sent": 7050, "acked": 7006, "t": 1785464465.349642}
+{"event": "heartbeat", "elapsed_s": 160.3, "sent": 8050, "acked": 8007, "t": 1785464485.393748}
+{"event": "soak_end", "outcome": "survived", "elapsed_s": 180.4, "sent": 9000, "acked": 9008, "t": 1785464505.432598}

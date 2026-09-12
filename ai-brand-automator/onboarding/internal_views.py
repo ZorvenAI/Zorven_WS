@@ -1,10 +1,11 @@
-"""Internal service-to-service endpoints for asset registration.
+"""Internal service-to-service endpoints for asset operations.
 
 These endpoints are authenticated via X-Service-Token (same pattern
 as orchestrator callbacks) and are NOT exposed through Kong.
 
 Used by rag-uploader-agent-service to register BrandAsset records
-before emitting IngestionEvents to Kafka.
+before emitting IngestionEvents to Kafka, and by the Onboarding
+Intelligence Agent to write OCR results back (H-03).
 """
 
 import logging
@@ -195,4 +196,97 @@ class InternalAssetRegisterView(APIView):
                 "pipeline_status": pipeline_status,
             },
             status=status.HTTP_201_CREATED,
+        )
+
+
+VALID_SENSITIVITY_CLASSES = {"GENERAL", "IDENTITY", "FINANCIAL"}
+
+
+class InternalAssetOCRUpdateView(APIView):
+    """Write OCR results back to a BrandAsset from the OIA service.
+
+    PATCH /api/v1/internal/assets/<pk>/ocr/
+
+    Accepts: ocr_text, ocr_confidence, sensitivity_class, rag_excluded.
+    Uses X-Service-Token authentication (no JWT required).
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def patch(self, request, pk):
+        auth_error = _verify_service_token(request)
+        if auth_error:
+            return auth_error
+
+        tenant_id = _get_tenant_id(request)
+        if not tenant_id:
+            return Response(
+                {"error": "X-Tenant-ID header required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            tenant = Tenant.objects.get(id=tenant_id)
+        except (Tenant.DoesNotExist, ValueError):
+            return Response(
+                {"error": f"Tenant {tenant_id} not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            asset = BrandAsset.objects.get(pk=pk, tenant=tenant)
+        except BrandAsset.DoesNotExist:
+            return Response(
+                {"error": "Asset not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        sensitivity = request.data.get("sensitivity_class")
+        if sensitivity and sensitivity not in VALID_SENSITIVITY_CLASSES:
+            return Response(
+                {
+                    "error": (
+                        f"Invalid sensitivity_class. "
+                        f"Must be one of: {sorted(VALID_SENSITIVITY_CLASSES)}"
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        update_fields = []
+
+        if "ocr_text" in request.data:
+            asset.ocr_text = request.data["ocr_text"]
+            update_fields.append("ocr_text")
+
+        if "ocr_confidence" in request.data:
+            asset.ocr_confidence = request.data["ocr_confidence"]
+            update_fields.append("ocr_confidence")
+
+        if sensitivity:
+            asset.sensitivity_class = sensitivity
+            update_fields.append("sensitivity_class")
+
+        if "rag_excluded" in request.data:
+            asset.rag_excluded = request.data["rag_excluded"]
+            update_fields.append("rag_excluded")
+
+        if update_fields:
+            asset.save(update_fields=update_fields)
+
+        logger.info(
+            "OCR results written for asset %s (fields: %s)",
+            asset.id,
+            update_fields,
+        )
+
+        return Response(
+            {
+                "asset_id": asset.id,
+                "ocr_confidence": asset.ocr_confidence,
+                "sensitivity_class": asset.sensitivity_class,
+                "rag_excluded": asset.rag_excluded,
+            },
+            status=status.HTTP_200_OK,
         )

@@ -36,6 +36,7 @@ on:
       - 'ad-publishing-agent-svc/**'
       - 'campaign-optimization-agent-svc/**'
       - 'intelligence-loop-agent-svc/**'
+      - 'onboarding-intelligence-agent-svc/**'
       - 'odoo-mcp-server-svc/**'
       - 'odoo-worker-agent-svc/**'
       - 'prompt-optimization-svc/**'
@@ -68,6 +69,7 @@ on:
       - 'ad-publishing-agent-svc/**'
       - 'campaign-optimization-agent-svc/**'
       - 'intelligence-loop-agent-svc/**'
+      - 'onboarding-intelligence-agent-svc/**'
       - 'odoo-mcp-server-svc/**'
       - 'odoo-worker-agent-svc/**'
       - 'prompt-optimization-svc/**'
@@ -121,6 +123,7 @@ jobs:
       ad-publishing: ${{ steps.filter.outputs.ad-publishing }}
       campaign-optimization: ${{ steps.filter.outputs.campaign-optimization }}
       intelligence-loop: ${{ steps.filter.outputs.intelligence-loop }}
+      onboarding-intelligence: ${{ steps.filter.outputs.onboarding-intelligence }}
       odoo-mcp: ${{ steps.filter.outputs.odoo-mcp }}
       odoo-worker: ${{ steps.filter.outputs.odoo-worker }}
       prompt-optimization: ${{ steps.filter.outputs.prompt-optimization }}
@@ -187,6 +190,8 @@ jobs:
               - 'campaign-optimization-agent-svc/**'
             intelligence-loop:
               - 'intelligence-loop-agent-svc/**'
+            onboarding-intelligence:
+              - 'onboarding-intelligence-agent-svc/**'
             odoo-mcp:
               - 'odoo-mcp-server-svc/**'
             odoo-worker:
@@ -335,6 +340,11 @@ jobs:
             context: intelligence-loop-agent-svc
             dockerfile: intelligence-loop-agent-svc/Dockerfile
             changed: ${{ needs.changes.outputs.intelligence-loop }}
+          - service: onboarding-intelligence-agent
+            image: zorven-onboarding-intelligence-agent
+            context: onboarding-intelligence-agent-svc
+            dockerfile: onboarding-intelligence-agent-svc/Dockerfile
+            changed: ${{ needs.changes.outputs.onboarding-intelligence }}
           # Support Services
           - service: chat-titling-worker
             image: zorven-chat-titling-worker

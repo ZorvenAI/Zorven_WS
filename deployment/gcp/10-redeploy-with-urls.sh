@@ -105,6 +105,16 @@ update_service zorven-content-agent \
 update_service zorven-social-agent \
   "SOCIAL_CORE_API_URL=${ZORVEN_BACKEND_URL},SOCIAL_MLFLOW_TRACKING_URI=${ZORVEN_MLFLOW_URL}" &
 
+# Onboarding intelligence needs the backend API URL (C-02).
+#
+# It was missing from this second pass entirely — 08-deploy-services.sh sets
+# OIA_BACKEND_BASE_URL=PLACEHOLDER like every other service, but nothing ever
+# replaced it, so the deployed service has held the literal string
+# "PLACEHOLDER" since it was first deployed. Nothing had called the backend
+# yet, so it cost nothing and stayed invisible.
+update_service zorven-onboarding-intelligence-agent \
+  "OIA_BACKEND_BASE_URL=${ZORVEN_BACKEND_URL}" &
+
 wait
 
 # ═══════════════════════════════════════════════════════════════

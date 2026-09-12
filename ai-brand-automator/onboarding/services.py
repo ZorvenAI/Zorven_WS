@@ -225,6 +225,9 @@ class OnboardingPipelineService:
                 "company_id": asset.company.id if asset.company else None,
                 "uploaded_at": asset.uploaded_at.isoformat(),
                 "source_service": "onboarding",
+                # B-02: reaches RAG document metadata so WF3 can retrieve
+                # prior ads by intent (Design §10.1).
+                "usage_tag": asset.usage_tag,
             },
         }
 
@@ -396,6 +399,8 @@ class OnboardingPipelineService:
                     "company_id": asset.company.id if asset.company else None,
                     "uploaded_at": asset.uploaded_at.isoformat(),
                     "source_service": "onboarding",
+                    # B-02: see the sibling event builder above.
+                    "usage_tag": asset.usage_tag,
                     "file_size_bytes": asset.file_size,
                     "raw_bucket": bucket,
                     "curated_bucket": curated_bucket,

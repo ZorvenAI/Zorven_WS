@@ -5,6 +5,11 @@
 
 // Dynamic API URL that works from any hostname (localhost, network IP, etc.)
 const getBaseApiUrl = (): string => {
+  // Explicit env var takes precedence — lets operators override detection
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+
   // In browser: detect production domain and route to api subdomain
   try {
     if (typeof window !== 'undefined' && window.location) {
@@ -22,11 +27,6 @@ const getBaseApiUrl = (): string => {
     }
   } catch {
     // Silently fall through to default during SSR
-  }
-
-  // Check for explicit env var (SSR context)
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
   }
 
   // Default for SSR/static generation

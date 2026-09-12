@@ -94,6 +94,12 @@ services:
       # Orchestration service configuration
       - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-http://orchestrator:8010}
       - ORCHESTRATOR_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      # Distinct per deployment: Google's private extended properties are
+      # private to the calendar, not the app, so a local stack and production
+      # sharing a test Google account would disown each other's events.
+      - CALENDAR_SYNC_NAMESPACE=${CALENDAR_SYNC_NAMESPACE:-zorven-local}
       - ORCHESTRATOR_CALLBACK_TOKEN=${ORCHESTRATOR_CALLBACK_TOKEN:-dev-callback-token}
       - ORCHESTRATOR_TIMEOUT=${ORCHESTRATOR_TIMEOUT:-30}
       - BACKEND_URL=${BACKEND_URL:-http://backend:8001}
@@ -116,6 +122,9 @@ services:
       - MAILGUN_API_KEY=${MAILGUN_API_KEY:-7776e9d86dc564e3e9bd4921c056ae3e-f9517a64-4481b185}
       - MAILGUN_DOMAIN=${MAILGUN_DOMAIN:-sandbox3c490c6302904ddda887a78852e81aea.mailgun.org}
       - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL:-AI Brand Automator <postmaster@sandbox3c490c6302904ddda887a78852e81aea.mailgun.org>}
+      # OIA (Onboarding Intelligence Agent) dispatch
+      - OIA_SERVICE_URL=http://onboarding-intelligence-agent-svc:8120
+      - OIA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
     # Port NOT exposed to host - only accessible via Kong
     expose:
       - "8001"
@@ -231,6 +240,16 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      # Google Calendar OAuth (D-02). The worker runs the hourly
+      # refresh_calendar_tokens sweep, which calls Google's token endpoint with
+      # the client credentials — without these it marks every healthy calendar
+      # NEEDS_RECONNECT. Beat only enqueues the task and needs neither.
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      # Distinct per deployment: Google's private extended properties are
+      # private to the calendar, not the app, so a local stack and production
+      # sharing a test Google account would disown each other's events.
+      - CALENDAR_SYNC_NAMESPACE=${CALENDAR_SYNC_NAMESPACE:-zorven-local}
       - CELERY_CONCURRENCY=4
       - CELERY_LOG_LEVEL=info
       # Multi-tenancy: default GCS buckets
@@ -317,7 +336,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ai-brand-automator-redis
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --databases 27
+    # noeviction, not allkeys-lru: OIA keeps live session state here, and an
+    # allkeys-* policy evicts any key regardless of TTL — a meeting can lose
+    # its transcript and resume window under memory pressure (A-03 AC-5). This
+    # mirrors the shared Memorystore instance, changed on 2026-08-01.
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy noeviction --databases 27
     ports:
       - "6379:6379"
     volumes:
@@ -1712,6 +1735,76 @@ services:
   # MLflow PostgreSQL — Dedicated database for MLflow Tracking Server
   # Stores prompt registry, experiment tracking, and run metadata
   # ==========================================================================
+  # OpenTelemetry collector — profiled, so the default stack is unaffected.
+  # Bring it up with:  docker compose --profile with-otel up -d otel-collector
+  # then set OIA_OTEL_EXPORTER_ENDPOINT=http://otel-collector:4318/v1/traces
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.109.0
+    container_name: ai-brand-automator-otel-collector
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./config/otel/collector.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    profiles:
+      - with-otel
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  onboarding-intelligence-agent-svc:
+    build:
+      context: ../onboarding-intelligence-agent-svc
+      dockerfile: Dockerfile
+    image: ghcr.io/naveenah/zorven-onboarding-intelligence-agent:latest
+    container_name: ai-brand-automator-onboarding-intelligence
+    environment:
+      # ERRATA-01: DB 2 with the oia:v1: prefix, not DB 27. Production Redis is
+      # Memorystore, which is fixed at 16 databases and has no DB 27.
+      - OIA_REDIS_URL=redis://redis:6379/2
+      - OIA_REDIS_DB=2
+      - OIA_POI_PROMPT_CACHE_DB=2
+      - OIA_BACKEND_BASE_URL=http://backend:8001
+      - OIA_GCS_BUCKET=${GS_BUCKET_NAME:-zorven-raw-assets}
+      - OIA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - OIA_POI_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}
+      - OIA_GEMINI_KEY=${GOOGLE_API_KEY:-}
+      - OIA_TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      # Relaxed guardrail budgets for local Docker Desktop (limited CPU/RAM)
+      - OIA_IG_BUDGET_MS=2000
+      - OIA_OG_BUDGET_MS=3000
+      # Left empty by default on purpose. The kafka service sits behind the
+      # with-kafka profile, so in the default stack there is no broker — and
+      # unlike the rest of the fleet, OIA's /health treats a *configured*
+      # broker as a hard dependency. Naming kafka:29092 here would make the
+      # container permanently 503 whenever the profile is off. Set it when
+      # running with --profile with-kafka.
+      - OIA_KAFKA_BOOTSTRAP_SERVERS=${OIA_KAFKA_BOOTSTRAP_SERVERS:-}
+      - OIA_LOG_LEVEL=INFO
+      # STT provider: "google" for real Speech-to-Text, "fake" for fixture replay.
+      - OIA_STT_PROVIDER=${OIA_STT_PROVIDER:-google}
+      - OIA_STT_PROJECT=${OIA_STT_PROJECT:-zorven-503517}
+      - OIA_STT_FAKE_FIXTURE=/app/config/fixtures/two_speaker_2min.jsonl
+      - GOOGLE_APPLICATION_CREDENTIALS=/gcloud/application_default_credentials.json
+    expose:
+      - "8120"
+    ports:
+      - "8120:8120"
+    volumes:
+      - ~/.config/gcloud/application_default_credentials.json:/gcloud/application_default_credentials.json:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8120/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - app-network
+
   mlflow-db:
     image: postgres:15-alpine
     container_name: ai-brand-automator-mlflow-db

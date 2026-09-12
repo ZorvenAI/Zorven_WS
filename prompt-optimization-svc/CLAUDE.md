@@ -95,7 +95,7 @@ app/
 ├── kafka/            # Producers (Trace, Audit, Lifecycle), campaign trigger consumer
 ├── auth/             # RBAC (4 roles × 9 permissions via X-User-Role header)
 ├── tasks/            # Celery tasks: optimization runner, mining, health checks, canary checks
-├── celery_app.py     # Beat schedule configuration (7 tasks)
+├── celery_app.py     # Beat schedule configuration (8 tasks)
 └── main.py           # FastAPI app with 11-step async lifespan startup
 ```
 
@@ -145,6 +145,7 @@ All 15 agent services have their own `app/prompts/loader.py` (AgentPromptClient)
 | `optimize-wf2-pipeline-monthly` | 3rd Sunday 06:00 UTC | WF2 agents (BPA, BAA, BPV, NTA, BSA) |
 | `optimize-wf3-creative-pipeline` | Sunday 06:00 UTC | WF3 creative agents (CAA, CGA, ADPUB) |
 | `optimize-wf3-optimization-loop` | Sunday 06:30 UTC | WF3 optimization agents (COA, ILA) |
+| `optimize-oia-pipeline-monthly` | 4th Sunday 06:00 UTC | OIA onboarding agents |
 | `prompt-health-check-daily` | Daily 10:00 UTC | Score PRODUCTION prompts, auto-rollback on >15% regression |
 | `canary-health-check` | Every 15 min | Monitor active canaries, auto-promote/rollback |
 

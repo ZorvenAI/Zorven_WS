@@ -216,6 +216,16 @@ class CuratedDocument(BaseModel):
     metadata: DocumentMetadata = Field(default_factory=DocumentMetadata)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+    # What the uploader said this asset *is* (B-02, Design §10.1). Carried
+    # from the ingestion event rather than read from the database: this is a
+    # hexagonal app and must not import the Django ORM.
+    usage_tag: Optional[str] = None
+
+    # H-03: redacted OCR text from SKL-OIA-16. Carried into RAG metadata so
+    # downstream skills can search document content. Always redacted — PII
+    # has been stripped before this field is set (Design §5.2 PG-08).
+    ocr_text: Optional[str] = None
+
     # Legacy fields for backward compatibility
     event_id: Optional[UUID] = None
     brand_id: Optional[str] = None
@@ -266,6 +276,20 @@ class CuratedDocument(BaseModel):
 
     def to_rag_document(self) -> dict[str, Any]:
         """Convert to RAG indexer document format."""
+        metadata: dict[str, Any] = {
+            "file_id": str(self.file_id),
+            "trace_id": str(self.trace_id),
+            "pii_redacted": self.pii_redacted,
+            "confidence_score": self.confidence_score,
+            **self.struct_data,
+        }
+        # Only when present, so documents uploaded before B-02 — and every
+        # asset that carries no tag — keep exactly the payload they had.
+        if self.usage_tag:
+            metadata["usage_tag"] = self.usage_tag
+        if self.ocr_text:
+            metadata["ocr_text"] = self.ocr_text
+
         return {
             "id": str(self.document_id),
             "tenant_id": self.tenant_id,
@@ -280,13 +304,7 @@ class CuratedDocument(BaseModel):
             "file_type": self.mime_type,
             "content_type": self.content_type.value,
             "created_at": self.created_at.isoformat(),
-            "metadata": {
-                "file_id": str(self.file_id),
-                "trace_id": str(self.trace_id),
-                "pii_redacted": self.pii_redacted,
-                "confidence_score": self.confidence_score,
-                **self.struct_data,
-            },
+            "metadata": metadata,
         }
 
 

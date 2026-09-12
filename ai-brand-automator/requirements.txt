@@ -23,7 +23,12 @@ whitenoise>=6.6.0,<7.0.0
 confluent-kafka>=2.3.0,<3.0.0
 
 # MCP (Model Context Protocol) dependencies
-mcp>=1.0.0
+# Pinned below 2.0.0: the low-level Server.list_tools decorator this codebase
+# uses was removed in mcp 2.x. Seven other services in the monorepo already
+# carry this bound; these two did not, so CI resolved 2.0.0 and failed with
+# "'Server' object has no attribute 'list_tools'". Lifting the bound means
+# migrating to the 2.x API, not just relaxing this line.
+mcp>=1.0.0,<2.0.0
 starlette>=0.27.0
 uvicorn>=0.24.0
 

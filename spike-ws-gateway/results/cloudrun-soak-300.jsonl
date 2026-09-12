@@ -1,0 +1,17 @@
+{"event": "soak_start", "minutes": 8.0, "url": "wss://zorven-spike-ws-echo-300-977911773818.us-central1.run.app", "t": 1785463240.9576352}
+{"event": "heartbeat", "elapsed_s": 20.5, "sent": 1050, "acked": 1000, "t": 1785463261.460095}
+{"event": "heartbeat", "elapsed_s": 40.5, "sent": 2050, "acked": 2001, "t": 1785463281.4878411}
+{"event": "heartbeat", "elapsed_s": 60.6, "sent": 3050, "acked": 3002, "t": 1785463301.5184681}
+{"event": "heartbeat", "elapsed_s": 80.6, "sent": 4050, "acked": 4003, "t": 1785463321.5534878}
+{"event": "heartbeat", "elapsed_s": 100.6, "sent": 5050, "acked": 5004, "t": 1785463341.582748}
+{"event": "heartbeat", "elapsed_s": 120.6, "sent": 6050, "acked": 6005, "t": 1785463361.608431}
+{"event": "heartbeat", "elapsed_s": 140.7, "sent": 7050, "acked": 7006, "t": 1785463381.646966}
+{"event": "heartbeat", "elapsed_s": 160.7, "sent": 8050, "acked": 8007, "t": 1785463401.678726}
+{"event": "heartbeat", "elapsed_s": 180.7, "sent": 9050, "acked": 9008, "t": 1785463421.7045279}
+{"event": "heartbeat", "elapsed_s": 200.8, "sent": 10050, "acked": 10009, "t": 1785463441.733948}
+{"event": "heartbeat", "elapsed_s": 220.8, "sent": 11050, "acked": 11010, "t": 1785463461.775848}
+{"event": "heartbeat", "elapsed_s": 240.8, "sent": 12050, "acked": 12011, "t": 1785463481.796866}
+{"event": "heartbeat", "elapsed_s": 260.9, "sent": 13050, "acked": 13012, "t": 1785463501.829414}
+{"event": "heartbeat", "elapsed_s": 280.9, "sent": 14050, "acked": 14013, "t": 1785463521.863673}
+{"event": "heartbeat", "elapsed_s": 300.9, "sent": 15050, "acked": 15014, "t": 1785463541.8870459}
+{"event": "soak_end", "outcome": "disconnected", "elapsed_s": 301.9, "sent": 15050, "acked": 15065, "error": "ConnectionClosedError", "detail": "no close frame received or sent", "close_code": null, "t": 1785463542.887712}

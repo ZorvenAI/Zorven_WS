@@ -1,11 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api';
+import { useWizardProvenance } from '@/hooks/useWizardProvenance';
+import ProvenanceBadge from '@/components/onboarding/ProvenanceBadge';
 
 export function CompanyForm() {
   const router = useRouter();
+  const { provenanceMap, editField, stepPath } = useWizardProvenance(1);
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -18,23 +22,26 @@ export function CompanyForm() {
     stateProvince: '',
     postalCode: '',
     country: '',
+    legalName: '',
+    founderStory: '',
+    trademarkStatus: '',
+    decisionMaker: '',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [existingCompanyId, setExistingCompanyId] = useState<number | null>(null);
+  const initialValues = useRef<Record<string, string>>({});
 
-  // Load existing company data if it exists
   useEffect(() => {
     const loadExistingCompany = async () => {
       try {
         const response = await apiClient.get('/companies/');
         if (response.ok) {
           const data = await response.json();
-          // API returns paginated data with results array
           const companies = data.results || [];
           if (companies.length > 0) {
-            const company = companies[0]; // Get first company (one per tenant)
+            const company = companies[0];
             setExistingCompanyId(company.id);
-            setFormData({
+            const loaded = {
               name: company.name || '',
               description: company.description || '',
               industry: company.industry || '',
@@ -46,8 +53,13 @@ export function CompanyForm() {
               stateProvince: company.state_province || '',
               postalCode: company.postal_code || '',
               country: company.country || '',
-            });
-            // Store company ID for next steps
+              legalName: company.legal_name || '',
+              founderStory: company.founder_story || '',
+              trademarkStatus: company.trademark_status || '',
+              decisionMaker: company.decision_maker || '',
+            };
+            setFormData(loaded);
+            initialValues.current = { ...loaded };
             localStorage.setItem('company_id', company.id.toString());
           }
         }
@@ -65,11 +77,17 @@ export function CompanyForm() {
     });
   };
 
+  const FIELD_MAP: Record<string, string> = {
+    legalName: 'legal_name',
+    founderStory: 'founder_story',
+    trademarkStatus: 'trademark_status',
+    decisionMaker: 'decision_maker',
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      // Convert camelCase to snake_case for backend
       const apiData = {
         name: formData.name,
         description: formData.description,
@@ -82,26 +100,40 @@ export function CompanyForm() {
         state_province: formData.stateProvince,
         postal_code: formData.postalCode,
         country: formData.country,
+        legal_name: formData.legalName,
+        founder_story: formData.founderStory,
+        trademark_status: formData.trademarkStatus,
+        decision_maker: formData.decisionMaker,
       };
-      
+
       let response;
       if (existingCompanyId) {
-        // Partial update existing company (PATCH preserves fields not sent)
         response = await apiClient.patch(`/companies/${existingCompanyId}/`, apiData);
       } else {
-        // Create new company
         response = await apiClient.post('/companies/', apiData);
       }
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Company saved:', data);
-        // Use known ID for updates; for new creates, get from response or refetch
         const companyId = existingCompanyId || data.id;
         if (companyId) {
           localStorage.setItem('company_id', companyId.toString());
         }
-        router.push('/onboarding/step-2');
+
+        const provenanceEdits: Promise<void>[] = [];
+        for (const [camel, snake] of Object.entries(FIELD_MAP)) {
+          if (
+            provenanceMap.has(snake) &&
+            formData[camel as keyof typeof formData] !== initialValues.current[camel]
+          ) {
+            provenanceEdits.push(
+              editField(snake, formData[camel as keyof typeof formData]),
+            );
+          }
+        }
+        await Promise.allSettled(provenanceEdits);
+
+        router.push(stepPath('/onboarding/step-2'));
       } else {
         const error = await response.json();
         alert(error.detail || 'Failed to save company data');
@@ -127,6 +159,22 @@ export function CompanyForm() {
           value={formData.name}
           onChange={handleChange}
           className="input-dark mt-1"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="legalName" className="label-dark">
+          Legal Name
+          <ProvenanceBadge row={provenanceMap.get('legal_name')} />
+        </label>
+        <input
+          type="text"
+          id="legalName"
+          name="legalName"
+          value={formData.legalName}
+          onChange={handleChange}
+          className="input-dark mt-1"
+          placeholder="Registered legal entity name, if different"
         />
       </div>
 
@@ -288,6 +336,62 @@ export function CompanyForm() {
             value={formData.country}
             onChange={handleChange}
             className="input-dark mt-1"
+          />
+        </div>
+      </div>
+
+      <div className="pt-2">
+        <h3 className="label-dark mb-1">Additional Details</h3>
+      </div>
+
+      <div>
+        <label htmlFor="founderStory" className="label-dark">
+          Founder Story
+          <ProvenanceBadge row={provenanceMap.get('founder_story')} />
+        </label>
+        <textarea
+          id="founderStory"
+          name="founderStory"
+          rows={3}
+          value={formData.founderStory}
+          onChange={handleChange}
+          className="input-dark mt-1"
+          placeholder="How did you start this company?"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label htmlFor="trademarkStatus" className="label-dark">
+            Trademark Status
+            <ProvenanceBadge row={provenanceMap.get('trademark_status')} />
+          </label>
+          <select
+            id="trademarkStatus"
+            name="trademarkStatus"
+            value={formData.trademarkStatus}
+            onChange={handleChange}
+            className="select-dark mt-1"
+          >
+            <option value="">Select status</option>
+            <option value="none">None</option>
+            <option value="pending">Pending</option>
+            <option value="registered">Registered</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="decisionMaker" className="label-dark">
+            Decision Maker
+            <ProvenanceBadge row={provenanceMap.get('decision_maker')} />
+          </label>
+          <input
+            type="text"
+            id="decisionMaker"
+            name="decisionMaker"
+            value={formData.decisionMaker}
+            onChange={handleChange}
+            className="input-dark mt-1"
+            placeholder="Who signs off on brand decisions?"
           />
         </div>
       </div>

@@ -57,15 +57,22 @@ class TestScorerCoverageIntegration:
             assert agent_code in AGENT_BUDGETS
 
     def test_optimization_groups_cover_all_agents(self):
-        """Union of all optimization groups covers all 15 agent codes."""
+        """Union of all optimization groups covers all 15 workflow agents.
+
+        Utility agents (e.g. OIA) may also appear in optimization groups
+        but are not required to — the invariant is that every workflow
+        agent has a group, not that no utility agent does.
+        """
+        from app.services.skill_registry_reader import ALL_AGENT_CODES
+
         covered = set()
         for group in OPTIMIZATION_GROUPS.values():
             covered.update(group.agent_codes)
-        expected = set(AGENT_SERVICE_DIRS.keys())
-        assert covered == expected, (
-            f"Missing agents: {expected - covered}, "
-            f"Extra agents: {covered - expected}"
-        )
+        workflow_agents = set(AGENT_SERVICE_DIRS.keys())
+        missing = workflow_agents - covered
+        unknown = covered - ALL_AGENT_CODES
+        assert not missing, f"Workflow agents without an optimization group: {missing}"
+        assert not unknown, f"Agent codes in groups but not in any registry: {unknown}"
 
     def test_skill_definitions_load_all_agents(self):
         """SkillRegistryReader loads all 15 agents' skills.yaml successfully."""

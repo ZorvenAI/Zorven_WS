@@ -19,6 +19,8 @@ def run_group_optimization(
     group_name: str,
     scorers: list[Any],
     celery_task_self: Any,
+    *,
+    tenant_id: str | None = None,
 ) -> dict[str, Any]:
     """Run the full GEPA optimization pipeline for a named group.
 
@@ -26,6 +28,7 @@ def run_group_optimization(
         group_name: Optimization group name (e.g., "wf1-discovery-pipeline").
         scorers: List of MLflow scorer callables for evaluation.
         celery_task_self: Celery task instance (for request.id).
+        tenant_id: Optional tenant for tenant-scoped optimization.
 
     Returns:
         Dict with run_id, status, scores, and metadata.
@@ -35,7 +38,9 @@ def run_group_optimization(
     )
 
     try:
-        return asyncio.run(_run_optimization_pipeline(run_id, group_name, scorers))
+        return asyncio.run(
+            _run_optimization_pipeline(run_id, group_name, scorers, tenant_id=tenant_id)
+        )
     except Exception as exc:
         logger.exception(
             "Optimization runner failed: group=%s, run=%s", group_name, run_id
@@ -52,6 +57,8 @@ async def _run_optimization_pipeline(
     run_id: str,
     group_name: str,
     scorers: list[Any],
+    *,
+    tenant_id: str | None = None,
 ) -> dict[str, Any]:
     """Async pipeline orchestrating the full optimization flow.
 
@@ -161,7 +168,9 @@ async def _run_optimization_pipeline(
             agent_code=primary_agent,
         )
 
-        full_dataset = await _load_golden_dataset(group, async_session_factory)
+        full_dataset = await _load_golden_dataset(
+            group, async_session_factory, tenant_id=tenant_id
+        )
         if not full_dataset:
             await run_lcm.transition(
                 run_id=run_id,
@@ -554,6 +563,7 @@ async def _run_optimization_pipeline(
                     canary_version=canary_version,
                     production_version=prod_version,
                     agent_code=primary_agent,
+                    tenant_id=tenant_id or "",
                 )
                 logger.info(
                     "Canary started: group=%s, prompt=%s, v%d vs v%d",
@@ -694,12 +704,17 @@ def _evaluate_on_holdout(
     }
 
 
-async def _load_golden_dataset(group, session_factory) -> list[dict[str, Any]]:
+async def _load_golden_dataset(
+    group, session_factory, *, tenant_id: str | None = None
+) -> list[dict[str, Any]]:
     """Load golden dataset examples for all agents in the group.
+
+    When tenant_id is set, loads both tenant-specific and global (NULL)
+    examples so tenant GEPA trains on the combined set.
 
     Returns list of dicts in GEPA format: {"inputs": {...}, "expected_output": "..."}.
     """
-    from sqlalchemy import select
+    from sqlalchemy import or_, select
 
     from app.models.golden_dataset import GoldenDataset
 
@@ -711,6 +726,13 @@ async def _load_golden_dataset(group, session_factory) -> list[dict[str, Any]]:
             .where(GoldenDataset.agent_code.in_(agent_codes))
             .where(GoldenDataset.active.is_(True))
         )
+        if tenant_id:
+            stmt = stmt.where(
+                or_(
+                    GoldenDataset.tenant_id == tenant_id,
+                    GoldenDataset.tenant_id.is_(None),
+                )
+            )
         result = await session.execute(stmt)
         rows = result.scalars().all()
 
@@ -722,8 +744,9 @@ async def _load_golden_dataset(group, session_factory) -> list[dict[str, Any]]:
         train_data.append(entry)
 
     logger.info(
-        "Loaded %d golden examples for agents %s",
+        "Loaded %d golden examples for agents %s (tenant=%s)",
         len(train_data),
         agent_codes,
+        tenant_id,
     )
     return train_data

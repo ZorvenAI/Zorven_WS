@@ -1,0 +1,75 @@
+# Kong declarative config for spike A-02 — the OIA live WebSocket route.
+#
+# This runs in the spike's own Kong container so the shared gateway config in
+# deployment/docker/kong/kong.yaml is not touched. The blocks below are what
+# F-04 should merge into that file when the real endpoint lands; they mirror
+# the existing workspace-ws-service block and add the JWT plugin it lacks.
+#
+# ${OIA_UPSTREAM_URL} and ${JWT_SECRET_KEY} are substituted before Kong reads
+# the file — by tests/test_kong_ws_integration.py in the spike, and by
+# deployment/docker/kong/docker-entrypoint.sh (envsubst) in the real gateway.
+
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: oia-live-service
+    # NOTE the /v1/live suffix. The route strips its own path, and Kong then
+    # joins the service path with what remains, so
+    #   /api/v1/agents/onboarding/live/{session_id}
+    # arrives upstream as
+    #   /v1/live/{session_id}
+    # which is the endpoint in Design §4.2. Dropping the suffix here sends
+    # the upstream a bare /{session_id} and every socket 404s.
+    url: ${OIA_UPSTREAM_URL}
+    connect_timeout: 60000
+    write_timeout: 60000
+    # A WebSocket idle longer than read_timeout is closed by Kong. The
+    # design's 20 s application heartbeat sits inside 60 s; A-02 measures
+    # whether that actually holds for a full 45-minute meeting.
+    read_timeout: 60000
+    retries: 0
+    tags:
+      - websocket
+      - oia
+    routes:
+      - name: oia-live-route
+        paths:
+          - /api/v1/agents/onboarding/live
+        strip_path: true
+        preserve_host: true
+        protocols:
+          - http
+          - https
+        tags:
+          - websocket
+          - oia
+
+consumers:
+  - username: django-backend
+    tags:
+      - backend
+
+jwt_secrets:
+  - consumer: django-backend
+    key: ai-brand-automator # matched against the iss claim
+    algorithm: HS256
+    secret: "${JWT_SECRET_KEY}"
+
+plugins:
+  - name: jwt
+    route: oia-live-route
+    config:
+      key_claim_name: iss
+      secret_is_base64: false
+      claims_to_verify:
+        - exp
+      # Browsers cannot set an Authorization header on a WebSocket handshake,
+      # so the token has to arrive as a query parameter. This is the only
+      # reason the gateway can authenticate a socket at all.
+      uri_param_names:
+        - jwt
+      run_on_preflight: false
+    tags:
+      - security
+      - jwt

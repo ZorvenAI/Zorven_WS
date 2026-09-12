@@ -411,6 +411,21 @@ class TenantOverrideResponse(BaseModel):
     state: str = "TENANT_OVERRIDE"
 
 
+class ScaffoldTenantRequest(BaseModel):
+    """Request for POST /v1/prompts/scaffold-tenant."""
+
+    tenant_id: str = Field(..., min_length=1, description="Tenant to scaffold for")
+
+
+class ScaffoldTenantResponse(BaseModel):
+    """Response for POST /v1/prompts/scaffold-tenant."""
+
+    tenant_id: str
+    scaffolded: int = 0
+    skipped: int = 0
+    prompt_names: list[str] = Field(default_factory=list)
+
+
 class TenantOptimizationConfig(BaseModel):
     """Full tenant optimization configuration."""
 
@@ -507,3 +522,24 @@ class CanaryHistoryResponse(BaseModel):
     total: int = 0
     page: int = 1
     page_size: int = 10
+
+
+class ErasureRequest(BaseModel):
+    """M-02 · GDPR erasure request from Django."""
+
+    tenant_id: str
+    session_ids: list[str]
+
+
+class ErasureCaveat(BaseModel):
+    """A caveat about a deactivated golden dataset row."""
+
+    dataset_id: int
+    reason: str
+
+
+class ErasureResponse(BaseModel):
+    """M-02 · GDPR erasure result."""
+
+    deactivated: int
+    caveats: list[ErasureCaveat] = Field(default_factory=list)

@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { StepWizard } from '@/components/onboarding/StepWizard';
 import { TargetAudienceForm } from '@/components/onboarding/TargetAudienceForm';
@@ -35,7 +36,7 @@ export default function OnboardingStep3() {
 
           <StepWizard currentStep={3} totalSteps={5} />
 
-          <TargetAudienceForm />
+          <Suspense><TargetAudienceForm /></Suspense>
         </div>
       </div>
     </div>

@@ -82,10 +82,11 @@ describe('FileFiltersBar', () => {
       // Open filters
       fireEvent.click(screen.getByText(/filters/i));
       
-      const typeSelect = screen.getByLabelText(/type:/i) || screen.getAllByRole('combobox')[0];
-      
+      const typeSelect = screen.getAllByRole('combobox')[0];
+
       expect(typeSelect).toBeInTheDocument();
-      expect(screen.getByRole('option', { name: /all/i })).toBeInTheDocument();
+      // Multiple "All" options exist across dropdowns — check at least one is present
+      expect(screen.getAllByRole('option', { name: /all/i }).length).toBeGreaterThan(0);
       expect(screen.getByRole('option', { name: /image/i })).toBeInTheDocument();
       expect(screen.getByRole('option', { name: /video/i })).toBeInTheDocument();
       expect(screen.getByRole('option', { name: /document/i })).toBeInTheDocument();

@@ -1,0 +1,63 @@
+{
+  "_comment": [
+    "C-03 AC-1's rubric fixture. The card: 'The rubric fixture in AC-1 is a",
+    "small checked-in file of depth exemplars. Without it, \"deep\" is",
+    "untestable and will drift with every prompt edit.'",
+    "",
+    "The rubric is lexical on purpose. Judging depth with a model would make",
+    "the test as unstable as the thing it measures, and a rubric that needs a",
+    "network call is one nobody runs. These markers are coarse, and that is",
+    "the point: they catch a prompt edit that quietly turns 'deep' back into",
+    "a list of facts, which is the drift the card is worried about.",
+    "",
+    "Scored per question, then aggregated. A single question is allowed to be",
+    "shallow at deep — some facts genuinely need asking — so the assertion is",
+    "on the proportion, not on every one."
+  ],
+
+  "shallow_markers": {
+    "_comment": "Fact retrieval. Answerable in a few words, from a website.",
+    "prefixes": ["what is", "what's", "who is", "when did", "where is", "how many", "do you have", "is there"],
+    "contains": ["your name", "your address", "your website", "phone number", "email address"]
+  },
+
+  "deep_markers": {
+    "_comment": "Mechanism and evidence. Cannot be answered without reasoning about cause, trade-off or proof.",
+    "prefixes": ["why", "how do you", "how did you", "what makes", "what happens when", "walk me through", "tell me about a time"],
+    "contains": [
+      "how do you know", "what evidence", "what would change", "trade-off", "tradeoff",
+      "instead of", "compared to", "what happens if", "why does", "why do", "what drives",
+      "how does that", "what led to", "measure", "decide", "prioritise", "prioritize"
+    ]
+  },
+
+  "thresholds": {
+    "_comment": [
+      "A deep set must clear deep_min and stay under shallow_max; a standard",
+      "set is unconstrained upward — depth is a floor on rigour, not a ban on",
+      "asking a factual question. Deliberately loose: the fixture exists to",
+      "catch a collapse, not to grade prose."
+    ],
+    "deep_min_deep_fraction": 0.5,
+    "deep_max_shallow_fraction": 0.3,
+    "standard_max_deep_fraction": 1.0
+  },
+
+  "exemplars": {
+    "_comment": "Hand-written reference pairs. Used to prove the scorer itself works before it is trusted to judge generated output.",
+    "shallow": [
+      "What is your company name?",
+      "Where is your business located?",
+      "How many employees do you have?",
+      "Do you have a website?",
+      "Who is your target customer?"
+    ],
+    "deep": [
+      "Why did you choose that pricing model instead of charging per seat?",
+      "How do you know your customers value speed over price?",
+      "Walk me through what happens when a repeat customer places an order.",
+      "What evidence do you have that your current positioning is working?",
+      "What would change your mind about entering the wholesale market?"
+    ]
+  }
+}

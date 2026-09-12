@@ -20,6 +20,7 @@ jest.mock('next/navigation', () => ({
     replace: mockReplace,
     prefetch: jest.fn(),
   }),
+  useSearchParams: () => new URLSearchParams(),
 }))
 
 describe('LoginForm', () => {

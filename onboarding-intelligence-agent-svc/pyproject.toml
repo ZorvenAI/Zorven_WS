@@ -1,0 +1,34 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+timeout = 300
+markers = [
+    "unit: pure unit tests, no network",
+    "property: hypothesis property tests",
+    "integration: requires Redis",
+    "e2e: requires Docker",
+    "load: performance tests requiring a deployed target (set OIA_LOAD_TARGET)",
+]
+
+[tool.black]
+line-length = 88
+target-version = ["py312"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+# Stubs raise NotImplementedError from bodies typed as returning a value;
+# that is intentional scaffolding, not a type error.
+disable_error_code = ["empty-body"]
+
+[tool.coverage.run]
+source = ["app"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+

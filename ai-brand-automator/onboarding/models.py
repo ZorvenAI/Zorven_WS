@@ -108,6 +108,95 @@ class Company(models.Model):
         blank=True, help_text="Brand messaging guidelines"
     )
 
+    # ── Onboarding Intelligence (B-03, Design §10.1) ──────────────────
+    # The thirteen approved fields. Every one is nullable and optional at
+    # both the model and serializer layer (NFR-COMPAT), so a client that has
+    # never heard of them keeps working unchanged. Epic J's extraction writes
+    # them; nothing here populates them.
+    #
+    # The JSON-typed fields carry a declared shape, enforced in the
+    # serializer rather than the column. J-02's extraction output has to
+    # match something, and "whatever the LLM emitted" is not a contract.
+    # Shapes are documented on each field and validated in serializers.py.
+
+    competitors = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='[{"name": str, "url": str?, "notes": str?}]',
+    )
+    products_services = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='[{"name": str, "description": str?, "price_range": str?}]',
+    )
+    marketing_budget_range = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            '{"currency": "INR", "min": 50000, "max": 200000?, '
+            '"period": "monthly"} — a numeric range with an ISO 4217 code '
+            "rather than a band enum, because a band cannot be "
+            "multi-currency without an FX rate baked into the schema. "
+            "Cross-currency comparison is the caller's job."
+        ),
+    )
+    digital_presence = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='{"website": str?, "instagram": str?, ... } — handles/URLs',
+    )
+    business_goals = models.TextField(
+        blank=True, null=True, help_text="What the business wants to achieve"
+    )
+    founder_story = models.TextField(
+        blank=True, null=True, help_text="Origin story, in the founder's words"
+    )
+    brand_asset_status = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="What brand assets exist today (logo, guidelines, none)",
+    )
+    legal_name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Registered legal entity name, where it differs from name",
+    )
+    trademark_status = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Trademark position — registered, pending, none",
+    )
+    customer_proof = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            '[{"type": "testimonial|review|case_study|award", "text": str, '
+            '"source": str?, "date": str?}]'
+        ),
+    )
+    sales_channels = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            '[{"channel": "online_store|marketplace|retail|wholesale|'
+            'direct|social", "notes": str?}]'
+        ),
+    )
+    audience_languages = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='["en-IN", "kn-IN"] — BCP-47, matching §10.2.1 config.language',
+    )
+    decision_maker = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Who signs off on brand and campaign decisions",
+    )
+
     # Metadata
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
@@ -213,6 +302,72 @@ class BrandAsset(models.Model):
         blank=True,
         default="",
         help_text="Short LLM-generated description of the asset's contents",
+    )
+
+    # ── Onboarding Intelligence (B-02, Design §10.1) ──────────────────
+    # All four are nullable and unsupplied by the existing upload flow, so
+    # every pre-existing row keeps working untouched (AC-4, NFR-COMPAT).
+
+    USAGE_TAG_CHOICES = [
+        ("business_photo", "Business photo"),
+        ("previous_ad", "Previous ad"),
+        ("identity_document", "Identity document"),
+        ("brand_asset", "Brand asset"),
+        ("other", "Other"),
+    ]
+
+    usage_tag = models.CharField(
+        max_length=32,
+        choices=USAGE_TAG_CHOICES,
+        null=True,
+        blank=True,
+        help_text=(
+            "What this asset is, as declared at capture. Carried into RAG "
+            "document metadata so WF3 can retrieve prior ads by intent."
+        ),
+    )
+    onboarding_session = models.ForeignKey(
+        "onboarding_sessions.OnboardingSession",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="captured_media",
+        help_text="The session this was captured during, if any",
+    )
+    ocr_text = models.TextField(
+        null=True,
+        blank=True,
+        help_text=(
+            "REDACTED OCR text only. The unredacted output must never reach "
+            "this column — Design §5.2 PG-08 requires redaction before "
+            "persistence, and H-03 implements it. Do not 'helpfully' store "
+            "the raw text here. Written by H-03, not by the upload flow. "
+            "H-03 also owns carrying this into RAG metadata, which B-02 "
+            "deliberately does not do (see test_rag_metadata.py)."
+        ),
+    )
+    ocr_confidence = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Confidence of the OCR pass that produced ocr_text (H-03)",
+    )
+    sensitivity_class = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        choices=[
+            ("GENERAL", "General"),
+            ("IDENTITY", "Identity"),
+            ("FINANCIAL", "Financial"),
+        ],
+        help_text="Sensitivity classification from OCR analysis (H-03)",
+    )
+    rag_excluded = models.BooleanField(
+        default=False,
+        help_text=(
+            "True when PG-08 excludes this asset from RAG due to "
+            "sensitivity that cannot be redacted."
+        ),
     )
 
     class Meta:

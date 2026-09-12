@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { StepWizard } from '@/components/onboarding/StepWizard';
 import { AssetUploadForm } from '@/components/onboarding/AssetUploadForm';
@@ -35,7 +36,7 @@ export default function OnboardingStep4() {
 
           <StepWizard currentStep={4} totalSteps={5} />
 
-          <AssetUploadForm />
+          <Suspense><AssetUploadForm /></Suspense>
         </div>
       </div>
     </div>

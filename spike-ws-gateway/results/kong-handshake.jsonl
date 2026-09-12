@@ -1,0 +1,3 @@
+{"event": "open", "rtt_ms": 444.18, "url": "ws://127.0.0.1:63577", "t": 1785463269.190531}
+{"event": "start_ack", "rtt_ms": 9.15, "frame": {"seq": 0, "type": "transcript.partial", "text": "session started for tenant tenant-spike", "speaker": 0}, "t": 1785463269.200663}
+{"event": "rtt", "rtt_ms": 7.35, "bytes_sent": 1024, "bytes_echoed": 1024, "echo_id": 1, "t": 1785463269.209044}

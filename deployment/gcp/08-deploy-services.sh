@@ -59,18 +59,26 @@ deploy_service() {
 log "Deploying core services..."
 
 # Backend (Django/Gunicorn) — skip startup migrations, run Gunicorn directly
+# CALENDAR_SYNC_NAMESPACE (D-03) is set on zorven-backend and
+# zorven-celery-worker only — the two services that hold the Google OAuth
+# credentials. It namespaces the private extended property that marks a
+# calendar event as ours. Google scopes those properties to the calendar
+# rather than to the application, so without it a staging deployment and
+# production syncing the same operator's calendar read each other's tags and
+# each disowns the other's meetings. celery-beat only enqueues the sweep.
 deploy_service zorven-backend zorven-backend 8001 \
   --memory=1Gi --cpu=1 \
   --max-instances="${CR_MAX_INSTANCES}" \
   --min-instances=0 \
   --timeout="${CR_TIMEOUT}" \
-  --set-secrets="SECRET_KEY=SECRET_KEY:latest,GOOGLE_API_KEY=GOOGLE_API_KEY:latest,STRIPE_SECRET_KEY=STRIPE_SECRET_KEY:latest,STRIPE_WEBHOOK_SECRET=STRIPE_WEBHOOK_SECRET:latest,ORCHESTRATOR_SERVICE_TOKEN=ORCHESTRATOR_SERVICE_TOKEN:latest,ORCHESTRATOR_CALLBACK_TOKEN=ORCHESTRATOR_CALLBACK_TOKEN:latest,WORKER_TOKEN=WORKER_TOKEN:latest" \
+  --set-secrets="SECRET_KEY=SECRET_KEY:latest,GOOGLE_API_KEY=GOOGLE_API_KEY:latest,STRIPE_SECRET_KEY=STRIPE_SECRET_KEY:latest,STRIPE_WEBHOOK_SECRET=STRIPE_WEBHOOK_SECRET:latest,ORCHESTRATOR_SERVICE_TOKEN=ORCHESTRATOR_SERVICE_TOKEN:latest,ORCHESTRATOR_CALLBACK_TOKEN=ORCHESTRATOR_CALLBACK_TOKEN:latest,WORKER_TOKEN=WORKER_TOKEN:latest,GOOGLE_OAUTH_CLIENT_ID=GOOGLE_OAUTH_CLIENT_ID:latest,GOOGLE_OAUTH_CLIENT_SECRET=GOOGLE_OAUTH_CLIENT_SECRET:latest" \
   --set-env-vars="\
 DATABASE_URL=${DATABASE_URL},\
 REDIS_URL=${REDIS_BASE}/0,\
 CELERY_BROKER_URL=${REDIS_BASE}/0,\
 CELERY_RESULT_BACKEND=${REDIS_BASE}/0,\
 DEBUG=False,\
+CALENDAR_SYNC_NAMESPACE=zorven-prod,\
 KONG_ENABLED=false,\
 ALLOWED_HOSTS=*,\
 GUNICORN_WORKERS=2,\
@@ -99,6 +107,7 @@ deploy_service zorven-backend-ws zorven-backend 8002 \
   --max-instances="${CR_MAX_INSTANCES}" \
   --min-instances=0 \
   --session-affinity \
+  --timeout="${CR_WS_TIMEOUT}" \
   --set-secrets="SECRET_KEY=SECRET_KEY:latest" \
   --set-env-vars="\
 DATABASE_URL=${DATABASE_URL},\
@@ -150,13 +159,14 @@ deploy_service zorven-celery-worker zorven-celery-worker 8080 \
   --max-instances=1 \
   --min-instances=1 \
   --no-cpu-throttling \
-  --set-secrets="SECRET_KEY=SECRET_KEY:latest,GOOGLE_API_KEY=GOOGLE_API_KEY:latest,ORCHESTRATOR_SERVICE_TOKEN=ORCHESTRATOR_SERVICE_TOKEN:latest,ORCHESTRATOR_CALLBACK_TOKEN=ORCHESTRATOR_CALLBACK_TOKEN:latest" \
+  --set-secrets="SECRET_KEY=SECRET_KEY:latest,GOOGLE_API_KEY=GOOGLE_API_KEY:latest,ORCHESTRATOR_SERVICE_TOKEN=ORCHESTRATOR_SERVICE_TOKEN:latest,ORCHESTRATOR_CALLBACK_TOKEN=ORCHESTRATOR_CALLBACK_TOKEN:latest,GOOGLE_OAUTH_CLIENT_ID=GOOGLE_OAUTH_CLIENT_ID:latest,GOOGLE_OAUTH_CLIENT_SECRET=GOOGLE_OAUTH_CLIENT_SECRET:latest" \
   --set-env-vars="\
 DATABASE_URL=${DATABASE_URL},\
 REDIS_URL=${REDIS_BASE}/0,\
 CELERY_BROKER_URL=${REDIS_BASE}/0,\
 CELERY_RESULT_BACKEND=${REDIS_BASE}/0,\
 DEBUG=False,\
+CALENDAR_SYNC_NAMESPACE=zorven-prod,\
 ORCHESTRATION_KAFKA_ENABLED=false,\
 ONBOARDING_KAFKA_ENABLED=false,\
 ANALYTICS_KAFKA_ENABLED=false,\
@@ -449,6 +459,30 @@ ILA_REDIS_URL=${REDIS_BASE}/2,\
 ILA_PROMPT_CACHE_REDIS_URL=${REDIS_BASE}/2,\
 ILA_MLFLOW_TRACKING_URI=PLACEHOLDER,\
 ILA_PROMPT_FALLBACK_ONLY=true,\
+${AGENT_COMMON}" &
+
+# Onboarding Intelligence Agent (OIA).
+#
+# --timeout is the WebSocket one, not the default: LIVE mode holds a socket for
+# a 45-minute meeting, and on Cloud Run a WebSocket is a single long-lived
+# request capped by this value. Spike A-02 measured the 300s default severing a
+# socket at 301.9s. --session-affinity is best-effort only; session state lives
+# in Redis because sockets land on different instances.
+#
+# Redis is DB 2 with the oia:v1: key prefix (ERRATA-01), not DB 27 — Memorystore
+# is fixed at 16 databases and DB 27 does not exist there.
+deploy_service zorven-onboarding-intelligence-agent zorven-onboarding-intelligence-agent 8120 \
+  --memory="${CR_MEMORY}" --cpu="${CR_CPU}" \
+  --max-instances="${CR_MAX_INSTANCES_AGENT}" \
+  --timeout="${CR_WS_TIMEOUT}" \
+  --session-affinity \
+  --set-secrets="OIA_GEMINI_KEY=GOOGLE_API_KEY:latest,OIA_TAVILY_API_KEY=TAVILY_API_KEY:latest" \
+  --set-env-vars="\
+OIA_REDIS_URL=${REDIS_BASE}/2,\
+OIA_REDIS_DB=2,\
+OIA_POI_PROMPT_CACHE_DB=2,\
+OIA_BACKEND_BASE_URL=PLACEHOLDER,\
+OIA_GCS_BUCKET=zorven-raw-assets,\
 ${AGENT_COMMON}" &
 
 deploy_service zorven-rag-uploader-agent zorven-rag-uploader-agent 8070 \

@@ -1,0 +1,792 @@
+"""B-08 · recording open, stop and list (AC-1 … AC-4).
+
+The consent gate is the part that matters. IG-08 says a recording may not
+start without a valid ConsentRecord, and AC-1 adds "this holds even when the
+client's UI would have prevented it" — because a caller who can reach the
+endpoint can skip whatever the UI would have done.
+
+Duration is the other one. FR-REC-02 requires it to derive from the audio
+timeline rather than wall-clock, to under a second over 45 minutes, so the
+server never computes elapsed time between open and stop.
+"""
+
+from __future__ import annotations
+
+from unittest.mock import patch
+
+import pytest
+from django.contrib.auth.models import User
+from rest_framework.test import APIClient
+
+from apps.onboarding.models import MeetingRecording, RecordingStatus, SessionStatus
+from apps.onboarding.tests.factories import (
+    make_company,
+    make_consent,
+    make_recording,
+    make_session,
+)
+from tenants.models import Membership, Tenant
+
+pytestmark = pytest.mark.django_db
+
+SESSIONS = "/api/v1/onboarding/sessions/"
+RECORDINGS = "/api/v1/onboarding/recordings/"
+
+
+def client_for(user, tenant) -> APIClient:
+    client = APIClient()
+    client.defaults["SERVER_NAME"] = "localhost"
+    client.force_authenticate(user=user)
+    client.defaults["HTTP_X_TENANT_ID"] = str(tenant.id)
+    return client
+
+
+def member(tenant, role, username) -> User:
+    user = User.objects.create_user(
+        username=username, email=f"{username}@test.com", password="TestPass123!"
+    )
+    Membership.objects.create(user=user, tenant=tenant, role=role)
+    return user
+
+
+@pytest.fixture
+def editor(public_tenant):
+    return member(public_tenant, Membership.Role.EDITOR, "b08_editor")
+
+
+@pytest.fixture
+def viewer(public_tenant):
+    return member(public_tenant, Membership.Role.VIEWER, "b08_viewer")
+
+
+@pytest.fixture
+def consented_session(public_tenant):
+    session = make_session(tenant=public_tenant, status=SessionStatus.MEETING_LIVE)
+    make_consent(session=session)
+    return session
+
+
+def recordings_url(session) -> str:
+    return f"{SESSIONS}{session.pk}/recordings/"
+
+
+# ── AC-1 · opening without consent is refused server-side ────────────
+
+
+def test_open_without_consent_403(public_tenant, editor):
+    """The card's named case: IG-08 is enforced at the API, not only the UI.
+
+    And no row is created — a RECORDING row for a meeting that never lawfully
+    started would be worse than the error, because the library would show it.
+    """
+    session = make_session(tenant=public_tenant, status=SessionStatus.READY)
+
+    response = client_for(editor, public_tenant).post(recordings_url(session))
+
+    assert response.status_code == 403
+    assert response.data["code"] == "ERR-03"
+    assert MeetingRecording.objects.filter(session=session).count() == 0
+
+
+def test_revoked_consent_is_not_consent(public_tenant, editor):
+    """Revoked consent must refuse exactly as absent consent does."""
+    session = make_session(tenant=public_tenant, status=SessionStatus.MEETING_LIVE)
+    client = client_for(editor, public_tenant)
+    client.post(
+        f"{SESSIONS}{session.pk}/consent/",
+        {"subject_name": "Asha Kalyani", "method": "VERBAL_RECORDED", "scope": {}},
+        format="json",
+    )
+    client.delete(f"{SESSIONS}{session.pk}/consent/")
+
+    response = client.post(recordings_url(session))
+
+    assert response.status_code == 403
+    assert response.data["code"] == "ERR-03"
+    assert MeetingRecording.objects.filter(session=session).count() == 0
+
+
+def test_open_with_consent_creates_a_recording(
+    consented_session, public_tenant, editor
+):
+    response = client_for(editor, public_tenant).post(recordings_url(consented_session))
+
+    assert response.status_code == 201, response.data
+    assert response.data["status"] == RecordingStatus.RECORDING
+    assert response.data["stopped_at"] is None
+    assert response.data["duration_s"] is None
+    assert response.data["has_summary"] is False
+
+
+def test_a_viewer_cannot_open_a_recording(consented_session, public_tenant, viewer):
+    response = client_for(viewer, public_tenant).post(recordings_url(consented_session))
+
+    assert response.status_code == 403
+    assert MeetingRecording.objects.filter(session=consented_session).count() == 0
+
+
+# ── AC-2 · stop finalises exactly the row it opened ──────────────────
+
+
+def test_stop_sets_the_three_fields(consented_session, public_tenant, editor):
+    client = client_for(editor, public_tenant)
+    opened = client.post(recordings_url(consented_session))
+    rid = opened.data["id"]
+
+    stopped = client.post(f"{RECORDINGS}{rid}/stop/", {"duration_s": 95}, format="json")
+
+    assert stopped.status_code == 200
+    assert stopped.data["stopped_at"] is not None
+    assert stopped.data["duration_s"] == 95
+    assert stopped.data["status"] == RecordingStatus.UPLOADED
+
+
+def test_stop_sets_uploaded_never_transcribed(consented_session, public_tenant, editor):
+    """The transcript arrives asynchronously, so the library must be able to
+    say "transcribing" honestly rather than claim a transcript that does not
+    exist."""
+    client = client_for(editor, public_tenant)
+    rid = client.post(recordings_url(consented_session)).data["id"]
+
+    stopped = client.post(f"{RECORDINGS}{rid}/stop/", {}, format="json")
+
+    assert stopped.data["status"] == RecordingStatus.UPLOADED
+    assert stopped.data["status"] != RecordingStatus.TRANSCRIBED
+
+
+def test_stop_is_idempotent(consented_session, public_tenant, editor):
+    """The card's named case: a double-stop must not corrupt the duration."""
+    client = client_for(editor, public_tenant)
+    rid = client.post(recordings_url(consented_session)).data["id"]
+
+    first = client.post(f"{RECORDINGS}{rid}/stop/", {"duration_s": 95}, format="json")
+    second = client.post(
+        f"{RECORDINGS}{rid}/stop/", {"duration_s": 9999}, format="json"
+    )
+
+    assert first.status_code == second.status_code == 200
+    assert second.data["duration_s"] == 95, "a second stop rewrote the duration"
+    assert second.data["stopped_at"] == first.data["stopped_at"]
+
+
+def test_stop_touches_only_its_own_row(consented_session, public_tenant, editor):
+    """AC-2's "on that row only", with three cycles open at once — B-02 made
+    MEETING_LIVE re-entrant, so concurrent opens are the normal case."""
+    client = client_for(editor, public_tenant)
+    ids = [client.post(recordings_url(consented_session)).data["id"] for _ in range(3)]
+
+    client.post(f"{RECORDINGS}{ids[1]}/stop/", {"duration_s": 42}, format="json")
+
+    rows = {r.pk: r for r in MeetingRecording.objects.filter(session=consented_session)}
+    assert rows[ids[1]].status == RecordingStatus.UPLOADED
+    assert rows[ids[0]].status == RecordingStatus.RECORDING
+    assert rows[ids[2]].status == RecordingStatus.RECORDING
+    assert rows[ids[0]].stopped_at is None and rows[ids[2]].stopped_at is None
+
+
+def test_duration_is_absent_rather_than_wrong(consented_session, public_tenant, editor):
+    """FR-REC-02 forbids wall-clock, and F-03's upload does not exist yet.
+
+    A duration the server invented from elapsed time would be confidently
+    wrong in the library; absent is honest.
+    """
+    client = client_for(editor, public_tenant)
+    rid = client.post(recordings_url(consented_session)).data["id"]
+
+    stopped = client.post(f"{RECORDINGS}{rid}/stop/", {}, format="json")
+
+    assert stopped.data["stopped_at"] is not None
+    assert stopped.data["duration_s"] is None, "the server invented a duration"
+
+
+def test_a_negative_duration_is_refused(consented_session, public_tenant, editor):
+    client = client_for(editor, public_tenant)
+    rid = client.post(recordings_url(consented_session)).data["id"]
+
+    response = client.post(
+        f"{RECORDINGS}{rid}/stop/", {"duration_s": -1}, format="json"
+    )
+
+    assert response.status_code == 400
+
+
+def test_a_viewer_cannot_stop_a_recording(
+    consented_session, public_tenant, viewer, editor
+):
+    rid = (
+        client_for(editor, public_tenant)
+        .post(recordings_url(consented_session))
+        .data["id"]
+    )
+
+    response = client_for(viewer, public_tenant).post(f"{RECORDINGS}{rid}/stop/")
+
+    assert response.status_code == 403
+    assert MeetingRecording.objects.get(pk=rid).stopped_at is None
+
+
+# ── AC-3 · the list serves the library ───────────────────────────────
+
+
+def test_list_newest_first_viewer_readonly(
+    consented_session, public_tenant, editor, viewer
+):
+    """The card's named case: the library contract holds for all roles."""
+    client = client_for(editor, public_tenant)
+    for _ in range(3):
+        client.post(recordings_url(consented_session))
+
+    as_viewer = client_for(viewer, public_tenant).get(recordings_url(consented_session))
+
+    assert as_viewer.status_code == 200
+    rows = as_viewer.data
+    assert len(rows) == 3
+    started = [row["started_at"] for row in rows]
+    assert started == sorted(started, reverse=True), "not newest-first"
+
+
+def test_the_list_carries_what_the_library_needs(
+    consented_session, public_tenant, editor
+):
+    make_recording(
+        session=consented_session,
+        duration_s=95,
+        status=RecordingStatus.SUMMARIZED,
+        summary={"text": "They started in a garage.", "key_moments": []},
+    )
+
+    rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
+
+    row = rows[0]
+    for key in ("duration_s", "status", "has_summary", "audio_asset"):
+        assert key in row, key
+    assert row["has_summary"] is True
+
+
+def test_the_list_sends_presence_not_the_summary_blob(
+    consented_session, public_tenant, editor
+):
+    """A long meeting's summary for every row would make the rail heavy for a
+    boolean's worth of information."""
+    make_recording(session=consented_session, summary={"text": "x" * 5000})
+
+    rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
+
+    assert "summary" not in rows[0]
+    assert rows[0]["has_summary"] is True
+
+
+def test_the_recording_list_is_tenant_scoped(public_tenant, editor):
+    other = Tenant.objects.create(name="Other B08", schema_name="other_b08")
+    theirs = make_session(company=make_company(tenant=other, name="Theirs"))
+
+    response = client_for(editor, public_tenant).get(recordings_url(theirs))
+
+    assert response.status_code == 404
+
+
+def test_stopping_another_tenants_recording_is_404(public_tenant, editor):
+    other = Tenant.objects.create(name="Other B08 stop", schema_name="other_b08_stop")
+    theirs = make_session(company=make_company(tenant=other, name="Theirs"))
+    recording = make_recording(session=theirs)
+
+    response = client_for(editor, public_tenant).post(
+        f"{RECORDINGS}{recording.pk}/stop/"
+    )
+
+    assert response.status_code == 404
+
+
+# ── AC-4 · what M-05's sweeper will need ─────────────────────────────
+
+
+def test_the_sweeper_index_exists():
+    """AC-4's sweeper is M-05's; this story owes it the index.
+
+    Added here rather than there because the query shape — "still RECORDING
+    and started before X" — is a property of this table, and an index arriving
+    with the sweeper would mean its first run scans.
+    """
+    from django.db import connection
+
+    # Introspection rather than a raw pg_indexes query against a hardcoded
+    # table name: _meta.db_table survives a rename, and the assertion then
+    # describes the *columns* the sweeper needs rather than a string that
+    # happens to match today.
+    with connection.cursor() as cursor:
+        constraints = connection.introspection.get_constraints(
+            cursor, MeetingRecording._meta.db_table
+        )
+
+    indexed_column_sets = [
+        tuple(c["columns"]) for c in constraints.values() if c.get("index")
+    ]
+    assert ("status", "started_at") in indexed_column_sets, indexed_column_sets
+
+
+def test_failed_is_reachable_and_visible_in_the_library(
+    consented_session, public_tenant, editor
+):
+    """AC-4: an abandoned recording is closed as FAILED and the operator sees
+    it in the library, rather than the row vanishing."""
+    recording = make_recording(session=consented_session, status=RecordingStatus.FAILED)
+
+    rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
+
+    assert any(row["id"] == recording.pk for row in rows)
+    assert rows[0]["status"] == RecordingStatus.FAILED
+
+
+# ── PR #550 review · all three findings were real ────────────────────
+
+
+def test_the_storage_path_is_not_exposed(consented_session, public_tenant, editor):
+    """FR-LIB-01: media is served "only through short-lived signed URLs minted
+    per request".
+
+    Handing out the raw bucket path leaks infrastructure detail and routes
+    around that design before it exists. The library only needs to know
+    whether a transcript has arrived.
+    """
+    make_recording(
+        session=consented_session,
+        transcript_gcs_path="gs://zorven-raw-assets/_raw/t-1/transcript.json",
+        transcript=[{"text": "hello", "speaker": 0, "t_start": 0.0, "t_end": 1.0}],
+    )
+
+    rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
+
+    assert "transcript_gcs_path" not in rows[0]
+    assert rows[0]["has_transcript"] is True
+    assert "gs://" not in str(rows[0]), "a storage path reached the response"
+
+
+def test_has_transcript_is_false_before_one_arrives(
+    consented_session, public_tenant, editor
+):
+    make_recording(session=consented_session, transcript_gcs_path="")
+
+    rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
+
+    assert rows[0]["has_transcript"] is False
+
+
+# ── I-01 · recordings-and-captures rail ────────────────────────────
+
+# Fixtures for I-01 — Admin role and a second tenant for cross-tenant tests.
+
+
+@pytest.fixture
+def admin(public_tenant):
+    return member(public_tenant, Membership.Role.ADMIN, "i01_admin")
+
+
+@pytest.fixture
+def other_tenant():
+    return Tenant.objects.create(name="Other I01", schema_name="other_i01")
+
+
+# ── I-01 AC-1 · ordering ───────────────────────────────────────────
+
+
+def test_list_recordings_newest_first(consented_session, public_tenant, editor):
+    """I-01 AC-1: recordings are returned newest first."""
+    for _ in range(3):
+        client_for(editor, public_tenant).post(recordings_url(consented_session))
+
+    rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
+    started = [row["started_at"] for row in rows]
+    assert started == sorted(started, reverse=True), "recordings not newest-first"
+
+
+def test_list_captures_newest_first(consented_session, public_tenant, editor):
+    """I-01 AC-1: captures (BrandAssets) returned newest first from GET media."""
+    from onboarding.models import BrandAsset
+
+    for i in range(3):
+        BrandAsset.objects.create(
+            company=consented_session.company,
+            tenant=public_tenant,
+            onboarding_session=consented_session,
+            file_name=f"cap_{i}.jpg",
+            file_type="image",
+            file_size=1024,
+            gcs_path=f"_raw/t-1/cap_{i}.jpg",
+            usage_tag="business_photo",
+        )
+
+    response = client_for(editor, public_tenant).get(
+        f"{SESSIONS}{consented_session.pk}/media/"
+    )
+    assert response.status_code == 200
+    dates = [row["uploaded_at"] for row in response.data]
+    assert dates == sorted(dates, reverse=True), "captures not newest-first"
+
+
+# ── I-01 · signed URL retrieve ─────────────────────────────────────
+
+
+@patch("files.services.gcs_service.generate_signed_url")
+def test_retrieve_with_signed_url(
+    mock_signed, consented_session, public_tenant, editor
+):
+    """?include=signed_urls adds playback_url to the response."""
+    mock_signed.return_value = {
+        "url": "https://storage.example.com/signed/meeting.webm?token=abc",
+        "expires_at": "2026-01-01T00:00:00Z",
+    }
+
+    from onboarding.models import BrandAsset
+
+    asset = BrandAsset.objects.create(
+        company=consented_session.company,
+        tenant=public_tenant,
+        file_name="meeting.webm",
+        file_type="audio",
+        file_size=4096,
+        gcs_path="_raw/t-1/meeting.webm",
+    )
+    rec = make_recording(
+        session=consented_session,
+        status=RecordingStatus.UPLOADED,
+        audio_asset=asset,
+    )
+
+    response = client_for(editor, public_tenant).get(
+        f"{RECORDINGS}{rec.pk}/?include=signed_urls"
+    )
+    assert response.status_code == 200
+    assert response.data["playback_url"] is not None
+    assert "meeting.webm" in response.data["playback_url"]
+    mock_signed.assert_called_once()
+
+
+def test_retrieve_without_signed_url_flag(consented_session, public_tenant, editor):
+    """Default retrieve has no playback_url key."""
+    rec = make_recording(session=consented_session, status=RecordingStatus.UPLOADED)
+
+    response = client_for(editor, public_tenant).get(f"{RECORDINGS}{rec.pk}/")
+    assert response.status_code == 200
+    assert "playback_url" not in response.data
+
+
+def test_retrieve_signed_url_no_asset(consented_session, public_tenant, editor):
+    """?include=signed_urls returns null when there is no audio_asset."""
+    rec = make_recording(session=consented_session, status=RecordingStatus.UPLOADED)
+
+    response = client_for(editor, public_tenant).get(
+        f"{RECORDINGS}{rec.pk}/?include=signed_urls"
+    )
+    assert response.status_code == 200
+    assert response.data["playback_url"] is None
+
+
+# ── I-01 · destroy RBAC ────────────────────────────────────────────
+
+
+def test_viewer_cannot_delete_recording(consented_session, public_tenant, viewer):
+    """I-01 AC-3 / §15: Viewer cannot delete."""
+    rec = make_recording(session=consented_session)
+
+    response = client_for(viewer, public_tenant).delete(f"{RECORDINGS}{rec.pk}/")
+    assert response.status_code == 403
+    assert MeetingRecording.objects.filter(pk=rec.pk).exists()
+
+
+def test_editor_cannot_delete_recording(consented_session, public_tenant, editor):
+    """§15: Editor cannot delete recordings either."""
+    rec = make_recording(session=consented_session)
+
+    response = client_for(editor, public_tenant).delete(f"{RECORDINGS}{rec.pk}/")
+    assert response.status_code == 403
+    assert MeetingRecording.objects.filter(pk=rec.pk).exists()
+
+
+def test_admin_can_delete_recording(consented_session, public_tenant, admin):
+    """§15: Admin can delete. 204 No Content returned."""
+    rec = make_recording(session=consented_session)
+
+    response = client_for(admin, public_tenant).delete(f"{RECORDINGS}{rec.pk}/")
+    assert response.status_code == 204
+    assert not MeetingRecording.objects.filter(pk=rec.pk).exists()
+
+
+# ── I-01 · cross-tenant isolation ──────────────────────────────────
+
+
+def test_cross_tenant_recording_404(public_tenant, editor, other_tenant):
+    """I-01 AC-3: accessing another tenant's recording is 404, not 403."""
+    other_session = make_session(
+        company=make_company(tenant=other_tenant, name="OtherCo I01")
+    )
+    rec = make_recording(session=other_session)
+
+    response = client_for(editor, public_tenant).get(
+        f"{RECORDINGS}{rec.pk}/?include=signed_urls"
+    )
+    assert response.status_code == 404
+
+
+def test_cross_tenant_capture_404(public_tenant, editor, other_tenant):
+    """I-01 AC-3: listing captures for another tenant's session is 404."""
+    other_session = make_session(
+        company=make_company(tenant=other_tenant, name="OtherCo I01 cap")
+    )
+
+    response = client_for(editor, public_tenant).get(
+        f"{SESSIONS}{other_session.pk}/media/"
+    )
+    assert response.status_code == 404
+
+
+def test_cross_tenant_delete_404(public_tenant, admin, other_tenant):
+    """Deleting another tenant's recording is 404, not 403."""
+    other_session = make_session(
+        company=make_company(tenant=other_tenant, name="OtherCo I01 del")
+    )
+    rec = make_recording(session=other_session)
+
+    response = client_for(admin, public_tenant).delete(f"{RECORDINGS}{rec.pk}/")
+    assert response.status_code == 404
+    assert MeetingRecording.objects.filter(pk=rec.pk).exists()
+
+
+# ── I-01 · captures GET listing ────────────────────────────────────
+
+
+def test_list_captures_get(consented_session, public_tenant, viewer):
+    """GET /sessions/{id}/media/ returns captures for Viewer+ (I-01)."""
+    from onboarding.models import BrandAsset
+
+    BrandAsset.objects.create(
+        company=consented_session.company,
+        tenant=public_tenant,
+        onboarding_session=consented_session,
+        file_name="whiteboard.jpg",
+        file_type="image",
+        file_size=2048,
+        gcs_path="_raw/t-1/whiteboard.jpg",
+        usage_tag="business_photo",
+    )
+
+    response = client_for(viewer, public_tenant).get(
+        f"{SESSIONS}{consented_session.pk}/media/"
+    )
+    assert response.status_code == 200
+    assert len(response.data) == 1
+    assert response.data[0]["file_name"] == "whiteboard.jpg"
+    assert response.data[0]["usage_tag"] == "business_photo"
+
+
+def test_media_post_still_works(consented_session, public_tenant, editor):
+    """Existing upload POST path is unbroken by the GET addition."""
+    response = client_for(editor, public_tenant).post(
+        f"{SESSIONS}{consented_session.pk}/media/",
+        {
+            "file_name": "logo.png",
+            "file_type": "image",
+            "file_size": 512,
+            "usage_tag": "brand_asset",
+        },
+        format="json",
+    )
+    # POST requires consent + blob data; without them it fails on validation
+    # not on routing — proving the POST path is still reachable.
+    assert response.status_code != 405, "POST method was removed"
+
+
+# ── I-01 review fixes ──────────────────────────────────────────────
+
+
+def test_captures_list_does_not_expose_gcs_path(
+    consented_session, public_tenant, editor
+):
+    """FR-LIB-01: captures list must not leak storage paths or OCR text."""
+    from onboarding.models import BrandAsset
+
+    BrandAsset.objects.create(
+        company=consented_session.company,
+        tenant=public_tenant,
+        onboarding_session=consented_session,
+        file_name="doc.jpg",
+        file_type="image",
+        file_size=2048,
+        gcs_path="_raw/t-1/doc.jpg",
+        gcs_bucket="zorven-raw-assets",
+        usage_tag="identity_document",
+        ocr_text="Sensitive PII content here",
+    )
+
+    response = client_for(editor, public_tenant).get(
+        f"{SESSIONS}{consented_session.pk}/media/"
+    )
+    assert response.status_code == 200
+    row = response.data[0]
+    assert "gcs_path" not in row, "raw GCS path leaked to client"
+    assert "gcs_bucket" not in row, "bucket name leaked to client"
+    assert "ocr_text" not in row, "unredacted OCR text leaked to client"
+    assert "pipeline_status" not in row, "pipeline internals leaked"
+    assert "gs://" not in str(row), "a storage URI reached the response"
+
+
+def test_empty_recordings_list_returns_empty_array(
+    consented_session, public_tenant, viewer
+):
+    """A session with no recordings returns [] not 404."""
+    response = client_for(viewer, public_tenant).get(recordings_url(consented_session))
+    assert response.status_code == 200
+    assert response.data == []
+
+
+def test_empty_captures_list_returns_empty_array(
+    consented_session, public_tenant, viewer
+):
+    """A session with no captures returns [] not 404."""
+    response = client_for(viewer, public_tenant).get(
+        f"{SESSIONS}{consented_session.pk}/media/"
+    )
+    assert response.status_code == 200
+    assert response.data == []
+
+
+# ── I-03 · transcript storage and endpoint ──────────────────────────
+
+
+SAMPLE_SEGMENTS = [
+    {
+        "text": "Welcome to the onboarding.",
+        "speaker": 0,
+        "t_start": 0.0,
+        "t_end": 2.5,
+        "redaction_applied": False,
+    },
+    {
+        "text": "Call me at [PHONE_NUMBER].",
+        "speaker": 1,
+        "t_start": 3.0,
+        "t_end": 5.0,
+        "redaction_applied": True,
+    },
+]
+
+
+def transcript_url(recording):
+    return f"/api/v1/onboarding/recordings/{recording.pk}/transcript/"
+
+
+def summary_callback_url(recording):
+    return f"/api/v1/onboarding/internal/recordings/{recording.pk}/summary/"
+
+
+def test_transcript_callback_stores_segments(
+    consented_session, public_tenant, settings
+):
+    """PATCH with transcript list stores it alongside the summary."""
+    settings.OIA_SERVICE_TOKEN = "test-token"
+    recording = make_recording(
+        session=consented_session,
+        status=RecordingStatus.UPLOADED,
+    )
+    client = APIClient()
+    client.defaults["SERVER_NAME"] = "localhost"
+    response = client.patch(
+        summary_callback_url(recording),
+        data={
+            "summary": {"text": "A summary.", "key_moments": []},
+            "transcript": SAMPLE_SEGMENTS,
+        },
+        format="json",
+        HTTP_X_SERVICE_TOKEN="test-token",
+        HTTP_X_TENANT_ID=str(public_tenant.pk),
+    )
+    assert response.status_code == 200
+    recording.refresh_from_db()
+    assert recording.transcript == SAMPLE_SEGMENTS
+    assert recording.status == RecordingStatus.SUMMARIZED
+
+
+def test_transcript_endpoint_returns_segments(consented_session, public_tenant, viewer):
+    """GET /recordings/{id}/transcript/ returns stored segments."""
+    recording = make_recording(
+        session=consented_session,
+        transcript=SAMPLE_SEGMENTS,
+        status=RecordingStatus.SUMMARIZED,
+    )
+    response = client_for(viewer, public_tenant).get(transcript_url(recording))
+    assert response.status_code == 200
+    assert response.data["recording_id"] == str(recording.pk)
+    assert len(response.data["segments"]) == 2
+    assert response.data["segments"][0]["speaker"] == 0
+    assert response.data["segments"][1]["redaction_applied"] is True
+
+
+def test_transcript_endpoint_empty_when_no_transcript(
+    consented_session, public_tenant, viewer
+):
+    """A recording with no transcript returns an empty segments list."""
+    recording = make_recording(session=consented_session)
+    response = client_for(viewer, public_tenant).get(transcript_url(recording))
+    assert response.status_code == 200
+    assert response.data["segments"] == []
+
+
+def test_has_transcript_reflects_transcript_field(
+    consented_session, public_tenant, editor
+):
+    """has_transcript is True when the transcript JSONField has data."""
+    make_recording(
+        session=consented_session,
+        transcript=SAMPLE_SEGMENTS,
+    )
+    rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
+    assert rows[0]["has_transcript"] is True
+
+
+def test_has_transcript_false_with_empty_list(consented_session, public_tenant, editor):
+    """has_transcript is False when transcript is []."""
+    make_recording(session=consented_session, transcript=[])
+    rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
+    assert rows[0]["has_transcript"] is False
+
+
+def test_transcript_no_unredacted_text_exposed(
+    consented_session, public_tenant, viewer
+):
+    """AC-4: no path reveals pre-redaction text.
+
+    The stored segments contain only redacted text. The endpoint returns
+    exactly what is stored — there is no mechanism to request or receive
+    pre-redaction content.
+    """
+    recording = make_recording(
+        session=consented_session,
+        transcript=[
+            {
+                "text": "My number is [PHONE_NUMBER].",
+                "speaker": 1,
+                "t_start": 1.0,
+                "t_end": 3.0,
+                "redaction_applied": True,
+            },
+        ],
+        status=RecordingStatus.SUMMARIZED,
+    )
+    response = client_for(viewer, public_tenant).get(transcript_url(recording))
+    seg = response.data["segments"][0]
+    assert "[PHONE_NUMBER]" in seg["text"]
+    assert seg["redaction_applied"] is True
+
+
+def test_transcript_endpoint_cross_tenant_404(consented_session, public_tenant):
+    """A recording from another tenant returns 404, not someone else's transcript."""
+    other_tenant = Tenant.objects.create(name="other-co", schema_name="other_co")
+    other_user = User.objects.create_user("other_user", password="pw")
+    Membership.objects.create(user=other_user, tenant=other_tenant, role="ADMIN")
+
+    recording = make_recording(
+        session=consented_session,
+        transcript=SAMPLE_SEGMENTS,
+        status=RecordingStatus.SUMMARIZED,
+    )
+    response = client_for(other_user, other_tenant).get(transcript_url(recording))
+    assert response.status_code == 404

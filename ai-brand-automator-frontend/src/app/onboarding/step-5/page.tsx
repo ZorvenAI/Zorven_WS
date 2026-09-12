@@ -1,22 +1,28 @@
 'use client';
 
+import { Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { StepWizard } from '@/components/onboarding/StepWizard';
 import { OnboardingReview } from '@/components/onboarding/OnboardingReview';
 import { useAuth } from '@/hooks/useAuth';
 
+function Step5Content() {
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get('sessionId');
+  return <OnboardingReview sessionId={sessionId} />;
+}
+
 export default function OnboardingStep5() {
-  useAuth(); // Protect this route
-  
+  useAuth();
+
   return (
     <div className="min-h-screen bg-brand-midnight">
-      {/* Subtle aura glow */}
       <div className="fixed inset-0 aura-glow pointer-events-none opacity-30" />
-      
+
       <div className="relative z-10 max-w-3xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        {/* Back to Dashboard */}
-        <Link 
-          href="/dashboard" 
+        <Link
+          href="/dashboard"
           className="inline-flex items-center gap-2 text-brand-silver hover:text-brand-electric transition-colors mb-6"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -24,7 +30,7 @@ export default function OnboardingStep5() {
           </svg>
           <span>Back to Dashboard</span>
         </Link>
-        
+
         <div className="glass-card p-8">
           <h1 className="text-3xl font-heading font-bold text-white mb-2">
             Review & Generate Brand Strategy
@@ -35,7 +41,9 @@ export default function OnboardingStep5() {
 
           <StepWizard currentStep={5} totalSteps={5} />
 
-          <OnboardingReview />
+          <Suspense>
+            <Step5Content />
+          </Suspense>
         </div>
       </div>
     </div>

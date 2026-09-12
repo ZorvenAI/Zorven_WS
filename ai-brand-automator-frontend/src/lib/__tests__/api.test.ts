@@ -9,57 +9,31 @@ jest.mock('@/lib/env', () => ({
 }))
 
 describe('apiClient', () => {
-  // Store original location
-  const originalLocation = window.location
-  
-  beforeAll(() => {
-    // Mock window.location with proper typing
-    const mockLocation = { href: '' } as Location
-    Object.defineProperty(window, 'location', {
-      value: mockLocation,
-      writable: true,
-      configurable: true
-    })
-  })
-  
-  afterAll(() => {
-    // Restore original location
-    Object.defineProperty(window, 'location', {
-      value: originalLocation,
-      writable: true,
-      configurable: true
-    })
-  })
-  
   beforeEach(() => {
     jest.clearAllMocks()
     global.fetch = jest.fn()
     window.localStorage.clear()
-    ;(window as Window & { location: { href: string } }).location.href = ''
   })
 
   describe('request method', () => {
     it('includes Authorization header when token exists', async () => {
       localStorage.setItem('access_token', 'test-token')
-      
+
       const mockResponse = {
         ok: true,
         status: 200,
         json: async () => ({ data: 'test' }),
       }
-      
+
       ;(global.fetch as jest.Mock).mockResolvedValue(mockResponse)
-      
+
       await apiClient.request('/test')
-      
-      expect(global.fetch).toHaveBeenCalledWith(
-        'http://localhost:8000/api/v1/test',
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Authorization': 'Bearer test-token',
-          }),
-        })
-      )
+
+      expect(global.fetch).toHaveBeenCalled()
+      const callArgs = (global.fetch as jest.Mock).mock.calls[0]
+      expect(callArgs[0]).toBe('http://localhost:8000/api/v1/test')
+      const headers = callArgs[1].headers as Headers
+      expect(headers.get('Authorization')).toBe('Bearer test-token')
     })
 
     it('does not include Authorization header when no token', async () => {
@@ -68,13 +42,13 @@ describe('apiClient', () => {
         status: 200,
         json: async () => ({ data: 'test' }),
       }
-      
+
       ;(global.fetch as jest.Mock).mockResolvedValue(mockResponse)
-      
+
       await apiClient.request('/test')
-      
-      const callArgs = (global.fetch as jest.Mock).mock.calls[0][1]
-      expect(callArgs.headers).not.toHaveProperty('Authorization')
+
+      const headers = (global.fetch as jest.Mock).mock.calls[0][1].headers as Headers
+      expect(headers.get('Authorization')).toBeNull()
     })
 
     it('includes Content-Type header by default', async () => {
@@ -83,19 +57,13 @@ describe('apiClient', () => {
         status: 200,
         json: async () => ({ data: 'test' }),
       }
-      
+
       ;(global.fetch as jest.Mock).mockResolvedValue(mockResponse)
-      
+
       await apiClient.request('/test')
-      
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-          }),
-        })
-      )
+
+      const headers = (global.fetch as jest.Mock).mock.calls[0][1].headers as Headers
+      expect(headers.get('Content-Type')).toBe('application/json')
     })
   })
 

@@ -1,7 +1,7 @@
 # Project Guidelines
 
-- Monorepo: Django core API (`ai-brand-automator/`), Next.js frontend (`ai-brand-automator-frontend/`), 22 FastAPI microservices, and an Odoo Community submodule (`vendor/odoo/community/`).
-- Read first: `ARCHITECTURE.md`, `.github/copilot-instructions.md`, `CLAUDE.md`, and service-local `CLAUDE.md` before edits.
+- Monorepo: Django core API (`ai-brand-automator/`), Next.js frontend (`ai-brand-automator-frontend/`), 26 FastAPI microservices, and an Odoo Community submodule (`vendor/odoo/community/`).
+- Read first: `ARCHITECTURE.md`, `CLAUDE.md`, and service-local `CLAUDE.md` before edits. (`.github/copilot-instructions.md` is no longer maintained — do not treat it as authoritative.)
 - Prefer the closest instruction file to your target code (service-local guidance wins).
 - Do not modify without explicit request: `docs/LICENSE.md`, `credentials/`, `deployment/config/kong/`, `.github/workflows/ci-cd.yml`, `ai-brand-automator/db.sqlite3`, `vendor/`.
 
@@ -24,7 +24,7 @@
 - `brand-equity-calculator-svc` (port 8090) is **public/unauthenticated** and uses Anthropic Claude (not Gemini).
 - `odoo-mcp-server-svc` (port 8095) bridges Odoo ERP via MCP protocol — RBAC engine with 16 YAML role definitions, 101 tools across 14 categories.
 - Onboarding is a 5-step wizard: Company Info → Brand Voice → Target Audience → Asset Upload → Review. On completion, a PDF of all onboarding data is generated via `fpdf2` and fed into the RAG pipeline.
-- Redis DB allocation: 0=Django/Celery, 1=Orchestrator, 2=Discovery, 3=Intelligence, 4=Titling, 5=Content, 6=Social, 7=RAG Uploader, 8=Brand Equity, 9=Odoo MCP, 10=Odoo Worker, 11=Market Research, 12=Competitor Intel, 13=Audience Persona, 14=Trend Cultural, 15=VoC Agent, 16=Brand Positioning, 17=Brand Architecture, 18=Brand Personality, 19=Brand Naming, 20=Brand Story, 21=Campaign Architecture, 22=Creative Generation, 23=Ad Publishing (requires `databases 24` in redis.conf).
+- Redis DB allocation: 0=Django/Celery, 1=Orchestrator, 2=Discovery **+ shared prompt cache** (key-prefix isolated), 3=Intelligence, 4=Titling, 5=Content, 6=Social, 7=RAG Uploader, 8=Brand Equity, 9=Odoo MCP, 10=Odoo Worker, 11=Market Research, 12=Competitor Intel, 13=Audience Persona, 14=Trend Cultural, 15=VoC Agent, 16=Brand Positioning, 17=Brand Architecture, 18=Brand Personality, 19=Brand Naming, 20=Brand Story, 21=Campaign Architecture, 22=Creative Generation, 23=Ad Publishing, 24=Campaign Optimization, 25=Intelligence Loop, 26=Prompt Optimization (requires `databases 27` in redis.conf and `--databases 27` in docker-compose; `ERR DB index is out of range` means bump it).
 
 ## Build and Test
 
@@ -38,7 +38,8 @@
 - Integration tests: `cd tests/integration && pytest -v`
 - Migrations: `cd ai-brand-automator && python manage.py makemigrations && python manage.py migrate_schemas --shared --noinput`
 - Seed data: `python manage.py seed_manifests` (pipeline manifests), `python manage.py seed_subscription_plans` (Stripe plans)
-- Full stack: `cd deployment && docker compose up --build`
+- Full stack: `cd deployment && docker compose up --build` (optional profiles: `with-kafka`, `with-db`, `with-odoo`, `with-nginx`)
+- Branching: feature branch → PR into `development_main` (dev tier, auto-deployed via GHCR `:development_main` + Watchtower) → merge into `main` (production, GCP Cloud Run). Never commit directly to `main`.
 
 ## Project Conventions
 
@@ -58,7 +59,7 @@
 - `X-Callback-Token`: Orchestrator -> Django callbacks.
 - `X-Worker-Token`: chat-titling worker -> Django.
 - `X-Tenant-ID`: Content/Social Agent and Orchestrator -> Django/Odoo MCP for tenant routing.
-- Kafka topics: `pipeline-trigger-topic`, `pipeline-result-topic`, `agent-trace-topic`, `data-ingestion-topic`, `media-curation-topic`, `chat-titling-topic`, `odoo-mcp-audit-topic`, `odoo-tenant-events-topic`, `tenant-provisioning-topic`.
+- Kafka topics (core set — see the full table in `CLAUDE.md`; each agent service also has its own `*-audit-topic`/`*-events-topic`): `pipeline-trigger-topic`, `pipeline-result-topic`, `agent-trace-topic`, `data-ingestion-topic`, `media-curation-topic`, `chat-titling-topic`, `odoo-mcp-audit-topic`, `odoo-tenant-events-topic`, `tenant-provisioning-topic`.
 - Key files: `ai-brand-automator/orchestration/views.py`, `ai-brand-automator/orchestration/services.py`, `pipeline-orchestrator-svc/app/services/job_executor.py`, `pipeline-orchestrator-svc/app/factory/node_registry.py`, `pipeline-orchestrator-svc/app/skills/`, `odoo-mcp-server-svc/app/tools/registry.py`, `odoo-mcp-server-svc/app/rbac/engine.py`, `ai-brand-automator-frontend/src/hooks/usePollingJob.ts`, `ai-brand-automator-frontend/src/lib/api.ts`.
 
 ## Security

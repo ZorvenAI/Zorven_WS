@@ -19,12 +19,12 @@ from app.tasks.prompt_health_check import _check_regression, _get_reopt_task_nam
 
 
 class TestBeatScheduleConfiguration:
-    """Verify all 7 Beat entries are present and correct."""
+    """Verify all 8 Beat entries are present and correct."""
 
-    def test_beat_schedule_has_7_entries(self):
+    def test_beat_schedule_has_8_entries(self):
         from app.celery_app import celery_app
 
-        assert len(celery_app.conf.beat_schedule) == 7
+        assert len(celery_app.conf.beat_schedule) == 8
 
     def test_mine_golden_examples_present(self):
         from app.celery_app import celery_app

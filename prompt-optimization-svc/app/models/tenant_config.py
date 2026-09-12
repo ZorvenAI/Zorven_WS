@@ -6,7 +6,7 @@ Redis remains the hot path; PostgreSQL is the fallback and audit record.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, String, text
+from sqlalchemy import DateTime, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -24,6 +24,9 @@ class TenantConfig(Base):
     tenant_id: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     wf3_optimization_schedule: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'monthly'")
+    )
+    min_gepa_dataset_size: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("50")
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

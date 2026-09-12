@@ -61,3 +61,9 @@ deployment/gcp/service-urls.env
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Microsoft Office lock files. Word, Excel and PowerPoint create a hidden
+# "~$name.docx" beside any open document and delete it on close, so these
+# appear and vanish as the design and backlog documents are edited. One was
+# committed by accident in B-02 and reappeared twice afterwards.
+~$*

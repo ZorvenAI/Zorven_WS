@@ -1,0 +1,29 @@
+# Minimal collector for local trace verification (A-03 AC-3).
+#
+# Receives OTLP from the fleet and writes spans to stdout, which is enough to
+# prove a trace arrives intact and that OIA's span shares a trace id with its
+# caller. Swap the exporter for a real backend when one exists — nothing in
+# GCP runs a collector today.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 1s
+
+exporters:
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

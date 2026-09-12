@@ -1,0 +1,125 @@
+"""Fixtures backed by real services.
+
+No mocks: the health probe is only worth testing against a Redis that is
+genuinely up and a Redis that is genuinely down. A patched client would prove
+the test double behaves, not the probe.
+"""
+
+from __future__ import annotations
+
+import os
+import socket
+
+import pytest
+
+REQUIRED_ENV = {
+    "OIA_BACKEND_BASE_URL": "http://backend:8001",
+    "OIA_GCS_BUCKET": "zorven-raw-assets",
+    # C-01: /v1/execute refuses every caller when this is unset, which is the
+    # correct production behaviour but would make every test a 503.
+    "OIA_SERVICE_TOKEN": "test-service-token",
+}
+
+REDIS_URL = os.environ.get("OIA_TEST_REDIS_URL", "redis://localhost:6379/2")
+
+
+def _port_is_open(host: str, port: int, timeout: float = 1.0) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def redis_available() -> bool:
+    """Whether the Redis the tests will actually use is reachable.
+
+    Parsed from REDIS_URL rather than assuming localhost: the guard and the
+    connection target must agree, or an override silently skips instead of
+    testing what it was pointed at.
+    """
+    from urllib.parse import urlparse
+
+    parsed = urlparse(REDIS_URL)
+    return _port_is_open(parsed.hostname or "localhost", parsed.port or 6379)
+
+
+def free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+@pytest.fixture(autouse=True)
+def _required_env(monkeypatch):
+    """Every test starts from a valid minimal configuration.
+
+    Ambient OIA_ variables are cleared first: inheriting a developer's
+    OIA_REDIS_URL would silently redirect the integration tests at a different
+    database than the one under test.
+    """
+    for key in [k for k in os.environ if k.startswith("OIA_")]:
+        monkeypatch.delenv(key, raising=False)
+    for key, value in REQUIRED_ENV.items():
+        monkeypatch.setenv(key, value)
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+@pytest.fixture
+def app_with_live_redis(monkeypatch):
+    """The real app wired to a real Redis."""
+    if not redis_available():
+        pytest.skip("Redis is not running on localhost:6379")
+    monkeypatch.setenv("OIA_REDIS_URL", REDIS_URL)
+    return _build_app()
+
+
+@pytest.fixture
+def app_with_dead_redis(monkeypatch):
+    """The real app pointed at a port with nothing behind it.
+
+    Not a simulated outage — a genuinely closed port, so the timeout path is
+    the one the probe would take in production.
+    """
+    monkeypatch.setenv("OIA_REDIS_URL", f"redis://127.0.0.1:{free_port()}/2")
+    return _build_app()
+
+
+@pytest.fixture
+async def live_redis(monkeypatch):
+    """A connected RedisManager against the real server.
+
+    Shared by test_session_state.py, test_segment_ordering.py, and any future
+    file that needs the manager without the full app wiring.
+    """
+    if not redis_available():
+        pytest.skip("Redis is not running on localhost:6379")
+
+    monkeypatch.setenv("OIA_REDIS_URL", REDIS_URL)
+    from app.cache.redis_manager import RedisManager
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    manager = RedisManager(get_settings())
+    await manager.connect()
+    try:
+        yield manager
+    finally:
+        await manager.close()
+        get_settings.cache_clear()
+
+
+def _build_app():
+    import importlib
+
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    import app.main
+
+    importlib.reload(app.main)
+    return app.main.app

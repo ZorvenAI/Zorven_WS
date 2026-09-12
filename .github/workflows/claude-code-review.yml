@@ -3,49 +3,25 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
-    paths:
-      - 'ai-brand-automator/**'
-      - 'ai-brand-automator-frontend/**'
-      - 'pipeline-orchestrator-svc/**'
-      - 'discovery-agent-svc/**'
-      - 'intelligence-agent-svc/**'
-      - 'chat-titling-worker/**'
-      - 'content-agent-service/**'
-      - 'social-agent-service/**'
-      - 'rag-uploader-agent-service/**'
-      - 'brand-equity-calculator-svc/**'
-      - 'market-research-agent-svc/**'
-      - 'competitor-intel-agent-svc/**'
-      - 'audience-persona-agent-svc/**'
-      - 'trend-cultural-agent-svc/**'
-      - 'voc-agent-svc/**'
-      - 'brand-positioning-agent-svc/**'
-      - 'brand-architecture-agent-svc/**'
-      - 'brand-personality-agent-svc/**'
-      - 'brand-naming-agent-svc/**'
-      - 'brand-story-agent-svc/**'
-      - 'campaign-architecture-agent-svc/**'
-      - 'creative-generation-agent-svc/**'
-      - 'ad-publishing-agent-svc/**'
-      - 'campaign-optimization-agent-svc/**'
-      - 'intelligence-loop-agent-svc/**'
-      - 'odoo-mcp-server-svc/**'
-      - 'odoo-worker-agent-svc/**'
-      - 'tests/integration/**'
-      - 'deployment/**'
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+    # Optional: Only run on specific file changes
+    # paths:
+    #   - "src/**/*.ts"
+    #   - "src/**/*.tsx"
+    #   - "src/**/*.js"
+    #   - "src/**/*.jsx"
 
 jobs:
   claude-review:
-    if: github.event.pull_request.draft == false
+    # Optional: Filter by PR author
+    # if: |
+    #   github.event.pull_request.user.login == 'external-contributor' ||
+    #   github.event.pull_request.user.login == 'new-developer' ||
+    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: read
       issues: read
       id-token: write
 
@@ -53,7 +29,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Run Claude Code Review
         id: claude-review

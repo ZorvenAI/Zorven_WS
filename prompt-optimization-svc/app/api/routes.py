@@ -31,6 +31,8 @@ from app.api.schemas import (
     PromptTransitionRequest,
     PromptTransitionResponse,
     RejectionRequest,
+    ScaffoldTenantRequest,
+    ScaffoldTenantResponse,
     SeedResponse,
     SingleAgentOptimizationResponse,
     SyntheticGenerateRequest,
@@ -42,8 +44,12 @@ from app.api.schemas import (
     DatasetSizeConfigRequest,
 )  # noqa: E402 — top-level for FastAPI
 from app.api.schemas import (
+    ErasureCaveat,
+    ErasureRequest,
+    ErasureResponse,
     TenantConfigUpdateRequest,
 )  # noqa: E402 — top-level for FastAPI
+from app.auth.deps import verify_service_token
 from app.auth.rbac import Decision, Permission, Role, require_permission, resolve_role
 from app.logic.lifecycle import (
     InvalidTransitionError,
@@ -785,8 +791,30 @@ async def optimize(
             content={"detail": str(exc)},
         )
 
+    tenant_id = config.get("tenant_id") or ""
+    from app.celery_app import celery_app
+
+    if tenant_id and group.workflow == 0:
+        task_name = "app.tasks.optimize_tenant_oia.optimize_tenant_oia_pipeline"
+        result = celery_app.send_task(
+            task_name,
+            kwargs={"tenant_id": tenant_id, "force": True},
+        )
+        return JSONResponse(
+            status_code=202,
+            content={
+                "status": "QUEUED",
+                "task_id": result.id,
+                "group_name": group_name,
+                "tenant_id": tenant_id,
+                "prompt_count": len(group.prompt_names),
+                "agent_codes": list(group.agent_codes),
+            },
+        )
+
     # Route to the correct Celery task based on workflow
     task_map = {
+        0: "app.tasks.optimize_oia_pipeline.optimize_oia_pipeline",
         1: "app.tasks.optimize_wf1_pipeline.optimize_wf1_pipeline",
         2: "app.tasks.optimize_wf2_pipeline.optimize_wf2_pipeline",
     }
@@ -803,8 +831,6 @@ async def optimize(
             status_code=400,
             content={"detail": f"No task mapped for workflow {group.workflow}"},
         )
-
-    from app.celery_app import celery_app
 
     # All tasks accept force=True to bypass schedule guards for on-demand triggers
     result = celery_app.send_task(task_name, kwargs={"force": True})
@@ -1597,6 +1623,67 @@ async def delete_tenant_override_endpoint(
         await cache.close()
 
 
+@router.post(
+    "/v1/prompts/scaffold-tenant",
+    response_model=ScaffoldTenantResponse,
+    status_code=201,
+)
+async def scaffold_tenant_prompts(
+    request: ScaffoldTenantRequest,
+    decision: Decision = Depends(require_permission(Permission.CREATE_OVERRIDE)),
+):
+    """Clone all OIA production prompts as TENANT_OVERRIDE for a new tenant.
+
+    Idempotent — skips prompts that already have a TENANT_OVERRIDE for
+    the given tenant.
+    """
+    from app.cache.prompt_cache import PromptCacheManager
+    from app.core.config import settings
+    from app.logic.tenant_override import create_tenant_override
+    from app.registries.prompt_catalog import OIA_PROMPTS
+
+    cache = PromptCacheManager(redis_url=settings.PROMPT_CACHE_REDIS_URL)
+    await cache.connect()
+    try:
+        scaffolded = 0
+        skipped = 0
+        prompt_names: list[str] = []
+
+        for entry in OIA_PROMPTS:
+            existing = mlflow_registry.get_prompt_by_state(
+                entry.name,
+                PromptState.TENANT_OVERRIDE.value,
+                tenant_id=request.tenant_id,
+            )
+            if existing is not None:
+                skipped += 1
+                continue
+
+            production = mlflow_registry.get_prompt_by_state(
+                entry.name, PromptState.PRODUCTION.value, tenant_id=None
+            )
+            template = production.template if production else entry.template
+
+            await create_tenant_override(
+                prompt_name=entry.name,
+                tenant_id=request.tenant_id,
+                template=template,
+                mlflow_registry=mlflow_registry,
+                prompt_cache=cache,
+            )
+            scaffolded += 1
+            prompt_names.append(entry.name)
+
+        return ScaffoldTenantResponse(
+            tenant_id=request.tenant_id,
+            scaffolded=scaffolded,
+            skipped=skipped,
+            prompt_names=prompt_names,
+        )
+    finally:
+        await cache.close()
+
+
 # ── Canary metrics + dashboard endpoints ──
 
 
@@ -1803,9 +1890,7 @@ async def promote_canary(
 
     promoted = await canary_manager.promote_canary(prompt_name)
     if not promoted:
-        return JSONResponse(
-            status_code=500, content={"detail": "Promotion failed"}
-        )
+        return JSONResponse(status_code=500, content={"detail": "Promotion failed"})
 
     logger.info(
         "Admin force-promoted canary: %s v%d (was production v%d)",
@@ -1845,9 +1930,7 @@ async def rollback_canary(
 
     rolled_back = await canary_manager.rollback_canary(prompt_name)
     if not rolled_back:
-        return JSONResponse(
-            status_code=500, content={"detail": "Rollback failed"}
-        )
+        return JSONResponse(status_code=500, content={"detail": "Rollback failed"})
 
     logger.info(
         "Admin force-rolled-back canary: %s v%d (reverted to production v%d)",
@@ -1967,3 +2050,82 @@ async def update_tenant_config(
         )
     finally:
         await cache.close()
+
+
+# ── M-02: GDPR erasure ────────────────────────────────────────
+
+
+@router.delete(
+    "/v1/admin/erasure",
+    response_model=ErasureResponse,
+    dependencies=[Depends(verify_service_token)],
+)
+async def erasure(payload: ErasureRequest) -> ErasureResponse:
+    """Soft-delete golden dataset rows linked to the given sessions."""
+    if not payload.session_ids:
+        return ErasureResponse(deactivated=0)
+
+    from sqlalchemy import or_, select, update
+
+    from app.models.database import async_session_factory
+    from app.models.golden_dataset import GoldenDataset
+    from app.models.optimization_run import OptimizationRun
+
+    async with async_session_factory() as session:
+        conditions = []
+        for sid in payload.session_ids:
+            conditions.append(
+                GoldenDataset.input_context["session_id"].as_string() == sid
+            )
+            conditions.append(
+                GoldenDataset.metadata_extra["session_id"].as_string() == sid
+            )
+
+        stmt = select(GoldenDataset).where(
+            GoldenDataset.tenant_id == payload.tenant_id,
+            GoldenDataset.active.is_(True),
+            or_(*conditions),
+        )
+        result = await session.execute(stmt)
+        rows = result.scalars().all()
+
+        if not rows:
+            return ErasureResponse(deactivated=0)
+
+        caveats: list[ErasureCaveat] = []
+        row_ids = [r.id for r in rows]
+
+        affected_prompts = {r.prompt_name for r in rows if r.prompt_name}
+        used_prompts: set[str] = set()
+        if affected_prompts:
+            run_stmt = select(OptimizationRun.prompt_name).where(
+                OptimizationRun.state == "COMPLETED",
+                OptimizationRun.prompt_name.in_(affected_prompts),
+            ).distinct()
+            run_result = await session.execute(run_stmt)
+            used_prompts = {r[0] for r in run_result.all()}
+
+        for row in rows:
+            if row.prompt_name in used_prompts:
+                caveats.append(
+                    ErasureCaveat(
+                        dataset_id=row.id,
+                        reason=(
+                            f"Row contributed to optimization of "
+                            f"'{row.prompt_name}' — prompt already deployed."
+                        ),
+                    )
+                )
+
+        update_stmt = (
+            update(GoldenDataset)
+            .where(GoldenDataset.id.in_(row_ids))
+            .values(active=False)
+        )
+        await session.execute(update_stmt)
+        await session.commit()
+
+        return ErasureResponse(
+            deactivated=len(row_ids),
+            caveats=caveats,
+        )

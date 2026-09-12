@@ -1,0 +1,2 @@
+{"event": "concurrency", "sockets": 8, "opened": 8, "refused": 0, "refusals": [], "distinct_instances": 3, "instances": ["zorven-spike-ws-echo-00002-9js-145956cf", "zorven-spike-ws-echo-00002-9js-ebe5ecf1", "zorven-spike-ws-echo-00002-9js-f88e85d1"], "t": 1785463164.1552792}
+{"event": "concurrency", "sockets": 20, "opened": 16, "refused": 4, "refusals": ["InvalidStatus:500"], "distinct_instances": 3, "instances": ["zorven-spike-ws-echo-00002-9js-145956cf", "zorven-spike-ws-echo-00002-9js-ebe5ecf1", "zorven-spike-ws-echo-00002-9js-f88e85d1"], "t": 1785463185.560629}

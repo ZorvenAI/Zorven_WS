@@ -1,0 +1,81 @@
+# Onboarding Intelligence Agent (OIA) — Circuit Breakers
+#
+# This file IS Design §18.2, transcribed verbatim.
+#
+# app/circuit_breaker/breaker.py loads it and rejects at startup: a non-mapping
+# file, a dependency with no degraded_mode, and any numeric field that is not a
+# positive integer. tests/test_circuit_breakers.py additionally asserts that
+# all seven dependencies are present and that every one of them can actually
+# recover from an open breaker.
+#
+# Created by C-02, which is the first story to need a working breaker. §18.2
+# specified this file from the start but no story owned building it — A-06's
+# acceptance criteria cover the registry, guardrail chain, RBAC evaluator and
+# skill interfaces, and never mention breakers, despite the scaffolded
+# breaker.py docstring naming A-06 as its implementer.
+#
+# user_message is config rather than code on purpose. Design §18.2: "these
+# strings are the entire user experience of a failure, and they should be
+# tunable without a deploy." A null message means the degradation is invisible
+# to the operator by design, not that a message is missing.
+#
+# Only `tavily` is wired to a caller in C-02. The other six are declared here
+# because the file is read whole and a partial file would read as "these
+# dependencies have no breaker" rather than "their callers are not built yet".
+
+defaults:
+  failure_threshold: 5
+  window_seconds: 30
+  success_threshold: 2
+  half_open_max_calls: 1
+  reset_timeout_seconds: 60
+
+dependencies:
+  stt:
+    failure_threshold: 5
+    window_seconds: 30
+    success_threshold: 2
+    degraded_mode: RECORD_ONLY
+    user_message: "Live assist paused — recording continues. Transcript will be ready after the meeting."
+
+  llm:
+    failure_threshold: 5
+    window_seconds: 30
+    success_threshold: 2
+    degraded_mode: MANUAL_CHECKBOXES     # LIVE; PREP/PROCESS queue then escalate
+    user_message: "Suggestions paused. Check questions off manually — nothing is lost."
+
+  vision:
+    failure_threshold: 5
+    window_seconds: 30
+    success_threshold: 2
+    degraded_mode: GEMINI_ONLY_OCR
+    user_message: "Reduced document-reading accuracy — captures still saved."
+
+  backend:
+    failure_threshold: 5
+    window_seconds: 30
+    success_threshold: 2
+    degraded_mode: REDIS_OUTBOX          # buffer writes, replay on recovery
+    user_message: "Saving is delayed — your meeting data is buffered and will sync automatically."
+
+  poi:
+    failure_threshold: 3
+    window_seconds: 60
+    success_threshold: 1
+    degraded_mode: CACHED_THEN_HARDCODED
+    user_message: null                   # invisible to the user, by design
+
+  gcs:
+    failure_threshold: 5
+    window_seconds: 30
+    success_threshold: 2
+    degraded_mode: LOCAL_DISK_SPOOL      # bounded; graceful stop if the bound is hit
+    user_message: "Upload delayed — recording continues locally."
+
+  tavily:
+    failure_threshold: 3
+    window_seconds: 60
+    success_threshold: 1
+    degraded_mode: SKIP_RESEARCH
+    user_message: "Web research unavailable — questionnaire generated from what you provided."

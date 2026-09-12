@@ -34,6 +34,12 @@ jobs:
         with:
           python-version: '3.12'
           cache: 'pip'
+          # Without this the default glob is recursive, so the key hashes
+          # every requirements.txt in the monorepo and an unrelated service
+          # invalidates this job's cache.
+          cache-dependency-path: |
+            ai-brand-automator/requirements.txt
+            ai-brand-automator/requirements-dev.txt
       
       - name: Install dependencies
         run: |
@@ -47,6 +53,20 @@ jobs:
           black --check .
           flake8 .
           pylint --load-plugins pylint_django --django-settings-module=brand_automator.settings */**.py || true
+
+      # Assertions that pass regardless of behaviour. A sweep of the OIA suite
+      # found four, each of which survived review because a passing test reads
+      # as a covered one. Suppressible, but only with a written reason.
+      #
+      # apps/integrations was outside the gate until D-03: the D-02 and D-03
+      # suites had been checked by hand and never by CI, which is the same as
+      # not being checked — a gate that covers only the directory it was
+      # written for stops being a gate as soon as the next one appears.
+      - name: Check for weak assertions
+        run: |
+          python scripts/check_weak_assertions.py \
+            ai-brand-automator/apps/onboarding/tests \
+            ai-brand-automator/apps/integrations/tests
       
       - name: Run security scan
         run: |
@@ -67,7 +87,11 @@ jobs:
         run: |
           cd ai-brand-automator
           python manage.py migrate_schemas --shared --noinput
-          pytest --cov=. --cov-report=xml --cov-report=html
+          # Everything except the property tests, which run in the
+          # backend-property-tests job alongside this one. --durations=25
+          # keeps reporting where the remaining time goes.
+          pytest -m "not property" --cov=. --cov-report=xml \
+            --cov-report=html --durations=25
       
       - name: Test MCP Server
         env:
@@ -89,6 +113,68 @@ jobs:
         with:
           files: ./ai-brand-automator/coverage.xml
           flags: backend
+
+  # Backend Property Tests (Hypothesis; split out so they run in
+  # parallel with backend-tests rather than behind it)
+  backend-property-tests:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          # Without this the default glob is recursive, so the key hashes
+          # every requirements.txt in the monorepo and an unrelated service
+          # invalidates this job's cache.
+          cache-dependency-path: |
+            ai-brand-automator/requirements.txt
+            ai-brand-automator/requirements-dev.txt
+      
+      - name: Install dependencies
+        run: |
+          cd ai-brand-automator
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      
+      - name: Run tests
+        env:
+          SECRET_KEY: test-secret-key-for-ci
+          DB_NAME: test_db
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_SSLMODE: disable
+          DB_CHANNEL_BINDING: disable
+          DEBUG: True
+        run: |
+          cd ai-brand-automator
+          python manage.py migrate_schemas --shared --noinput
+          # Only the property tests. They dominated the 4h run — the 25
+          # slowest were all Hypothesis tests — so running them beside the
+          # rest turns a serial 4h into two shorter jobs in parallel.
+          # No coverage: this job exists for wall-clock, and backend-tests
+          # already uploads the coverage report.
+          pytest -m property --durations=25
 
   # Media Curation Tests
   test-media-curation:
@@ -306,6 +392,89 @@ jobs:
         working-directory: odoo-worker-agent-svc
         run: pytest tests/ -v -m "not integration"
 
+  onboarding-intelligence-agent-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        working-directory: onboarding-intelligence-agent-svc
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Download spaCy model
+        run: python -m spacy download en_core_web_sm
+        working-directory: onboarding-intelligence-agent-svc
+
+      - name: Lint
+        working-directory: onboarding-intelligence-agent-svc
+        run: |
+          black --check app/ tests/
+          flake8 app/ tests/
+
+      # Assertions that pass regardless of behaviour. A sweep of this suite
+      # found four, each of which had survived review because a passing test
+      # reads as a covered one. Suppressible, but only with a written reason.
+      - name: Check for weak assertions
+        run: python scripts/check_weak_assertions.py onboarding-intelligence-agent-svc/tests
+
+      - name: Type check
+        working-directory: onboarding-intelligence-agent-svc
+        run: mypy app/
+
+      # A real broker for the AC-1 round-trip and DLQ tests. Redpanda rather
+      # than a Kafka service container: it speaks the Kafka protocol, needs no
+      # ZooKeeper, and starts in seconds on a runner.
+      - name: Start Kafka (Redpanda)
+        run: |
+          docker run -d --name ci-kafka -p 39092:9092 \
+            redpandadata/redpanda:v24.2.7 redpanda start \
+            --smp 1 --memory 512M --overprovisioned --node-id 0 --check=false \
+            --kafka-addr PLAINTEXT://0.0.0.0:9092 \
+            --advertise-kafka-addr PLAINTEXT://localhost:39092
+          for i in $(seq 1 60); do
+            if docker exec ci-kafka rpk cluster info >/dev/null 2>&1; then
+              echo "kafka ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::warning::Kafka never became ready; broker tests will skip"
+
+      - name: Test (unit + coverage)
+        working-directory: onboarding-intelligence-agent-svc
+        env:
+          OIA_TEST_REDIS_URL: redis://localhost:6379/2
+        run: pytest tests/ -v -m "not integration and not e2e" --cov=app --cov-report=term-missing --cov-fail-under=55
+
+      - name: Test (integration + coverage)
+        working-directory: onboarding-intelligence-agent-svc
+        env:
+          OIA_TEST_KAFKA: localhost:39092
+          OIA_TEST_REDIS_URL: redis://localhost:6379/2
+        run: pytest tests/ -v -m "integration" --cov=app --cov-report=term-missing --cov-fail-under=55
+
+      - name: Test (fast e2e)
+        working-directory: onboarding-intelligence-agent-svc
+        env:
+          OIA_TEST_REDIS_URL: redis://localhost:6379/2
+        run: pytest tests/e2e/ -v -m "e2e" --ignore=tests/e2e/test_prep_to_questionnaire.py
+
   # Frontend Tests
   frontend-tests:
     runs-on: ubuntu-latest
@@ -343,8 +512,37 @@ jobs:
       - name: Run tests
         run: |
           cd ai-brand-automator-frontend
-          npm test -- --coverage || echo "No tests configured yet"
-      
+          npm test -- --coverage
+
+      # Browser tests, added by E-02 for claims jsdom cannot make. Its AC-2 is
+      # about rendered geometry — no horizontal scrolling at a 13-inch
+      # viewport, question text not truncated — and jsdom reports every element
+      # as zero by zero.
+      #
+      # It earned its place immediately: it caught the checklist pane scrolling
+      # sideways by 665px on an unbroken reference code, and the page itself
+      # scrolling by 28px. Neither is visible to any jsdom test.
+      #
+      # Deliberately not suffixed with `|| echo`. The step above is (see #565)
+      # and cannot fail; a gate that cannot fail is not a gate.
+      - name: Install Playwright browsers
+        run: |
+          cd ai-brand-automator-frontend
+          npx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: |
+          cd ai-brand-automator-frontend
+          npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: ai-brand-automator-frontend/playwright-report/
+          retention-days: 7
+
       - name: Upload coverage
         uses: codecov/codecov-action@v3
         with:
@@ -392,7 +590,7 @@ jobs:
   # Build Docker Images
   build-images:
     runs-on: ubuntu-latest
-    needs: [backend-tests, test-media-curation, orchestrator-tests, discovery-agent-tests, intelligence-agent-tests, odoo-mcp-server-tests, odoo-worker-tests, frontend-tests, integration-tests]
+    needs: [backend-tests, test-media-curation, orchestrator-tests, discovery-agent-tests, intelligence-agent-tests, odoo-mcp-server-tests, odoo-worker-tests, onboarding-intelligence-agent-tests, frontend-tests, integration-tests]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/development_main'
     
     steps:

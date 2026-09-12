@@ -45,6 +45,7 @@ UTILITY_AGENT_CODES: set[str] = {
     "rag_uploader",
     "orchestrator",
     "odoo_worker",
+    "oia",
 }
 
 # All known agent codes (workflow + utility)

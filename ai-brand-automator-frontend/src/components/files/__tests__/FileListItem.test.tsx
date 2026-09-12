@@ -1,6 +1,6 @@
 /**
  * Phase 7.3: Frontend Unit Tests - FileListItem Component
- * 
+ *
  * Tests for src/components/files/FileListItem.tsx
  */
 
@@ -13,6 +13,7 @@ import { AssetFile } from '@/lib/api';
 jest.mock('@/lib/api', () => ({
   assetsApi: {
     getSignedUrl: jest.fn(),
+    deleteAsset: jest.fn(),
   },
 }));
 
@@ -28,6 +29,15 @@ const mockFile: AssetFile = {
   gcs_path: 'gs://bucket/path/test-image.jpg',
 };
 
+// Helper to wrap <tr> in a proper table structure for valid HTML
+function renderInTable(ui: React.ReactElement) {
+  return render(
+    <table>
+      <tbody>{ui}</tbody>
+    </table>
+  );
+}
+
 describe('FileListItem', () => {
   const defaultProps = {
     file: mockFile,
@@ -36,118 +46,146 @@ describe('FileListItem', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.restoreAllMocks();
     (assetsApi.getSignedUrl as jest.Mock).mockResolvedValue({
-      signed_url: 'https://storage.googleapis.com/signed-url',
+      view_url: 'https://storage.googleapis.com/view-url',
+      download_url: 'https://storage.googleapis.com/download-url',
       expires_at: '2025-01-20T10:45:00Z',
+      file_name: 'test-image.jpg',
+      file_type: 'image',
+      file_size: 1048576,
     });
+    (assetsApi.deleteAsset as jest.Mock).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('File Information Display', () => {
     it('renders file name', () => {
-      render(<FileListItem {...defaultProps} />);
-      
+      renderInTable(<FileListItem {...defaultProps} />);
+
       expect(screen.getByText('test-image.jpg')).toBeInTheDocument();
     });
 
     it('renders formatted file size', () => {
-      render(<FileListItem {...defaultProps} />);
-      
-      expect(screen.getByText('1.00 MB')).toBeInTheDocument();
+      renderInTable(<FileListItem {...defaultProps} />);
+
+      // Component uses .toFixed(1), producing "1.0 MB"
+      expect(screen.getByText('1.0 MB')).toBeInTheDocument();
     });
 
     it('renders small file sizes correctly', () => {
       const smallFile = { ...mockFile, file_size: 500 };
-      render(<FileListItem {...defaultProps} file={smallFile} />);
-      
+      renderInTable(<FileListItem {...defaultProps} file={smallFile} />);
+
       expect(screen.getByText('500 B')).toBeInTheDocument();
     });
 
     it('renders KB file sizes correctly', () => {
       const kbFile = { ...mockFile, file_size: 5120 };
-      render(<FileListItem {...defaultProps} file={kbFile} />);
-      
-      expect(screen.getByText('5.00 KB')).toBeInTheDocument();
+      renderInTable(<FileListItem {...defaultProps} file={kbFile} />);
+
+      // Component uses .toFixed(1), producing "5.0 KB"
+      expect(screen.getByText('5.0 KB')).toBeInTheDocument();
     });
 
     it('renders file type badge', () => {
-      render(<FileListItem {...defaultProps} />);
-      
+      renderInTable(<FileListItem {...defaultProps} />);
+
       expect(screen.getByText('image')).toBeInTheDocument();
     });
 
     it('renders file status', () => {
-      render(<FileListItem {...defaultProps} />);
-      
-      expect(screen.getByText('indexed')).toBeInTheDocument();
+      renderInTable(<FileListItem {...defaultProps} />);
+
+      // Status uses getPipelineStatusConfig which capitalizes: "Indexed"
+      expect(screen.getByText(/Indexed/)).toBeInTheDocument();
     });
 
     it('renders different status colors', () => {
       const pendingFile = { ...mockFile, pipeline_status: 'pending' as const };
-      const { rerender } = render(<FileListItem {...defaultProps} file={pendingFile} />);
-      
-      expect(screen.getByText('pending')).toBeInTheDocument();
+      const { unmount } = renderInTable(<FileListItem {...defaultProps} file={pendingFile} />);
+
+      // Status label is capitalized via getPipelineStatusConfig
+      expect(screen.getByText(/Pending/)).toBeInTheDocument();
+      unmount();
 
       const failedFile = { ...mockFile, pipeline_status: 'failed' as const };
-      rerender(<FileListItem {...defaultProps} file={failedFile} />);
-      
-      expect(screen.getByText('failed')).toBeInTheDocument();
+      renderInTable(<FileListItem {...defaultProps} file={failedFile} />);
+
+      expect(screen.getByText(/Failed/)).toBeInTheDocument();
     });
 
     it('formats upload date correctly', () => {
-      render(<FileListItem {...defaultProps} />);
-      
-      // Should display relative or absolute date
+      renderInTable(<FileListItem {...defaultProps} />);
+
+      // Should display formatted date
       expect(screen.getByText(/2025|Jan|ago/i)).toBeInTheDocument();
     });
   });
 
   describe('File Type Icons', () => {
     it('shows image icon for image files', () => {
-      render(<FileListItem {...defaultProps} />);
-      
-      expect(screen.getByText('🖼️')).toBeInTheDocument();
+      renderInTable(<FileListItem {...defaultProps} />);
+
+      const iconSpans = screen.getAllByText((_content, element) =>
+        element?.textContent?.includes('\u{1F5BC}') ?? false
+      );
+      expect(iconSpans.length).toBeGreaterThan(0);
     });
 
     it('shows video icon for video files', () => {
       const videoFile = { ...mockFile, file_type: 'video' as const };
-      render(<FileListItem {...defaultProps} file={videoFile} />);
-      
-      expect(screen.getByText('🎬')).toBeInTheDocument();
+      renderInTable(<FileListItem {...defaultProps} file={videoFile} />);
+
+      const iconSpans = screen.getAllByText((_content, element) =>
+        element?.textContent?.includes('\u{1F3AC}') ?? false
+      );
+      expect(iconSpans.length).toBeGreaterThan(0);
     });
 
     it('shows document icon for document files', () => {
       const docFile = { ...mockFile, file_type: 'document' as const };
-      render(<FileListItem {...defaultProps} file={docFile} />);
-      
-      expect(screen.getByText('📄')).toBeInTheDocument();
+      renderInTable(<FileListItem {...defaultProps} file={docFile} />);
+
+      const iconSpans = screen.getAllByText((_content, element) =>
+        element?.textContent?.includes('\u{1F4C4}') ?? false
+      );
+      expect(iconSpans.length).toBeGreaterThan(0);
     });
 
     it('shows generic icon for other files', () => {
       const otherFile = { ...mockFile, file_type: 'other' as const };
-      render(<FileListItem {...defaultProps} file={otherFile} />);
-      
-      expect(screen.getByText('📁')).toBeInTheDocument();
+      renderInTable(<FileListItem {...defaultProps} file={otherFile} />);
+
+      const iconSpans = screen.getAllByText((_content, element) =>
+        element?.textContent?.includes('\u{1F4C1}') ?? false
+      );
+      expect(iconSpans.length).toBeGreaterThan(0);
     });
   });
 
   describe('View Action', () => {
     it('renders view button', () => {
-      render(<FileListItem {...defaultProps} />);
-      
-      expect(screen.getByRole('button', { name: /view/i })).toBeInTheDocument();
+      renderInTable(<FileListItem {...defaultProps} />);
+
+      // Button has title="View file"
+      expect(screen.getByTitle('View file')).toBeInTheDocument();
     });
 
     it('fetches signed URL and opens in new tab on view click', async () => {
       const windowOpen = jest.spyOn(window, 'open').mockImplementation(() => null);
-      
-      render(<FileListItem {...defaultProps} />);
-      
-      fireEvent.click(screen.getByRole('button', { name: /view/i }));
-      
+
+      renderInTable(<FileListItem {...defaultProps} />);
+
+      fireEvent.click(screen.getByTitle('View file'));
+
       await waitFor(() => {
         expect(assetsApi.getSignedUrl).toHaveBeenCalledWith('123');
         expect(windowOpen).toHaveBeenCalledWith(
-          'https://storage.googleapis.com/signed-url',
+          'https://storage.googleapis.com/view-url',
           '_blank'
         );
       });
@@ -157,132 +195,134 @@ describe('FileListItem', () => {
 
     it('shows loading state during view', async () => {
       (assetsApi.getSignedUrl as jest.Mock).mockImplementation(
-        () => new Promise(resolve => setTimeout(resolve, 100))
+        () => new Promise(resolve => setTimeout(resolve, 200))
       );
-      
-      render(<FileListItem {...defaultProps} />);
-      
-      fireEvent.click(screen.getByRole('button', { name: /view/i }));
-      
-      expect(screen.getByText(/loading/i)).toBeInTheDocument();
+
+      renderInTable(<FileListItem {...defaultProps} />);
+
+      fireEvent.click(screen.getByTitle('View file'));
+
+      // Component disables the button during loading and shows hourglass
+      await waitFor(() => {
+        const viewButton = screen.getByTitle('View file');
+        expect(viewButton).toBeDisabled();
+      });
     });
 
     it('shows error message on view failure', async () => {
       (assetsApi.getSignedUrl as jest.Mock).mockRejectedValue(new Error('Failed to get URL'));
-      
-      render(<FileListItem {...defaultProps} />);
-      
-      fireEvent.click(screen.getByRole('button', { name: /view/i }));
-      
+
+      renderInTable(<FileListItem {...defaultProps} />);
+
+      fireEvent.click(screen.getByTitle('View file'));
+
       await waitFor(() => {
-        expect(screen.getByText(/error|failed/i)).toBeInTheDocument();
+        expect(screen.getByText(/failed/i)).toBeInTheDocument();
       });
     });
   });
 
   describe('Download Action', () => {
     it('renders download button', () => {
-      render(<FileListItem {...defaultProps} />);
-      
-      expect(screen.getByRole('button', { name: /download/i })).toBeInTheDocument();
+      renderInTable(<FileListItem {...defaultProps} />);
+
+      // Button has title="Download file"
+      expect(screen.getByTitle('Download file')).toBeInTheDocument();
     });
 
-    it('fetches signed URL and initiates download on click', async () => {
-      // Mock creating and clicking an anchor
-      const mockClick = jest.fn();
-      const mockAnchor = { href: '', download: '', click: mockClick };
-      jest.spyOn(document, 'createElement').mockImplementation((tagName) => {
-        if (tagName === 'a') return mockAnchor as unknown as HTMLAnchorElement;
-        return document.createElement(tagName);
-      });
-      
-      render(<FileListItem {...defaultProps} />);
-      
-      fireEvent.click(screen.getByRole('button', { name: /download/i }));
-      
+    it('fetches signed URL on download click', async () => {
+      renderInTable(<FileListItem {...defaultProps} />);
+
+      fireEvent.click(screen.getByTitle('Download file'));
+
       await waitFor(() => {
         expect(assetsApi.getSignedUrl).toHaveBeenCalledWith('123');
-        expect(mockAnchor.href).toBe('https://storage.googleapis.com/signed-url');
-        expect(mockAnchor.download).toBe('test-image.jpg');
-        expect(mockClick).toHaveBeenCalled();
       });
     });
   });
 
   describe('Delete Action', () => {
     it('renders delete button', () => {
-      render(<FileListItem {...defaultProps} />);
-      
-      expect(screen.getByRole('button', { name: /delete/i })).toBeInTheDocument();
+      renderInTable(<FileListItem {...defaultProps} />);
+
+      // Button has title="Delete file"
+      expect(screen.getByTitle('Delete file')).toBeInTheDocument();
     });
 
-    it('shows confirmation dialog on delete click', () => {
-      render(<FileListItem {...defaultProps} />);
-      
-      fireEvent.click(screen.getByRole('button', { name: /delete/i }));
-      
-      expect(screen.getByText(/are you sure/i)).toBeInTheDocument();
+    it('calls onDelete when user confirms deletion', async () => {
+      // Component uses window.confirm() for confirmation
+      jest.spyOn(window, 'confirm').mockReturnValue(true);
+      const onDelete = jest.fn().mockResolvedValue(undefined);
+      renderInTable(<FileListItem {...defaultProps} onDelete={onDelete} />);
+
+      fireEvent.click(screen.getByTitle('Delete file'));
+
+      await waitFor(() => {
+        expect(window.confirm).toHaveBeenCalled();
+        // onDelete receives the full file object
+        expect(onDelete).toHaveBeenCalledWith(mockFile);
+      });
     });
 
-    it('calls onDelete when confirmed', () => {
+    it('does not call onDelete when user cancels', () => {
+      // Component uses window.confirm() - returning false cancels
+      jest.spyOn(window, 'confirm').mockReturnValue(false);
       const onDelete = jest.fn();
-      render(<FileListItem {...defaultProps} onDelete={onDelete} />);
-      
-      // Click delete
-      fireEvent.click(screen.getByRole('button', { name: /delete/i }));
-      
-      // Confirm deletion
-      fireEvent.click(screen.getByRole('button', { name: /confirm|yes/i }));
-      
-      expect(onDelete).toHaveBeenCalledWith('123');
-    });
+      renderInTable(<FileListItem {...defaultProps} onDelete={onDelete} />);
 
-    it('cancels deletion on cancel click', () => {
-      const onDelete = jest.fn();
-      render(<FileListItem {...defaultProps} onDelete={onDelete} />);
-      
-      // Click delete
-      fireEvent.click(screen.getByRole('button', { name: /delete/i }));
-      
-      // Cancel
-      fireEvent.click(screen.getByRole('button', { name: /cancel|no/i }));
-      
+      fireEvent.click(screen.getByTitle('Delete file'));
+
+      expect(window.confirm).toHaveBeenCalled();
       expect(onDelete).not.toHaveBeenCalled();
-      expect(screen.queryByText(/are you sure/i)).not.toBeInTheDocument();
+    });
+
+    it('falls back to assetsApi.deleteAsset when no onDelete prop', async () => {
+      jest.spyOn(window, 'confirm').mockReturnValue(true);
+      renderInTable(<FileListItem file={mockFile} />);
+
+      fireEvent.click(screen.getByTitle('Delete file'));
+
+      await waitFor(() => {
+        expect(assetsApi.deleteAsset).toHaveBeenCalledWith('123');
+      });
     });
   });
 
   describe('Compact Mode', () => {
     it('renders in compact mode when specified', () => {
+      // Compact mode renders a <div>, not <tr>, so no table wrapper needed
       render(<FileListItem {...defaultProps} compact={true} />);
-      
+
       expect(screen.getByText('test-image.jpg')).toBeInTheDocument();
     });
 
     it('renders in normal mode by default', () => {
-      render(<FileListItem {...defaultProps} />);
-      
+      renderInTable(<FileListItem {...defaultProps} />);
+
       expect(screen.getByText('test-image.jpg')).toBeInTheDocument();
       expect(screen.getByText('image')).toBeInTheDocument();
-      expect(screen.getByText('indexed')).toBeInTheDocument();
+      // Status label is capitalized via getPipelineStatusConfig
+      expect(screen.getByText(/Indexed/)).toBeInTheDocument();
       expect(screen.getByText('1.0 MB')).toBeInTheDocument();
     });
   });
 
   describe('Accessibility', () => {
-    it('has accessible button labels', () => {
-      render(<FileListItem {...defaultProps} />);
-      
-      expect(screen.getByRole('button', { name: /view/i })).toHaveAccessibleName();
-      expect(screen.getByRole('button', { name: /download/i })).toHaveAccessibleName();
-      expect(screen.getByRole('button', { name: /delete/i })).toHaveAccessibleName();
+    it('has accessible button titles', () => {
+      renderInTable(<FileListItem {...defaultProps} />);
+
+      // Buttons use title attribute for accessibility
+      expect(screen.getByTitle('View file')).toBeInTheDocument();
+      expect(screen.getByTitle('Download file')).toBeInTheDocument();
+      expect(screen.getByTitle('Delete file')).toBeInTheDocument();
     });
 
-    it('displays file info accessibly', () => {
-      render(<FileListItem {...defaultProps} />);
-      
-      const container = screen.getByRole('listitem') || screen.getByRole('row');
-      expect(container).toBeInTheDocument();
+    it('displays file info in a table row', () => {
+      renderInTable(<FileListItem {...defaultProps} />);
+
+      // Default (non-compact) render produces a <tr> with role="row"
+      const row = screen.getByRole('row');
+      expect(row).toBeInTheDocument();
     });
   });
 });

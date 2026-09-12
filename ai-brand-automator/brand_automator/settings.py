@@ -103,6 +103,13 @@ SHARED_APPS = [
     "analytics",  # Workflow analytics layer
     "optimization",  # Campaign optimization (COA-3.4 background service)
     "intelligence_loop",  # Intelligence Loop Agent (ILA, WF3.5)
+    # OIA session models. Label is "onboarding_sessions", not "onboarding" —
+    # that label belongs to the wizard app above. See apps/onboarding/apps.py.
+    "apps.onboarding.apps.OnboardingSessionsConfig",
+    # Tenant-owned provider connections (D-02). Shared rather than per-tenant:
+    # the row carries its own tenant FK like everything else in this project,
+    # and only the `files` app runs in per-tenant schemas.
+    "apps.integrations.apps.IntegrationsConfig",
 ]
 
 TENANT_APPS = [
@@ -655,6 +662,16 @@ GOOGLE_BUSINESS_REDIRECT_URI = config(
 # Frontend URL for OAuth redirects
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")
 
+# F-03 AC-3. Mirrors `gcs.user_message` in the agent's
+# config/circuit_breakers.yaml, which §18.2 makes the source of truth: "these
+# strings are the entire user experience of a failure". That file ships in the
+# agent's image and this process cannot read it, so the value is duplicated —
+# and apps/onboarding/tests/test_uploads.py reads both and fails if they drift.
+OIA_GCS_DEGRADED_MESSAGE = config(
+    "OIA_GCS_DEGRADED_MESSAGE",
+    default="Upload delayed — recording continues locally.",
+)
+
 # =============================================================================
 # Kafka Configuration
 # =============================================================================
@@ -916,6 +933,32 @@ CELERY_BEAT_SCHEDULE = {
         "task": "orchestration.tasks.check_stale_jobs",
         "schedule": 300.0,  # Every 5 minutes
     },
+    # Google Calendar grants (D-02). Scheduled rather than lazy-on-use, per the
+    # card: a grant revoked in Google's account settings should be discovered
+    # by this sweep and shown as "needs reconnect", not by the operator at the
+    # moment they open the calendar. Hourly is well inside an access token's
+    # life and far cheaper than the alternative of finding out during a
+    # meeting.
+    "refresh-google-calendar-tokens": {
+        "task": "integrations.refresh_calendar_tokens",
+        "schedule": 3600.0,
+    },
+    # D-03 AC-1: an externally created meeting "appears in the calendar pane
+    # within 5 minutes".
+    #
+    # Three, not five. A five-minute cadence cannot meet a five-minute budget:
+    # an event created one second after a cycle waits the best part of a full
+    # interval before the next one starts, and then has to be fetched and
+    # written. Three leaves room for the work.
+    #
+    # Cheap because it is incremental — a sync token means an idle calendar
+    # costs one token refresh and one empty list per cycle, and that cost does
+    # not grow as the calendar does. The card is explicit that a date-range
+    # re-fetch here "will hit quota with a handful of tenants".
+    "sync-google-calendars": {
+        "task": "integrations.sync_calendars",
+        "schedule": 180.0,
+    },
 }
 
 # Explicit flag to enable Kafka consumer Celery tasks.
@@ -983,6 +1026,12 @@ CELERY_BEAT_SCHEDULE["reconcile-analytics-rollups"] = {
     "schedule": crontab(hour=2, minute=0),
 }
 
+# M-03: daily retention enforcement — erase expired onboarding evidence
+CELERY_BEAT_SCHEDULE["enforce-onboarding-retention"] = {
+    "task": "apps.onboarding.erasure.tasks.enforce_retention_windows",
+    "schedule": crontab(hour=3, minute=0),
+}
+
 # ILA: expire stale WF2 approval requests hourly
 CELERY_BEAT_SCHEDULE["expire-ila-wf2-requests"] = {
     "task": "intelligence_loop.tasks.expire_pending_wf2_requests",
@@ -1009,6 +1058,23 @@ ILA_SERVICE_URL = config(
     "ILA_SERVICE_URL", default="http://intelligence-loop-agent-svc:8045"
 )
 ILA_SERVICE_TOKEN = config("ILA_SERVICE_TOKEN", default="dev-service-token")
+
+# Onboarding Intelligence Agent (C-02). Shares the token OIA already presents
+# on its own endpoints, so the trust is symmetric and there is one secret to
+# rotate rather than two. The default matches the fleet's other dev tokens —
+# the upsert endpoint still refuses an empty configured value, so an
+# unconfigured production deploy rejects every write rather than accepting
+# any.
+OIA_SERVICE_URL = config(
+    "OIA_SERVICE_URL", default="http://onboarding-intelligence-agent-svc:8120"
+)
+# Defaults to the orchestrator token rather than a literal, so the two sides
+# agree by construction. Compose gives OIA
+# OIA_SERVICE_TOKEN=${ORCHESTRATOR_SERVICE_TOKEN:-dev-service-token}; a
+# literal default here would mean any deployment that sets
+# ORCHESTRATOR_SERVICE_TOKEN silently 403s every brief write, with the two
+# services each looking correctly configured on their own.
+OIA_SERVICE_TOKEN = config("OIA_SERVICE_TOKEN", default=ORCHESTRATOR_SERVICE_TOKEN)
 # HTTP timeout (seconds) when dispatching jobs to the orchestrator
 ORCHESTRATOR_TIMEOUT = config("ORCHESTRATOR_TIMEOUT", default=30, cast=int)
 # Backend URL for orchestrator callbacks (used to build callback_url in dispatch)

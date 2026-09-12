@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { StepWizard } from '@/components/onboarding/StepWizard';
 import { CompanyForm } from '@/components/onboarding/CompanyForm';
@@ -28,7 +29,7 @@ export default function OnboardingStep1() {
         <div className="mt-8 glass-card p-8">
           <h1 className="text-2xl font-heading font-bold text-white mb-4">Company Information</h1>
           <p className="text-brand-silver/70 font-body mb-8">Tell us about your company to get started with your brand automation.</p>
-          <CompanyForm />
+          <Suspense><CompanyForm /></Suspense>
         </div>
       </div>
     </div>

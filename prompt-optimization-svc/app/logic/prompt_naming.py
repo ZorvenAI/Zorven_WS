@@ -21,19 +21,30 @@ VALID_AGENT_CODES: dict[int, set[str]] = {
     3: {"caa", "cga", "adpub", "coa", "ila"},
 }
 
+# Utility agents (workflow=0) use zorven-<agent>-<skill> naming
+UTILITY_AGENT_CODES: set[str] = {"oia"}
+
 ALL_AGENT_CODES: set[str] = set()
 for codes in VALID_AGENT_CODES.values():
     ALL_AGENT_CODES |= codes
+ALL_AGENT_CODES |= UTILITY_AGENT_CODES
 
 # Reserved skill names that are always valid
 RESERVED_SKILLS = {"system", "planner"}
 
 # Regex for structural validation
 _NAME_PATTERN = re.compile(
-    r"^zorven-wf([1-3])-([a-z][a-z0-9]*)-([a-z][a-z0-9_]*)(?:-([a-z0-9][a-z0-9_]*))?$"
+    r"^zorven-wf([1-3])-([a-z][a-z0-9]*)"
+    r"-([a-z][a-z0-9_]*)(?:-([a-z0-9][a-z0-9_]*))?$"
+)
+_UTILITY_PATTERN = re.compile(
+    r"^zorven-([a-z][a-z0-9]*)" r"-([a-z][a-z0-9_]*)(?:-([a-z0-9][a-z0-9_-]*))?$"
 )
 
-EXPECTED_FORMAT = "zorven-wf<1|2|3>-<agent_code>-<skill>[-<variant>]"
+EXPECTED_FORMAT = (
+    "zorven-wf<1|2|3>-<agent_code>-<skill>[-<variant>]"
+    " or zorven-<agent_code>-<skill>[-<variant>]"
+)
 
 
 @dataclass(frozen=True)
@@ -84,31 +95,45 @@ def validate_prompt_name(name: str) -> PromptNameParts:
         )
 
     match = _NAME_PATTERN.match(name)
-    if not match:
-        raise ValueError(
-            f"Invalid prompt name '{name}'. "
-            f"Expected format: {EXPECTED_FORMAT}. "
-            f"Names must be lowercase with hyphens. "
-            f"Valid agent codes: {', '.join(sorted(ALL_AGENT_CODES))}"
+    if match:
+        workflow = int(match.group(1))
+        agent_code = match.group(2)
+        skill = match.group(3)
+        variant = match.group(4)
+
+        if agent_code not in VALID_AGENT_CODES[workflow]:
+            valid_for_wf = ", ".join(sorted(VALID_AGENT_CODES[workflow]))
+            raise ValueError(
+                f"Agent code '{agent_code}' is not valid "
+                f"for workflow {workflow}. "
+                f"Valid WF{workflow} agent codes: {valid_for_wf}. "
+                f"Use the correct workflow number."
+            )
+
+        return PromptNameParts(
+            workflow=workflow,
+            agent_code=agent_code,
+            skill=skill,
+            variant=variant,
         )
 
-    workflow = int(match.group(1))
-    agent_code = match.group(2)
-    skill = match.group(3)
-    variant = match.group(4)
+    util_match = _UTILITY_PATTERN.match(name)
+    if util_match:
+        agent_code = util_match.group(1)
+        if agent_code in UTILITY_AGENT_CODES:
+            skill = util_match.group(2)
+            variant = util_match.group(3)
+            return PromptNameParts(
+                workflow=0,
+                agent_code=agent_code,
+                skill=skill,
+                variant=variant,
+            )
 
-    # Validate agent code belongs to the specified workflow
-    if agent_code not in VALID_AGENT_CODES[workflow]:
-        valid_for_wf = ", ".join(sorted(VALID_AGENT_CODES[workflow]))
-        raise ValueError(
-            f"Agent code '{agent_code}' is not valid for workflow {workflow}. "
-            f"Valid WF{workflow} agent codes: {valid_for_wf}. "
-            f"Use the correct workflow number for this agent."
-        )
-
-    return PromptNameParts(
-        workflow=workflow,
-        agent_code=agent_code,
-        skill=skill,
-        variant=variant,
+    raise ValueError(
+        f"Invalid prompt name '{name}'. "
+        f"Expected format: {EXPECTED_FORMAT}. "
+        f"Names must be lowercase with hyphens. "
+        f"Valid agent codes: "
+        f"{', '.join(sorted(ALL_AGENT_CODES))}"
     )
