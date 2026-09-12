@@ -728,6 +728,35 @@ return 1
         except (ValueError, TypeError):
             return None
 
+    # ── Multi-stream map (O-03) ──────────────────────────────────────
+
+    async def set_stream_map(self, stream_map: dict[str, dict[str, str]]) -> None:
+        """Store the stream-index → speaker mapping for multi-mic sessions."""
+        import json as _json
+
+        keys = self._keys()
+        key = keys.session(self.session_id)
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.hset(key, "stream_map", _json.dumps(stream_map))
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
+
+    async def get_stream_map(self) -> dict[str, dict[str, str]] | None:
+        """Read the stream map. None means single-stream legacy mode."""
+        import json as _json
+
+        keys = self._keys()
+        key = keys.session(self.session_id)
+        raw = await self.redis.client.hget(key, "stream_map")
+        if raw is None:
+            return None
+        val = raw if isinstance(raw, str) else raw.decode()
+        try:
+            parsed: dict[str, dict[str, str]] = _json.loads(val)
+            return parsed
+        except (ValueError, TypeError):
+            return None
+
     # ── Coverage state (G-06) ────────────────────────────────────────
 
     async def store_coverage(self, coverage: Any) -> None:
