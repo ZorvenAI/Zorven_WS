@@ -124,6 +124,7 @@ def client(app_with_live_redis, django_stub, live_company):
         # is thirty seconds; a suite that waited that out per case would not
         # be run.
         app_with_live_redis.state.live_poll_s = 0.05
+        app_with_live_redis.state.live_slow_check_s = 0.05
         django_stub["company_id"] = live_company
         # No explicit lock cleanup: the per-test company id above is what
         # isolates these, and a teardown that drove the event loop by hand

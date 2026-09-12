@@ -1593,7 +1593,9 @@ async def _hold(
 
     import time as _time
 
-    _SLOW_CHECK_INTERVAL = 10.0
+    _SLOW_CHECK_INTERVAL = float(
+        getattr(websocket.app.state, "live_slow_check_s", 10.0)
+    )
     _last_slow_check = 0.0
 
     try:
