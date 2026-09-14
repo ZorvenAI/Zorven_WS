@@ -24,6 +24,10 @@ export interface FeedbackItem {
   text: string;
   /** ISO-8601. Rendered in the viewer's zone. */
   at: string;
+  /** O-04: speaker name from multi-mic sessions. Undefined for legacy. */
+  speakerName?: string;
+  /** O-04: speaker index for colour assignment. */
+  speaker?: number;
 }
 
 export interface AgentFeedbackStreamProps {
@@ -53,6 +57,17 @@ const KIND_STYLES: Record<FeedbackKind, string> = {
   coverage: 'text-emerald-300',
   gap: 'text-amber-300',
 };
+
+const SPEAKER_COLOURS = [
+  'text-sky-300',
+  'text-emerald-300',
+  'text-violet-300',
+  'text-amber-300',
+  'text-rose-300',
+  'text-cyan-300',
+  'text-lime-300',
+  'text-fuchsia-300',
+] as const;
 
 /**
  * How close to the bottom still counts as "at the bottom".
@@ -153,10 +168,11 @@ export default function AgentFeedbackStream({ items }: AgentFeedbackStreamProps)
           <ol className="space-y-2">
             {items.map((item) => {
               const Icon = ICONS[item.kind];
+              const speakerColour =
+                item.kind === 'transcript' && item.speaker != null
+                  ? SPEAKER_COLOURS[item.speaker % SPEAKER_COLOURS.length]
+                  : undefined;
               return (
-                // Keyed by id, never by index: a keyed-by-index list remounts
-                // every row when one is prepended, and a remount is how an
-                // input inside the tree would lose focus.
                 <li key={item.id} className="flex items-start gap-2">
                   <Icon
                     aria-hidden="true"
@@ -164,10 +180,31 @@ export default function AgentFeedbackStream({ items }: AgentFeedbackStreamProps)
                   />
                   <div className="min-w-0">
                     <p className="text-sm text-white">
-                      <span className={`mr-2 text-xs ${KIND_STYLES[item.kind]}`}>
-                        {KIND_LABELS[item.kind]}
-                      </span>
-                      {item.text}
+                      {item.kind !== 'transcript' && (
+                        <span className={`mr-2 text-xs ${KIND_STYLES[item.kind]}`}>
+                          {KIND_LABELS[item.kind]}
+                        </span>
+                      )}
+                      {item.kind === 'transcript' && item.speakerName ? (
+                        <>
+                          <span
+                            data-testid="speaker-label"
+                            className={`mr-1.5 font-medium ${speakerColour ?? KIND_STYLES.transcript}`}
+                          >
+                            {item.speakerName}:
+                          </span>
+                          {item.text}
+                        </>
+                      ) : item.kind === 'transcript' ? (
+                        <>
+                          <span className={`mr-2 text-xs ${KIND_STYLES.transcript}`}>
+                            {KIND_LABELS.transcript}
+                          </span>
+                          {item.text}
+                        </>
+                      ) : (
+                        item.text
+                      )}
                     </p>
                   </div>
                 </li>

@@ -29,6 +29,7 @@ export interface ServerFrame {
   seq?: number;
   text?: string;
   speaker?: number;
+  speaker_name?: string;
   [key: string]: unknown;
 }
 
