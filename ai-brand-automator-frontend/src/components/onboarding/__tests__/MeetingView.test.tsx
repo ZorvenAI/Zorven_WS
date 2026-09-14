@@ -608,3 +608,64 @@ describe('F-06 · degraded mode banner', () => {
     expect(box).toBeChecked();
   });
 });
+
+// ── O-04 · speaker-labelled live transcript ──────────────────────────
+
+describe('O-04 · speaker-labelled transcript', () => {
+  it('AC-1: transcript line is prefixed with speaker name', () => {
+    const items: FeedbackItem[] = [
+      { id: 'f-1', kind: 'transcript', text: 'Good afternoon.', at: '2026-09-14T10:00:00Z', speakerName: 'John Smith', speaker: 0 },
+    ];
+
+    render(<AgentFeedbackStream items={items} />);
+
+    const label = screen.getByTestId('speaker-label');
+    expect(label).toHaveTextContent('John Smith:');
+    expect(screen.getByText('Good afternoon.')).toBeInTheDocument();
+  });
+
+  it('AC-2: different speakers have different colours', () => {
+    const items: FeedbackItem[] = [
+      { id: 'f-1', kind: 'transcript', text: 'Hello.', at: '2026-09-14T10:00:00Z', speakerName: 'Alice', speaker: 0 },
+      { id: 'f-2', kind: 'transcript', text: 'Hi there.', at: '2026-09-14T10:00:01Z', speakerName: 'Bob', speaker: 1 },
+    ];
+
+    render(<AgentFeedbackStream items={items} />);
+
+    const labels = screen.getAllByTestId('speaker-label');
+    expect(labels).toHaveLength(2);
+    expect(labels[0].className).not.toBe(labels[1].className);
+  });
+
+  it('AC-3: partial transcripts show the current speaker name', () => {
+    const items: FeedbackItem[] = [
+      { id: 'partial-0', kind: 'transcript', text: 'I was say...', at: '2026-09-14T10:00:00Z', speakerName: 'Alice', speaker: 0 },
+    ];
+
+    render(<AgentFeedbackStream items={items} />);
+
+    expect(screen.getByTestId('speaker-label')).toHaveTextContent('Alice:');
+  });
+
+  it('AC-4: legacy speaker=0 without name shows "Transcript" label instead', () => {
+    const items: FeedbackItem[] = [
+      { id: 'f-1', kind: 'transcript', text: 'Some text.', at: '2026-09-14T10:00:00Z' },
+    ];
+
+    render(<AgentFeedbackStream items={items} />);
+
+    expect(screen.queryByTestId('speaker-label')).toBeNull();
+    expect(screen.getByText('Transcript')).toBeInTheDocument();
+  });
+
+  it('non-transcript items still show their kind label', () => {
+    const items: FeedbackItem[] = [
+      { id: 'f-1', kind: 'follow_up', text: 'Ask about revenue.', at: '2026-09-14T10:00:00Z' },
+    ];
+
+    render(<AgentFeedbackStream items={items} />);
+
+    expect(screen.queryByTestId('speaker-label')).toBeNull();
+    expect(screen.getByText('Follow-up')).toBeInTheDocument();
+  });
+});

@@ -140,9 +140,29 @@ export default function MeetingView({
     const at = new Date().toISOString();
     const text = typeof frame.text === 'string' ? frame.text : '';
 
+    const speakerName = typeof frame.speaker_name === 'string' ? frame.speaker_name : undefined;
+    const speaker = typeof frame.speaker === 'number' ? frame.speaker : undefined;
+
     switch (frame.type) {
+      case 'transcript.partial':
+        setLiveFeedback((prev) => {
+          const partialId = `partial-${speaker ?? 0}`;
+          const existing = prev.findIndex((f) => f.id === partialId);
+          const entry: FeedbackItem = { id: partialId, kind: 'transcript', text, at, speakerName, speaker };
+          if (existing >= 0) {
+            const next = [...prev];
+            next[existing] = entry;
+            return next;
+          }
+          return [...prev, entry];
+        });
+        break;
       case 'transcript.final':
-        setLiveFeedback((prev) => [...prev, { id, kind: 'transcript', text, at }]);
+        setLiveFeedback((prev) => {
+          const partialId = `partial-${speaker ?? 0}`;
+          const without = prev.filter((f) => f.id !== partialId);
+          return [...without, { id, kind: 'transcript', text, at, speakerName, speaker }];
+        });
         break;
       case 'notable_fact':
         setLiveFeedback((prev) => [...prev, { id, kind: 'fact', text, at }]);
