@@ -60,6 +60,7 @@ from app.api.schemas import (
     RecoveryFrame,
     ResumeFrame,
     StartFrame,
+    StreamDescriptor,
     TranscriptFinal,
     TranscriptPartial,
 )
@@ -212,6 +213,8 @@ async def _stt_loop(
     codec: str,
     sample_rate: int,
     stt_state: dict[str, Any],
+    speaker: int = 0,
+    speaker_name: str | None = None,
 ) -> None:
     """Background task: feed audio to STT, emit frames.
 
@@ -242,12 +245,20 @@ async def _stt_loop(
                     allowlist=allowlist,
                     batcher=batcher,
                     analysis_state=analysis_state,
+                    speaker=speaker,
+                    speaker_name=speaker_name,
                 )
             else:
                 import time as _time
 
                 _partial_t0 = _time.perf_counter()
-                await _emit_partial(websocket, session, result)
+                await _emit_partial(
+                    websocket,
+                    session,
+                    result,
+                    speaker=speaker,
+                    speaker_name=speaker_name,
+                )
                 from app.metrics import record_stt_partial_latency
 
                 record_stt_partial_latency((_time.perf_counter() - _partial_t0) * 1000)
@@ -350,7 +361,7 @@ async def _stt_recovery_task(
 
             try:
                 async for _ in stt.stream(
-                    _probe_audio(), sample_rate=sample_rate, codec=codec
+                    _probe_audio(), sample_rate=16000, codec="LINEAR16"
                 ):
                     break
             except STTUnavailable:
@@ -390,12 +401,22 @@ async def _stt_recovery_task(
 
 
 async def _emit_partial(
-    websocket: WebSocket, session: LiveSessionManager, result: STTResult
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    result: STTResult,
+    *,
+    speaker: int = 0,
+    speaker_name: str | None = None,
 ) -> None:
     """AC-1: partials within 2 s, no LLM/redaction pass."""
     try:
         seq = await session.next_seq()
-        frame = TranscriptPartial(seq=seq, text=result.text, speaker=0)
+        frame = TranscriptPartial(
+            seq=seq,
+            text=result.text,
+            speaker=speaker,
+            speaker_name=speaker_name,
+        )
         payload = await session.emit(frame)
         await websocket.send_json(payload)
     except WebSocketDisconnect:
@@ -413,6 +434,8 @@ async def _emit_final(
     allowlist: list[str] | None = None,
     batcher: SegmentBatcher | None = None,
     analysis_state: dict[str, Any] | None = None,
+    speaker: int = 0,
+    speaker_name: str | None = None,
 ) -> None:
     """AC-4: persisted redacted, displayed unredacted.
 
@@ -439,7 +462,8 @@ async def _emit_final(
     buffered = TranscriptFinal(
         seq=seq,
         text=redaction.text,
-        speaker=0,
+        speaker=speaker,
+        speaker_name=speaker_name,
         t_start=result.t_start,
         t_end=result.t_end,
         redaction_applied=redaction.applied,
@@ -452,7 +476,8 @@ async def _emit_final(
     displayed = TranscriptFinal(
         seq=seq,
         text=result.text,
-        speaker=0,
+        speaker=speaker,
+        speaker_name=speaker_name,
         t_start=result.t_start,
         t_end=result.t_end,
         redaction_applied=False,
@@ -476,7 +501,8 @@ async def _emit_final(
     if batcher is not None:
         segment = {
             "text": redaction.text,
-            "speaker": 0,
+            "speaker": speaker,
+            "speaker_name": speaker_name,
             "t_start": result.t_start,
             "t_end": result.t_end,
         }
@@ -1222,7 +1248,7 @@ async def _handle_control(
             logger.info("live_start_malformed")
             return
 
-        if stt_state.get("audio_q") is not None:
+        if stt_state.get("audio_q") is not None or stt_state.get("stream_queues"):
             return
 
         await _cancel_recovery(stt_state)
@@ -1241,46 +1267,126 @@ async def _handle_control(
         if batcher_obj is not None:
             batcher_obj.recording_id = start.recording_id
 
-        audio_q: asyncio.Queue[bytes | None] = asyncio.Queue()
-        task = asyncio.create_task(
-            _stt_loop(
-                websocket,
-                session,
-                stt,
-                audio_q,
+        if start.streams:
+            stream_map: dict[int, StreamDescriptor] = {}
+            stream_queues: dict[int, asyncio.Queue[bytes | None]] = {}
+            stream_tasks: dict[int, asyncio.Task[None]] = {}
+
+            for sd in start.streams:
+                stream_map[sd.stream_index] = sd
+                q: asyncio.Queue[bytes | None] = asyncio.Queue()
+                stream_queues[sd.stream_index] = q
+                t = asyncio.create_task(
+                    _stt_loop(
+                        websocket,
+                        session,
+                        stt,
+                        q,
+                        codec=start.codec,
+                        sample_rate=start.sample_rate,
+                        stt_state=stt_state,
+                        speaker=sd.stream_index,
+                        speaker_name=sd.speaker_name,
+                    )
+                )
+                idx = sd.stream_index
+
+                def _on_done(_: Any, _idx: int = idx) -> None:
+                    stream_queues.pop(_idx, None)
+
+                t.add_done_callback(_on_done)
+                stream_tasks[sd.stream_index] = t
+
+            stt_state["stream_map"] = stream_map
+            stt_state["stream_queues"] = stream_queues
+            stt_state["stream_tasks"] = stream_tasks
+
+            if session is not None:
+                try:
+                    await session.set_stream_map(
+                        {
+                            str(k): {
+                                "speaker_name": v.speaker_name,
+                                "speaker_role": v.speaker_role,
+                            }
+                            for k, v in stream_map.items()
+                        }
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.warning("set_stream_map_failed")
+
+            logger.info(
+                "stt_started_multi",
                 codec=start.codec,
                 sample_rate=start.sample_rate,
-                stt_state=stt_state,
+                recording_id=start.recording_id,
+                stream_count=len(start.streams),
             )
-        )
-        stt_state["audio_q"] = audio_q
-        stt_state["stt_task"] = task
-        task.add_done_callback(lambda _: stt_state.update(audio_q=None))
-        logger.info(
-            "stt_started",
-            codec=start.codec,
-            sample_rate=start.sample_rate,
-            recording_id=start.recording_id,
-        )
+        else:
+            audio_q: asyncio.Queue[bytes | None] = asyncio.Queue()
+            task = asyncio.create_task(
+                _stt_loop(
+                    websocket,
+                    session,
+                    stt,
+                    audio_q,
+                    codec=start.codec,
+                    sample_rate=start.sample_rate,
+                    stt_state=stt_state,
+                )
+            )
+            stt_state["audio_q"] = audio_q
+            stt_state["stt_task"] = task
+            task.add_done_callback(lambda _: stt_state.update(audio_q=None))
+            logger.info(
+                "stt_started",
+                codec=start.codec,
+                sample_rate=start.sample_rate,
+                recording_id=start.recording_id,
+            )
         return
 
     if frame_type == ClientFrameType.STOP.value:
         await _cancel_recovery(stt_state)
-        pending_q = stt_state.get("audio_q")
-        if pending_q is not None:
-            pending_q.put_nowait(None)
-            stt_state["audio_q"] = None
-            pending_task = stt_state.get("stt_task")
-            if pending_task is not None and not pending_task.done():
-                try:
-                    await asyncio.wait_for(pending_task, timeout=5.0)
-                except (asyncio.TimeoutError, asyncio.CancelledError):
-                    pending_task.cancel()
+
+        stop_queues: dict[int, asyncio.Queue[bytes | None]] | None = stt_state.get(
+            "stream_queues"
+        )
+        if stop_queues:
+            for sq in stop_queues.values():
+                sq.put_nowait(None)
+            stop_tasks: dict[int, asyncio.Task[None]] = stt_state.get(
+                "stream_tasks", {}
+            )
+            for st in stop_tasks.values():
+                if st is not None and not st.done():
                     try:
-                        await pending_task
-                    except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                        pass
-            stt_state["stt_task"] = None
+                        await asyncio.wait_for(st, timeout=5.0)
+                    except (asyncio.TimeoutError, asyncio.CancelledError):
+                        st.cancel()
+                        try:
+                            await st
+                        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                            pass
+            stt_state["stream_queues"] = None
+            stt_state["stream_tasks"] = None
+            stt_state["stream_map"] = None
+        else:
+            pending_q = stt_state.get("audio_q")
+            if pending_q is not None:
+                pending_q.put_nowait(None)
+                stt_state["audio_q"] = None
+                pending_task = stt_state.get("stt_task")
+                if pending_task is not None and not pending_task.done():
+                    try:
+                        await asyncio.wait_for(pending_task, timeout=5.0)
+                    except (asyncio.TimeoutError, asyncio.CancelledError):
+                        pending_task.cancel()
+                        try:
+                            await pending_task
+                        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                            pass
+                stt_state["stt_task"] = None
         logger.info("stt_stopped")
         return
 
@@ -1651,10 +1757,20 @@ async def _hold(
             if message.get("type") == "websocket.disconnect":
                 return
 
-            # Binary audio → STT queue (F-05)
-            if message.get("bytes") and stt_state.get("audio_q") is not None:
-                stt_state["audio_q"].put_nowait(message["bytes"])
-                continue
+            # Binary audio → STT queue(s) (F-05, O-03)
+            raw_bytes = message.get("bytes")
+            if raw_bytes:
+                stream_queues = stt_state.get("stream_queues")
+                if stream_queues:
+                    if len(raw_bytes) > 1:
+                        stream_idx = raw_bytes[0]
+                        q = stream_queues.get(stream_idx)
+                        if q is not None:
+                            q.put_nowait(raw_bytes[1:])
+                    continue
+                elif stt_state.get("audio_q") is not None:
+                    stt_state["audio_q"].put_nowait(raw_bytes)
+                    continue
 
             await _handle_control(
                 websocket,
@@ -1715,6 +1831,18 @@ async def _hold(
         audio_q = stt_state.get("audio_q")
         if audio_q is not None:
             audio_q.put_nowait(None)
+        cleanup_stream_queues = stt_state.get("stream_queues")
+        if cleanup_stream_queues:
+            for sq in cleanup_stream_queues.values():
+                sq.put_nowait(None)
+        cleanup_stream_tasks = stt_state.get("stream_tasks") or {}
+        for st in cleanup_stream_tasks.values():
+            if st is not None and not st.done():
+                st.cancel()
+                try:
+                    await st
+                except asyncio.CancelledError:
+                    pass
         for key in ("stt_task", "recovery_task"):
             task = stt_state.get(key)
             if task is not None and not task.done():
