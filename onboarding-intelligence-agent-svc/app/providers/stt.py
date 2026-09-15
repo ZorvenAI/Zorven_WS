@@ -74,6 +74,16 @@ class STTAdapter(ABC):
     ) -> AsyncIterator[STTResult]:
         yield  # type: ignore[misc]
 
+    @abstractmethod
+    async def recognize(
+        self,
+        audio: bytes,
+        *,
+        sample_rate: int = 16000,
+        codec: str = "LINEAR16",
+        language: str = "en-US",
+    ) -> str: ...
+
 
 def _dedup_key(result: STTResult) -> tuple[float, str]:
     """Key for deduplicating finals across stream rollover."""
@@ -172,7 +182,9 @@ class GoogleSTTAdapter(STTAdapter):
         except Exception as exc:
             self._breaker.record_failure()
             logger.warning("stt_stream_failed", error=f"{type(exc).__name__}: {exc}")
-            raise STTUnavailable(f"stream failed: {type(exc).__name__}") from exc
+            raise STTUnavailable(
+                "Live transcription interrupted. Recording continues."
+            ) from exc
 
     async def _stream_with_rollover(
         self,
@@ -366,6 +378,57 @@ class GoogleSTTAdapter(STTAdapter):
             cs.ExplicitDecodingConfig.AudioEncoding.LINEAR16,
         )
 
+    async def recognize(
+        self,
+        audio: bytes,
+        *,
+        sample_rate: int = 16000,
+        codec: str = "LINEAR16",
+        language: str = "en-US",
+    ) -> str:
+        if not self.configured:
+            raise STTUnavailable("no GCP project configured for STT")
+
+        try:
+            self._breaker.before_call()
+        except CircuitBreakerOpen as exc:
+            raise STTUnavailable(
+                exc.user_message or f"{exc.dependency} is unavailable",
+                degraded_mode=exc.degraded_mode,
+            ) from exc
+
+        from google.cloud.speech_v2.types import cloud_speech as cs
+
+        config = cs.RecognitionConfig(
+            explicit_decoding_config=cs.ExplicitDecodingConfig(
+                encoding=self._encoding_for(codec),
+                sample_rate_hertz=sample_rate,
+                audio_channel_count=1,
+            ),
+            language_codes=[language],
+            model="short",
+        )
+        request = cs.RecognizeRequest(
+            recognizer=self._recognizer,
+            config=config,
+            content=audio,
+        )
+
+        try:
+            client = self._ensure_client()
+            response = await client.recognize(request=request)
+            self._breaker.record_success()
+        except Exception as exc:
+            self._breaker.record_failure()
+            logger.warning("stt_recognize_failed", error=f"{type(exc).__name__}: {exc}")
+            raise STTUnavailable("Clip transcription failed.") from exc
+
+        parts: list[str] = []
+        for result in response.results:
+            if result.alternatives:
+                parts.append(result.alternatives[0].transcript)
+        return " ".join(parts).strip()
+
 
 # ── Fixture-driven fake ─────────────────────────────────────────────
 
@@ -428,6 +491,17 @@ class FakeSTTAdapter(STTAdapter):
                     await drain_task
                 except asyncio.CancelledError:
                     pass
+
+    async def recognize(
+        self,
+        audio: bytes,
+        *,
+        sample_rate: int = 16000,
+        codec: str = "LINEAR16",
+        language: str = "en-US",
+    ) -> str:
+        finals = [e["text"] for e in self._events if e.get("is_final")]
+        return " ".join(finals).strip() if finals else "Test Speaker"
 
     @staticmethod
     async def _drain_audio(audio: AsyncIterator[bytes]) -> None:

@@ -67,6 +67,7 @@ from apps.onboarding.models import (
     ConsentRecord,
     FieldClassification,
     FieldProvenance,
+    MeetingAttendee,
     MeetingOrigin,
     MeetingRecording,
     MeetingStatus,
@@ -86,6 +87,8 @@ from apps.onboarding.models import (
     tenant_scope_q,
 )
 from apps.onboarding.serializers import (
+    AttendanceRequestSerializer,
+    AttendeeSerializer,
     CaptureListSerializer,
     ConsentRecordSerializer,
     FieldProvenanceSerializer,
@@ -794,6 +797,7 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
 class MeetingRecordingViewSet(
     RoleBasedPermissionMixin,
+    mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
@@ -808,6 +812,7 @@ class MeetingRecordingViewSet(
     queryset = MeetingRecording.objects.all()
 
     role_permissions = {
+        "list": [IsAuthenticated, IsTenantViewer],
         "retrieve": [IsAuthenticated, IsTenantViewer],
         "transcript": [IsAuthenticated, IsTenantViewer],
         "stop": [IsAuthenticated, IsTenantEditor],
@@ -3084,3 +3089,114 @@ def finalize_stuck_session(request, pk):
         },
         status=http.HTTP_200_OK,
     )
+
+
+# ── O-05: Attendance / roll call ────────────────────────────────────
+
+
+@api_view(["POST", "GET"])
+@permission_classes([IsAuthenticated])
+def session_attendance(request, pk):
+    """Create or list attendees for a session's voice roll call."""
+    tenant = getattr(request, "tenant", None)
+    qs = OnboardingSession.objects.filter(tenant_scope_q(tenant))
+    try:
+        session = qs.get(pk=pk)
+    except OnboardingSession.DoesNotExist:
+        return Response(
+            {"detail": "Session not found."},
+            status=http.HTTP_404_NOT_FOUND,
+        )
+
+    if request.method == "GET":
+        attendees = MeetingAttendee.objects.filter(session=session).order_by(
+            "stream_index"
+        )
+        serializer = AttendeeSerializer(attendees, many=True)
+        return Response({"attendees": serializer.data})
+
+    ser = AttendanceRequestSerializer(data=request.data)
+    ser.is_valid(raise_exception=True)
+
+    created = []
+    for item in ser.validated_data["attendees"]:
+        attendee, _ = MeetingAttendee.objects.update_or_create(
+            session=session,
+            stream_index=item["stream_index"],
+            defaults={
+                "tenant": tenant,
+                "name": item["name"],
+                "role": item["role"],
+                "mic_label": item.get("mic_label", ""),
+            },
+        )
+        created.append(attendee)
+
+    out = AttendeeSerializer(created, many=True)
+    return Response({"attendees": out.data}, status=http.HTTP_201_CREATED)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def session_transcribe_clip(request, pk):
+    """Proxy an audio clip to OIA for one-shot transcription (O-05)."""
+    import requests as http_requests
+    from decouple import config
+
+    tenant = getattr(request, "tenant", None)
+    qs = OnboardingSession.objects.filter(tenant_scope_q(tenant))
+    if not qs.filter(pk=pk).exists():
+        return Response(
+            {"detail": "Session not found."},
+            status=http.HTTP_404_NOT_FOUND,
+        )
+
+    audio = request.body
+    if not audio:
+        return Response(
+            {"detail": "Empty audio body."},
+            status=http.HTTP_400_BAD_REQUEST,
+        )
+
+    oia_url = config(
+        "OIA_SERVICE_URL",
+        default="http://onboarding-intelligence-agent-svc:8120",
+    )
+    oia_token = config("OIA_SERVICE_TOKEN", default="")
+
+    headers = {
+        "X-Service-Token": oia_token,
+        "Content-Type": "application/octet-stream",
+        "X-Audio-Codec": request.headers.get("X-Audio-Codec", "WEBM_OPUS"),
+        "X-Audio-Sample-Rate": request.headers.get(
+            "X-Audio-Sample-Rate", "48000"
+        ),
+        "X-Audio-Language": request.headers.get("X-Audio-Language", "en-US"),
+    }
+
+    try:
+        resp = http_requests.post(
+            f"{oia_url.rstrip('/')}/v1/transcribe-clip",
+            data=audio,
+            headers=headers,
+            timeout=(3, 30),
+        )
+    except http_requests.RequestException:
+        return Response(
+            {"detail": "Transcription service unavailable."},
+            status=http.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    if resp.status_code >= 400:
+        return Response(
+            {"detail": "Transcription failed."},
+            status=resp.status_code,
+        )
+
+    try:
+        return Response(resp.json())
+    except ValueError:
+        return Response(
+            {"detail": "Invalid response from transcription service."},
+            status=http.HTTP_502_BAD_GATEWAY,
+        )

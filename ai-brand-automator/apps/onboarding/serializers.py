@@ -18,6 +18,7 @@ from rest_framework import serializers
 from apps.onboarding.models import (
     ConsentRecord,
     FieldProvenance,
+    MeetingAttendee,
     MeetingRecording,
     OnboardingSession,
     Question,
@@ -39,6 +40,7 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
     meeting runs under — the exact thing that pinning exists to prevent.
     """
 
+    company_name = serializers.SerializerMethodField()
     legal_next_states = serializers.SerializerMethodField(
         help_text="Statuses reachable from the current one (§9.4)",
     )
@@ -55,6 +57,7 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
             "id",
             "tenant",
             "company",
+            "company_name",
             "status",
             "escalated_from",
             "questionnaire",
@@ -87,6 +90,10 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
             "legal_next_states",
             "consent",
         ]
+
+    def get_company_name(self, obj) -> str | None:
+        company = getattr(obj, "company", None)
+        return str(company) if company else None
 
     def get_legal_next_states(self, obj) -> list[str]:
         """Advertised so a caller does not have to hold §9.4 in its head.
@@ -678,3 +685,24 @@ class MediaCaptureSerializer(serializers.Serializer):
         if value.size > max_size:
             raise serializers.ValidationError("File size cannot exceed 50MB")
         return value
+
+
+# ── O-05: Attendance / roll call ────────────────────────────────────
+
+
+class AttendeeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MeetingAttendee
+        fields = [
+            "id",
+            "name",
+            "role",
+            "mic_label",
+            "stream_index",
+            "checked_in_at",
+        ]
+        read_only_fields = ["id", "checked_in_at"]
+
+
+class AttendanceRequestSerializer(serializers.Serializer):
+    attendees = AttendeeSerializer(many=True)

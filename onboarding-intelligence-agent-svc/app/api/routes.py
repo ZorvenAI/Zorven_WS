@@ -32,6 +32,7 @@ from app.api.schemas import (
     ProcessRequest,
     ProcessResponse,
     SkillExecuteRequest,
+    TranscribeClipResponse,
     UsageReport,
 )
 from app.cache.conversation import ConversationStore
@@ -691,3 +692,65 @@ async def erasure(request: Request, payload: ErasureRequest) -> ErasureResponse:
         deleted_keys=result_keys,
         total=len(result_keys),
     )
+
+
+# ── O-05: one-shot clip transcription ────────────────────────
+
+
+MAX_CLIP_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+@router.post(
+    "/v1/transcribe-clip",
+    response_model=TranscribeClipResponse,
+    dependencies=[Depends(verify_service_token)],
+)
+async def transcribe_clip(request: Request) -> TranscribeClipResponse:
+    """Transcribe a short audio clip for roll-call name extraction (O-05).
+
+    Accepts raw audio bytes in the request body. Codec and sample rate
+    are passed via headers so the body stays binary.
+    """
+    audio = await request.body()
+    if not audio:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty audio body",
+        )
+    if len(audio) > MAX_CLIP_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Clip exceeds {MAX_CLIP_BYTES} bytes",
+        )
+
+    stt = getattr(request.app.state, "stt", None)
+    if stt is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="STT not configured",
+        )
+
+    codec = request.headers.get("x-audio-codec", "WEBM_OPUS")
+    sample_rate_raw = request.headers.get("x-audio-sample-rate", "48000")
+    try:
+        sample_rate = int(sample_rate_raw)
+    except ValueError:
+        sample_rate = 48000
+    language = request.headers.get("x-audio-language", "en-US")
+
+    from app.providers.stt import STTUnavailable
+
+    try:
+        text = await stt.recognize(
+            audio,
+            sample_rate=sample_rate,
+            codec=codec,
+            language=language,
+        )
+    except STTUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+    return TranscribeClipResponse(text=text, language=language)

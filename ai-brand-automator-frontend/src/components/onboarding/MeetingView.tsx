@@ -38,12 +38,13 @@ import { useTenantRole } from '@/hooks/useTenantRole';
 import AgentFeedbackStream, {
   type FeedbackItem,
 } from '@/components/onboarding/AgentFeedbackStream';
+import AttendanceRollCall from '@/components/onboarding/AttendanceRollCall';
 import QuestionChecklist from '@/components/onboarding/QuestionChecklist';
 import RightRail from '@/components/onboarding/RightRail';
 import ConsentModal from '@/components/onboarding/ConsentModal';
 import MicSetup from '@/components/onboarding/MicSetup';
 import type { MicAssignment } from '@/hooks/useAudioDevices';
-import type { CapturedMedia, ConsentDraft, ConsentState, PreparedQuestion } from '@/lib/onboarding-sessions';
+import type { Attendee, CapturedMedia, ConsentDraft, ConsentState, PreparedQuestion } from '@/lib/onboarding-sessions';
 
 function mergeCaptures(
   local: CapturedMedia[],
@@ -84,6 +85,8 @@ export default function MeetingView({
   const [consentError, setConsentError] = useState<string | null>(null);
   const [micSetupOpen, setMicSetupOpen] = useState(false);
   const [micAssignments, setMicAssignments] = useState<MicAssignment[]>([]);
+  const [rollCallOpen, setRollCallOpen] = useState(false);
+  const [attendees, setAttendees] = useState<Attendee[]>([]);
 
   const granted = consent?.granted === true;
 
@@ -260,9 +263,25 @@ export default function MeetingView({
         onConfirm={(assignments) => {
           setMicAssignments(assignments);
           setMicSetupOpen(false);
+          if (assignments.length > 0) {
+            setRollCallOpen(true);
+          }
         }}
         existing={micAssignments}
       />
+
+      {rollCallOpen && sessionId && (
+        <AttendanceRollCall
+          open={rollCallOpen}
+          sessionId={sessionId}
+          micAssignments={micAssignments}
+          onComplete={(confirmed) => {
+            setAttendees(confirmed);
+            setRollCallOpen(false);
+          }}
+          onCancel={() => setRollCallOpen(false)}
+        />
+      )}
 
       {/*
         The back link lives here, not above this component.

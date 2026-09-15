@@ -452,3 +452,12 @@ class ErasureResponse(BaseModel):
 
     deleted_keys: list[str]
     total: int
+
+
+class TranscribeClipResponse(BaseModel):
+    """O-05 · One-shot transcription result for a short audio clip."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    language: str = "en-US"

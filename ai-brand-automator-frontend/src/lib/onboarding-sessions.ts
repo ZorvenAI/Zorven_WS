@@ -38,6 +38,7 @@ export type SessionStatus =
 export interface OnboardingSessionSummary {
   id: string;
   company: string | null;
+  company_name: string | null;
   status: SessionStatus;
   questionnaire: string | null;
   created_at: string;
@@ -439,7 +440,13 @@ export interface RecordingSession {
   degraded_message: string;
 }
 
-/** Open a MeetingRecording row (B-08) and mint its upload session (F-03). */
+/** Open a MeetingRecording row (B-08) and mint its upload session (F-03).
+ *
+ * The upload session (GCS) is attempted but its failure does not prevent the
+ * recording_id from being returned — the caller needs the id to send the STT
+ * start frame, and refusing to return it because the *upload* endpoint is
+ * unavailable would silently disable live transcription.
+ */
 export async function openRecording(sessionId: string): Promise<RecordingSession> {
   const opened = await apiClient.post(`${BASE}/sessions/${sessionId}/recordings/`, {
     modality: 'AUDIO',
@@ -448,19 +455,29 @@ export async function openRecording(sessionId: string): Promise<RecordingSession
     throw new Error(`API ${opened.status}: ${await opened.text()}`);
   }
   const recording = await opened.json();
+  const rid = String(recording.id);
 
-  const minted = await apiClient.post(
-    `${BASE}/recordings/${recording.id}/upload-session/`,
-    {},
-  );
-  if (!minted.ok) {
-    throw new Error(`API ${minted.status}: ${await minted.text()}`);
+  let sessionUrl = '';
+  let degradedMessage = '';
+  try {
+    const minted = await apiClient.post(
+      `${BASE}/recordings/${recording.id}/upload-session/`,
+      {},
+    );
+    if (minted.ok) {
+      const session = await minted.json();
+      sessionUrl = session.session_url;
+      degradedMessage = session.degraded_message;
+    }
+  } catch {
+    // Upload session unavailable (e.g. GCS not configured locally).
+    // The recording row exists; chunk upload degrades but STT can proceed.
   }
-  const session = await minted.json();
+
   return {
-    recording_id: String(recording.id),
-    session_url: session.session_url,
-    degraded_message: session.degraded_message,
+    recording_id: rid,
+    session_url: sessionUrl,
+    degraded_message: degradedMessage,
   };
 }
 
@@ -579,6 +596,7 @@ export async function getRecordingDetail(
 /** Delete a recording (Admin+ only, §15). */
 export async function deleteRecording(recordingId: string): Promise<void> {
   const response = await apiClient.delete(`${BASE}/recordings/${recordingId}/`);
+  if (response.status === 404) return;
   if (!response.ok) {
     throw new Error(`API ${response.status}: ${await response.text()}`);
   }
@@ -790,4 +808,69 @@ export async function updateRetentionConfig(
     throw new Error(`API ${response.status}: ${await response.text()}`);
   }
   return (await response.json()) as RetentionUpdateResponse;
+}
+
+// ── Voice roll call (O-05) ──────────────────────────────────────────
+
+export interface Attendee {
+  id?: number;
+  name: string;
+  role: 'operator' | 'participant';
+  stream_index: number;
+  mic_label: string;
+}
+
+export interface AttendanceResponse {
+  attendees: Attendee[];
+}
+
+export async function transcribeClip(
+  sessionId: string,
+  audio: Blob,
+  codec = 'audio/webm;codecs=opus',
+): Promise<string> {
+  const buffer = await audio.arrayBuffer();
+  const response = await apiClient.request(
+    `${BASE}/sessions/${sessionId}/transcribe-clip/`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Audio-Codec': codec.includes('opus') ? 'WEBM_OPUS' : 'LINEAR16',
+        'X-Audio-Sample-Rate': '48000',
+      },
+      body: buffer,
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`Transcription failed: ${response.status}`);
+  }
+  const data = (await response.json()) as { text: string };
+  return data.text;
+}
+
+export async function recordAttendance(
+  sessionId: string,
+  attendees: Attendee[],
+): Promise<AttendanceResponse> {
+  const response = await apiClient.post(
+    `${BASE}/sessions/${sessionId}/attendance/`,
+    { attendees },
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as AttendanceResponse;
+}
+
+export async function getAttendance(
+  sessionId: string,
+): Promise<AttendanceResponse> {
+  const response = await apiClient.get(
+    `${BASE}/sessions/${sessionId}/attendance/`,
+  );
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+  return (await response.json()) as AttendanceResponse;
 }
