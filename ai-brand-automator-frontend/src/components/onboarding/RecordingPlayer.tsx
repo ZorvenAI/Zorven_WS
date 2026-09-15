@@ -18,9 +18,11 @@ import {
   getRecordingTranscript,
   type KeyMoment,
   type RecordingDetail,
+  type TranscriptHeader,
   type TranscriptSegment,
 } from '@/lib/onboarding-sessions';
 import TranscriptView from '@/components/onboarding/TranscriptView';
+import LegalTranscriptHeader from '@/components/onboarding/LegalTranscriptHeader';
 
 type Tab = 'summary' | 'transcript';
 
@@ -48,6 +50,8 @@ export default function RecordingPlayer({
   const [transcriptSegments, setTranscriptSegments] = useState<
     TranscriptSegment[] | null
   >(null);
+  const [transcriptHeader, setTranscriptHeader] =
+    useState<TranscriptHeader | null>(null);
   const transcriptLoading =
     activeTab === 'transcript' && transcriptSegments === null;
 
@@ -78,8 +82,11 @@ export default function RecordingPlayer({
     if (activeTab !== 'transcript' || transcriptSegments !== null) return;
     let cancelled = false;
     getRecordingTranscript(recordingId)
-      .then((segs) => {
-        if (!cancelled) setTranscriptSegments(segs);
+      .then((resp) => {
+        if (!cancelled) {
+          setTranscriptSegments(resp.segments);
+          if (resp.header) setTranscriptHeader(resp.header);
+        }
       })
       .catch(() => {
         if (!cancelled) setTranscriptSegments([]);
@@ -341,12 +348,17 @@ export default function RecordingPlayer({
               </div>
             )}
             {!transcriptLoading && transcriptSegments !== null && (
-              <TranscriptView
-                segments={transcriptSegments}
-                currentTime={currentTime}
-                onSeek={seekTo}
-                initialTime={initialTime}
-              />
+              <>
+                {transcriptHeader && (
+                  <LegalTranscriptHeader header={transcriptHeader} />
+                )}
+                <TranscriptView
+                  segments={transcriptSegments}
+                  currentTime={currentTime}
+                  onSeek={seekTo}
+                  initialTime={initialTime}
+                />
+              </>
             )}
           </>
         )}
