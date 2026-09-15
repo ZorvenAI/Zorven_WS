@@ -1190,4 +1190,54 @@ class CalendarSyncConflict(models.Model):
         return f"{self.winner} won for meeting {self.meeting_id}"
 
 
+class MeetingAttendee(models.Model):
+    """A participant in an onboarding meeting (O-05 voice roll call).
+
+    Created during the attendance phase before recording starts. Each row
+    maps a mic (stream_index) to a named speaker, persisting the roll-call
+    result so the legal transcript can reference it.
+    """
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="%(class)ss",
+    )
+    session = models.ForeignKey(
+        OnboardingSession,
+        on_delete=models.CASCADE,
+        related_name="attendees",
+    )
+    recording = models.ForeignKey(
+        MeetingRecording,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="attendees",
+    )
+    name = models.CharField(max_length=255)
+    role = models.CharField(
+        max_length=50, help_text="'operator' or 'participant'"
+    )
+    mic_label = models.CharField(max_length=255, blank=True, default="")
+    stream_index = models.PositiveSmallIntegerField()
+    checked_in_at = models.DateTimeField(auto_now_add=True)
+
+    objects = TenantScopedManager()
+
+    class Meta:
+        ordering = ["stream_index"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session", "stream_index"],
+                name="unique_attendee_per_stream",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.role}) · stream {self.stream_index}"
+
+
 from apps.onboarding.erasure.models import ErasureLog  # noqa: E402, F401

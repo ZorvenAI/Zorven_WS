@@ -51,6 +51,7 @@ function asRole(role: 'admin' | 'editor' | 'viewer') {
 const SESSION = {
   id: 'sess-1',
   company: 'company-1',
+  company_name: 'company-1',
   status: 'READY' as const,
   questionnaire: 'q-1',
   created_at: '2026-08-09T10:00:00Z',

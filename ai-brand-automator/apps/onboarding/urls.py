@@ -33,7 +33,9 @@ from apps.onboarding.views import (
     patch_company_fields,
     patch_session_prompt_versions,
     process_callback,
+    session_attendance,
     session_evidence,
+    session_transcribe_clip,
     update_recording_summary,
     upsert_research_brief,
 )
@@ -76,6 +78,16 @@ urlpatterns = [
         "sessions/<pk>/live-precheck/",
         live_precheck,
         name="onboarding-live-precheck",
+    ),
+    path(
+        "sessions/<pk>/attendance/",
+        session_attendance,
+        name="onboarding-session-attendance",
+    ),
+    path(
+        "sessions/<pk>/transcribe-clip/",
+        session_transcribe_clip,
+        name="onboarding-session-transcribe-clip",
     ),
     # I-02: OIA writes summary results back via X-Service-Token auth.
     path(
