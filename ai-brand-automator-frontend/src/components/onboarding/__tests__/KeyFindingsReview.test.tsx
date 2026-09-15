@@ -86,6 +86,7 @@ function makeSession(overrides: Partial<ProcessSummary> = {}, extras: Partial<Se
   return {
     id: 'sess-1',
     company: 'comp-1',
+    company_name: 'comp-1',
     status: 'REVIEW_PENDING',
     questionnaire: null,
     created_at: '2026-08-01T00:00:00Z',

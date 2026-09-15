@@ -88,6 +88,7 @@ beforeEach(() => {
     {
       id: 'sess-1',
       company: 'Kalyani Roasters',
+      company_name: 'Kalyani Roasters',
       status: 'PREPARING',
       questionnaire: null,
       created_at: '2024-06-01T00:00:00Z',
