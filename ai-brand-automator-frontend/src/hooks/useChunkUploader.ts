@@ -124,6 +124,8 @@ interface StreamMachinery {
   nextAttemptAt: number;
   /** The append in flight, so a close can wait for it rather than skip (AC-4). */
   inflight: Promise<void> | null;
+  /** The session mint in flight, shared so one mic gets one writer. */
+  minting: Promise<SessionInfo | null> | null;
 }
 
 function blankStream(key: number): StreamUploadState {
@@ -145,6 +147,7 @@ function newMachinery(): StreamMachinery {
     halted: false,
     nextAttemptAt: 0,
     inflight: null,
+    minting: null,
   };
 }
 
@@ -234,21 +237,33 @@ export function useChunkUploader({
     async (key: number): Promise<SessionInfo | null> => {
       const state = machineryFor(key);
       if (state.session || !recordingId) return state.session;
-      try {
-        const response = await apiClient.post(
-          `/onboarding/recordings/${recordingId}/upload-session/`,
-          // The legacy stream sends no stream_index, so the server takes the
-          // single-stream path it always took.
-          key === LEGACY_STREAM ? {} : { stream_index: key },
-        );
-        if (!response.ok) return null;
-        const body = (await response.json()) as SessionInfo;
-        state.session = body;
-        state.upload = new ResumableUpload(body.session_url, transport);
-        return body;
-      } catch {
-        return null;
-      }
+      // Concurrent callers share one mint. `apiClient.post` has no timeout, so
+      // a second caller arriving during a slow mint would otherwise open a
+      // second session and build a second ResumableUpload at offset 0 — two
+      // writers PUTting different bodies over the same byte range of one mic's
+      // object.
+      if (state.minting) return state.minting;
+      const mint = (async () => {
+        try {
+          const response = await apiClient.post(
+            `/onboarding/recordings/${recordingId}/upload-session/`,
+            // The legacy stream sends no stream_index, so the server takes the
+            // single-stream path it always took.
+            key === LEGACY_STREAM ? {} : { stream_index: key },
+          );
+          if (!response.ok) return null;
+          const body = (await response.json()) as SessionInfo;
+          state.session = body;
+          state.upload = new ResumableUpload(body.session_url, transport);
+          return body;
+        } catch {
+          return null;
+        } finally {
+          state.minting = null;
+        }
+      })();
+      state.minting = mint;
+      return mint;
     },
     [recordingId, transport, machineryFor],
   );
@@ -303,67 +318,84 @@ export function useChunkUploader({
       // interval and not one timer per attempt.
       if (!final && Date.now() < state.nextAttemptAt) return;
 
-      const active = await openSession(key);
-      if (!active || !state.upload) {
-        patch(key, { status: 'delayed' });
-        return;
-      }
-
-      const held = new Blob(state.buffer);
-      // Non-final chunks must be a whole number of 256 KiB units; the
-      // remainder waits. GCS rejects a misaligned intermediate PUT outright,
-      // and the upload cannot continue afterwards.
-      const length = final ? held.size : alignedLength(held.size);
-      if (length === 0 && !final) {
-        setPerStream((prev) => {
-          const current = prev[key]?.status;
-          // A stream already degraded or stopped is not promoted back to
-          // "uploading" by a flush that had nothing aligned to send.
-          if (
-            current === 'degraded' ||
-            current === 'stopped' ||
-            current === 'uploading'
-          ) {
-            return prev;
-          }
-          return {
-            ...prev,
-            [key]: { ...(prev[key] ?? blankStream(key)), status: 'uploading' },
-          };
-        });
-        return;
-      }
-
+      // Claim the stream before any await, not just before the PUT. Minting a
+      // session is a network call with no timeout, so a mint that outlives the
+      // cadence would let the next tick past this guard, build a second
+      // ResumableUpload at offset 0, and have both writers PUT different bodies
+      // over the same byte range.
       state.busy = true;
-      const inflight = state.upload.send(held.slice(0, length), { final });
-      state.inflight = inflight.then(
-        () => undefined,
-        () => undefined,
-      );
       try {
+        const active = await openSession(key);
+        if (!active || !state.upload) {
+          patch(key, { status: 'delayed' });
+          return;
+        }
+
+        // How many buffered blobs this pass is responsible for. The recorder
+        // keeps appending during the PUT below, and those arrivals sit past
+        // `consumed`, so they can never be re-absorbed — rebuilding the buffer
+        // from the snapshot alone would drop every chunk recorded mid-append.
+        const sentCount = state.buffer.length;
+        const held = new Blob(state.buffer);
+        // Non-final chunks must be a whole number of 256 KiB units; the
+        // remainder waits. GCS rejects a misaligned intermediate PUT outright,
+        // and the upload cannot continue afterwards.
+        const length = final ? held.size : alignedLength(held.size);
+        if (length === 0 && !final) {
+          setPerStream((prev) => {
+            const current = prev[key]?.status;
+            // A stream already degraded or stopped is not promoted back to
+            // "uploading" by a flush that had nothing aligned to send.
+            if (
+              current === 'degraded' ||
+              current === 'stopped' ||
+              current === 'uploading'
+            ) {
+              return prev;
+            }
+            return {
+              ...prev,
+              [key]: { ...(prev[key] ?? blankStream(key)), status: 'uploading' },
+            };
+          });
+          return;
+        }
+
+        const inflight = state.upload.send(held.slice(0, length), { final });
+        state.inflight = inflight.then(
+          () => undefined,
+          () => undefined,
+        );
         const outcome = await inflight;
         if (outcome.ok) {
           const rest = held.slice(length);
-          state.buffer = rest.size ? [rest] : [];
+          const arrived = state.buffer.slice(sentCount);
+          state.buffer = rest.size ? [rest, ...arrived] : arrived;
           state.attempt = 0;
           state.nextAttemptAt = 0;
           patch(key, {
-            pendingBytes: rest.size,
+            pendingBytes: state.buffer.reduce((t, blob) => t + blob.size, 0),
             uploadedBytes: outcome.committed,
-            status: final ? 'idle' : 'uploading',
+            // A halted stream stays "stopped". The bound handler finalises, so
+            // a successful close would otherwise erase the only explanation the
+            // operator gets for why recording ended.
+            status: state.halted ? 'stopped' : final ? 'idle' : 'uploading',
           });
-          setMessage(null);
+          if (!state.halted) setMessage(null);
           return;
         }
 
         if (!outcome.retryable) {
-          patch(key, { status: 'delayed' });
-          setMessage(state.session?.degraded_message ?? null);
+          if (!state.halted) {
+            patch(key, { status: 'delayed' });
+            setMessage(state.session?.degraded_message ?? null);
+          }
           return;
         }
 
         state.attempt += 1;
         state.nextAttemptAt = Date.now() + backoffMs(state.attempt);
+        if (state.halted) return;
         // AC-2: "a transient 'Saving delayed' indicator, not an error". The
         // audio is not lost — it is held, and the next attempt sends it.
         patch(key, { status: state.attempt > 2 ? 'degraded' : 'delayed' });

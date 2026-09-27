@@ -472,6 +472,137 @@ describe('F-03/O-07 · audio is appended during the meeting, not only at the end
   });
 });
 
+describe('F-03/O-07 · audio arriving during a PUT is not lost', () => {
+  /**
+   * A microphone does not stop while an append is in flight.
+   *
+   * `flushStream` snapshots the buffer, awaits the PUT, then rebuilds the
+   * buffer from the snapshot's remainder. Anything the recorder appended during
+   * that await is past `consumed`, so overwriting the array drops it with no
+   * way to re-absorb it. Dormant until the cadence started working — the only
+   * flush used to happen after the recorder had already stopped — and live on
+   * every tick now that it does.
+   */
+  it('keeps chunks that arrive while an append is in flight', async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sent: { size: number }[] = [];
+    const committed = new Map<string, number>();
+    let firstPut = true;
+    const transport: UploadTransport = {
+      async put(url, body) {
+        if (firstPut) {
+          firstPut = false;
+          await gate;
+        }
+        sent.push({ size: body.size });
+        const at = (committed.get(url) ?? 0) + body.size;
+        committed.set(url, at);
+        return { status: 200, range: null };
+      },
+    };
+    stubSessionEndpoint();
+
+    const chunks = [{ blob: blobOf(ALIGN_BYTES), streamIndex: 0 }];
+    const chunksRef = { current: chunks };
+
+    const { result, rerender } = renderHook(
+      ({ count }: { count: number }) =>
+        useChunkUploader({
+          recordingId: 'rec-1',
+          chunksRef,
+          chunkCount: count,
+          recording: true,
+          streams: [{ streamIndex: 0 }],
+          transport,
+        }),
+      { initialProps: { count: chunks.length } },
+    );
+
+    // Start the append; it blocks inside the transport.
+    const inFlight = result.current.finalise();
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
+
+    // The recorder produces more audio while that PUT is open.
+    chunks.push({ blob: blobOf(ALIGN_BYTES), streamIndex: 0 });
+    await act(async () => {
+      rerender({ count: chunks.length });
+    });
+
+    release();
+    await act(async () => {
+      await inFlight;
+    });
+
+    // Flush again: the late chunk must still be there to send.
+    await flushAll(result);
+
+    const total = sent.reduce((t, s) => t + s.size, 0);
+    expect(total).toBe(ALIGN_BYTES * 2);
+  });
+});
+
+describe('F-03/O-07 · a stalled session mint cannot start a second upload', () => {
+  /**
+   * `state.busy` used to be claimed only just before the PUT, after awaiting
+   * the session mint. `apiClient.post` has no timeout, so a mint that outlived
+   * the cadence let the next tick through: a second `ResumableUpload` was built
+   * at offset 0 and both writers PUT different bodies over the same range.
+   * Exactly the degraded case this feature is for.
+   */
+  it('opens one session per mic even when the mint is slow', async () => {
+    const { transport, sent } = recordingTransport();
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const requested: number[] = [];
+    global.fetch = jest.fn(async (input: unknown, init?: RequestInit) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : {};
+      requested.push(body.stream_index);
+      await gate;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          session_url: 'https://upload.example/stream-0',
+          degraded_message: 'Upload delayed — recording continues locally.',
+        }),
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const chunks = [{ blob: blobOf(ALIGN_BYTES), streamIndex: 0 }];
+    const chunksRef = { current: chunks };
+
+    const { result } = renderHook(() =>
+      useChunkUploader({
+        recordingId: 'rec-1',
+        chunksRef,
+        chunkCount: chunks.length,
+        recording: true,
+        streams: [{ streamIndex: 0 }],
+        transport,
+      }),
+    );
+
+    // Two flushes race while the mint is still outstanding.
+    const a = result.current.finalise();
+    const b = result.current.finalise();
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
+
+    release();
+    await act(async () => {
+      await Promise.all([a, b]);
+    });
+
+    // One mint, so one ResumableUpload: no second writer at offset 0.
+    expect(requested).toEqual([0]);
+    expect(new Set(sent.map((s) => s.url)).size).toBe(1);
+  });
+});
+
 describe('O-07 · a halted stream can still be saved', () => {
   /**
    * The bound stops the recording; it must not make the held audio
@@ -512,6 +643,39 @@ describe('O-07 · a halted stream can still be saved', () => {
     expect(sent.some((s) => s.url.endsWith('stream-0'))).toBe(true);
     expect(sent.some((s) => s.url.endsWith('stream-1'))).toBe(true);
     expect(sent.every((s) => s.final)).toBe(true);
+  });
+
+  /**
+   * The bound handler finalises, and a successful close reports `idle` and
+   * clears the message. Without a sticky halt that wipes the `stopped` status
+   * and `BOUND_REACHED_MESSAGE` the bound had just set, so the recording stops
+   * itself and every trace of why disappears — the opposite of AC-3's
+   * "stops gracefully with an explicit message".
+   */
+  it('still explains itself after finalising', async () => {
+    const { transport } = recordingTransport();
+    stubSessionEndpoint();
+    const chunks = [{ blob: blobOf(LOCAL_BOUND_BYTES + 1), streamIndex: 0 }];
+    const chunksRef = { current: chunks };
+
+    const { result } = renderHook(() =>
+      useChunkUploader({
+        recordingId: 'rec-1',
+        chunksRef,
+        chunkCount: chunks.length,
+        recording: true,
+        streams: [{ streamIndex: 0 }],
+        transport,
+        onBoundReached: () => {},
+      }),
+    );
+
+    expect(result.current.status).toBe('stopped');
+    await flushAll(result);
+
+    // RecorderControl renders the alert only when both survive.
+    expect(result.current.status).toBe('stopped');
+    expect(result.current.message).toMatch(/could not be saved/);
   });
 });
 

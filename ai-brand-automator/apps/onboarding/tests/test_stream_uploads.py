@@ -375,6 +375,35 @@ def test_erasure_collects_every_stream_object(public_tenant, recording):
     assert manifest.item_count == len(collected)
 
 
+def test_erasure_lists_each_finalised_stream_object_once(
+    public_tenant, editor, recording
+):
+    """After ``stop`` a stream is reachable from both halves of the collector.
+
+    Listing it twice makes ``erase`` delete it twice, and the second call fails
+    because the object is already gone — which flips the whole erasure's
+    ``completeness_verified`` to False and overstates ``item_count``. The
+    seeded-only test above cannot see this: with no BrandAssets there is
+    nothing to collide with.
+    """
+    from apps.onboarding.erasure.stores.gcs_blobs import GCSBlobStore
+
+    streams = seed_streams(recording, 2)
+    client_for(editor).post(stop_url(recording), {"duration_s": 60}, format="json")
+
+    manifest = GCSBlobStore().collect(
+        tenant_id=public_tenant.pk,
+        session_ids=[recording.session_id],
+        subject_name="Sarah Kelso",
+    )
+
+    listed = [entry["path"] for entry in manifest.details["gcs_paths"]]
+    assert len(listed) == len(set(listed)), f"duplicated paths: {listed}"
+    for stream in streams:
+        assert listed.count(stream["gcs_path"]) == 1
+    assert manifest.item_count == len(listed)
+
+
 # ── The library surface ──────────────────────────────────────────────
 
 
