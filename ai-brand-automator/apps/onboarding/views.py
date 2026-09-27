@@ -48,6 +48,11 @@ from tenants.models import Tenant
 
 from apps.onboarding import errors
 from apps.onboarding.commands import publish_consent_revoked
+from apps.onboarding.transcript_assembler import (
+    assemble_header,
+    build_speaker_map,
+    enrich_segments,
+)
 from apps.onboarding.erasure.tasks import execute_erasure_cascade
 from apps.onboarding.field_map import all_mapped_fields, label_for, page_for
 from apps.onboarding.live_tickets import USABLE_SECONDS, mint, resolve
@@ -857,20 +862,58 @@ class MeetingRecordingViewSet(
 
     @action(detail=True, methods=["get"])
     def transcript(self, request, pk=None):
-        """``GET /recordings/{id}/transcript/`` — post-redaction segments (I-03).
+        """``GET /recordings/{id}/transcript/`` — post-redaction segments (I-03, O-06).
 
         FR-LIB-03: the complete transcript for reading, searching and seeking.
         No role can read pre-redaction text — the stored segments are already
         redacted by F-05's pipeline before they enter Redis and are persisted
         here as-is.
+
+        O-06 extends this to include a legal header (date, attendees, consent)
+        and resolve speaker names in each segment.
         """
         recording = self.get_object()
         segments = recording.transcript or []
+
+        attendees = list(
+            MeetingAttendee.objects.filter(session=recording.session)
+            .order_by("stream_index")
+            .values("name", "role", "mic_label", "stream_index", "checked_in_at")
+        )
+        speaker_map = build_speaker_map(attendees)
+        enriched = enrich_segments(segments, speaker_map)
+
+        consent_qs = ConsentRecord.objects.filter(
+            session=recording.session, revoked_at__isnull=True
+        ).order_by("-granted_at")
+        consent_row = consent_qs.first()
+        consent_dict = None
+        if consent_row:
+            consent_dict = {
+                "subject_name": consent_row.subject_name,
+                "method": consent_row.method,
+                "granted_at": consent_row.granted_at.isoformat()
+                if consent_row.granted_at
+                else None,
+                "scope": consent_row.scope or {},
+            }
+
+        session = recording.session
+        company = getattr(session, "company", None)
+        company_name = str(company) if company else None
+        header = assemble_header(
+            recording=recording,
+            attendees=[dict(a) for a in attendees],
+            consent=consent_dict,
+            session_company=company_name,
+        )
+
         return Response(
             {
                 "recording_id": str(recording.pk),
                 "duration_s": recording.duration_s,
-                "segments": segments,
+                "header": header,
+                "segments": enriched,
             }
         )
 
@@ -975,6 +1018,51 @@ class MeetingRecordingViewSet(
         if asset is not None:
             recording.audio_asset = asset
             fields.append("audio_asset")
+
+        # O-06: snapshot attendees and consent at stop time so the legal
+        # header is frozen even if the data changes later.
+        attendees = list(
+            MeetingAttendee.objects.filter(session=recording.session)
+            .order_by("stream_index")
+            .values("name", "role", "mic_label", "stream_index", "checked_in_at")
+        )
+        consent_qs = ConsentRecord.objects.filter(
+            session=recording.session, revoked_at__isnull=True
+        ).order_by("-granted_at")
+        consent_row = consent_qs.first()
+        consent_snapshot = None
+        if consent_row:
+            consent_snapshot = {
+                "subject_name": consent_row.subject_name,
+                "method": consent_row.method,
+                "granted_at": consent_row.granted_at.isoformat()
+                if consent_row.granted_at
+                else None,
+                "scope": consent_row.scope or {},
+            }
+        recording.summary = {
+            **recording.summary,
+            "legal_header": {
+                "started_at_utc": recording.started_at.isoformat()
+                if recording.started_at
+                else None,
+                "attendees": [
+                    {
+                        "name": a["name"],
+                        "role": a["role"],
+                        "mic_label": a["mic_label"],
+                        "stream_index": a["stream_index"],
+                        "checked_in_at": a["checked_in_at"].isoformat()
+                        if a.get("checked_in_at")
+                        else None,
+                    }
+                    for a in attendees
+                ],
+                "consent": consent_snapshot,
+            },
+        }
+        if "summary" not in fields:
+            fields.append("summary")
 
         recording.save(update_fields=fields)
 

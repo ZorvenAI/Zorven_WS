@@ -137,9 +137,13 @@ function setupMocks(
     stopped_at: '2026-08-01T00:02:00Z',
     summary: { text: 'Test summary', key_moments: [] },
   } as RecordingDetail);
-  mockApi.getRecordingTranscript.mockResolvedValue([
-    { text: 'Hello', speaker: 0, t_start: 0, t_end: 2, redaction_applied: false },
-  ]);
+  mockApi.getRecordingTranscript.mockResolvedValue({
+    recording_id: 'rec-1',
+    duration_s: 120,
+    segments: [
+      { text: 'Hello', speaker: 0, t_start: 0, t_end: 2, redaction_applied: false },
+    ],
+  });
   mockApi.confirmProvenance.mockResolvedValue(makeRow({ status: 'CONFIRMED' }));
   mockApi.editProvenance.mockResolvedValue(makeRow({ status: 'EDITED' }));
   mockApi.submitReview.mockResolvedValue(makeSession());

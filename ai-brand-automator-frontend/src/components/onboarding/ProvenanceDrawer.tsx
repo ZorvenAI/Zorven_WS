@@ -31,9 +31,9 @@ export default function ProvenanceDrawer({
     let cancelled = false;
     const fetchTranscript = async () => {
       try {
-        const segs = await getRecordingTranscript(recordingId);
+        const resp = await getRecordingTranscript(recordingId);
         if (!cancelled) {
-          setSegments(segs);
+          setSegments(resp.segments);
           setError(null);
         }
       } catch (err) {

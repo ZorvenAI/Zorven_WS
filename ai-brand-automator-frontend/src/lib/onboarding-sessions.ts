@@ -184,19 +184,50 @@ export interface RecordingDetail extends RecordingItem {
   playback_url?: string;
 }
 
-/** A single transcript segment (I-03). */
+/** A single transcript segment (I-03, O-06). */
 export interface TranscriptSegment {
   text: string;
   speaker: number;
+  speaker_name?: string | null;
   t_start: number;
   t_end: number;
   redaction_applied: boolean;
 }
 
-/** Response from GET /recordings/{id}/transcript/ (I-03). */
+/** Attendee in the legal transcript header (O-06). */
+export interface TranscriptAttendee {
+  name: string;
+  role: string;
+  mic_label: string;
+  stream_index: number;
+  checked_in_at: string | null;
+}
+
+/** Consent snapshot in the legal transcript header (O-06). */
+export interface TranscriptConsent {
+  subject_name: string;
+  method: string;
+  granted_at: string | null;
+  scope: Record<string, boolean>;
+}
+
+/** Legal transcript header assembled from auto-captured metadata (O-06). */
+export interface TranscriptHeader {
+  date: string | null;
+  time_utc: string | null;
+  started_at_iso: string | null;
+  stopped_at_iso: string | null;
+  session_id: string;
+  session_company: string | null;
+  attendees: TranscriptAttendee[];
+  consent: TranscriptConsent | null;
+}
+
+/** Response from GET /recordings/{id}/transcript/ (I-03, O-06). */
 export interface TranscriptResponse {
   recording_id: string;
   duration_s: number | null;
+  header?: TranscriptHeader;
   segments: TranscriptSegment[];
 }
 
@@ -602,18 +633,17 @@ export async function deleteRecording(recordingId: string): Promise<void> {
   }
 }
 
-/** Fetch transcript segments for a recording (I-03). */
+/** Fetch transcript with legal header for a recording (I-03, O-06). */
 export async function getRecordingTranscript(
   recordingId: string,
-): Promise<TranscriptSegment[]> {
+): Promise<TranscriptResponse> {
   const response = await apiClient.get(
     `${BASE}/recordings/${recordingId}/transcript/`,
   );
   if (!response.ok) {
     throw new Error(`API ${response.status}: ${await response.text()}`);
   }
-  const data = (await response.json()) as TranscriptResponse;
-  return data.segments;
+  return (await response.json()) as TranscriptResponse;
 }
 
 // ── Provenance (K-01) ───────────────────────────────────────────────

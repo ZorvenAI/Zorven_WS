@@ -15,7 +15,8 @@ const SPEAKER_COLORS: Record<number, string> = {
   1: 'text-emerald-400',
 };
 
-function speakerLabel(speaker: number): string {
+function speakerLabel(speaker: number, name?: string | null): string {
+  if (name) return name;
   return `Speaker ${speaker + 1}`;
 }
 
@@ -338,7 +339,7 @@ export default function TranscriptView({
                   data-testid="speaker-label"
                   data-speaker={seg.speaker}
                 >
-                  {speakerLabel(seg.speaker)}
+                  {speakerLabel(seg.speaker, seg.speaker_name)}
                 </span>
 
                 {/* Text */}

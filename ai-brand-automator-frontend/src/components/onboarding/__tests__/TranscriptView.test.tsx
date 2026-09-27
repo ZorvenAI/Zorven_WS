@@ -170,6 +170,25 @@ it('shows empty state when no segments', () => {
   expect(screen.getByText(/No transcript available/)).toBeInTheDocument();
 });
 
+it('O-06 AC-4: shows speaker_name when available', () => {
+  const namedSegments: TranscriptSegment[] = [
+    seg({ text: 'Hello.', speaker: 0, speaker_name: 'John Smith' }),
+    seg({ text: 'Hi.', speaker: 1, speaker_name: 'Mario Rossi', t_start: 2.0 }),
+    seg({ text: 'Bye.', speaker: 2, t_start: 4.0 }),
+  ];
+  render(
+    <TranscriptView
+      segments={namedSegments}
+      currentTime={0}
+      onSeek={jest.fn()}
+    />,
+  );
+  const labels = screen.getAllByTestId('speaker-label');
+  expect(labels[0]).toHaveTextContent('John Smith');
+  expect(labels[1]).toHaveTextContent('Mario Rossi');
+  expect(labels[2]).toHaveTextContent('Speaker 3');
+});
+
 it('deep link scrolls to segment at initialTime', () => {
   const scrollSpy = Element.prototype.scrollIntoView as jest.Mock;
   scrollSpy.mockClear();
