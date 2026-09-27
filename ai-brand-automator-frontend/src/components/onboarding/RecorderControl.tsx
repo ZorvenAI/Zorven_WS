@@ -92,6 +92,8 @@ export default function RecorderControl({
   const [recordingId, setRecordingId] = useState<string | null>(null);
   const elapsedAtStop = useRef(0);
   const sentChunkIndex = useRef(0);
+  /** Set below, so the bound handler can reach `end` without a cycle. */
+  const endRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
     if (!recording || !sendBinary) return;
@@ -119,8 +121,17 @@ export default function RecorderControl({
     chunksRef,
     chunkCount,
     recording,
+    // O-07: one upload session per mic. Omitted when there are no
+    // assignments, which keeps the single-mic upload exactly as it was.
+    streams: useMulti ? multiDevices : undefined,
     // AC-3: the local bound stops the recording rather than discarding audio.
-    onBoundReached: () => void stop(),
+    //
+    // `endRef`, not `stop`: stopping the recorder alone left the held audio
+    // unflushed and the recording row in RECORDING with no BrandAsset, while
+    // the operator was told ten minutes were "waiting to upload". Going through
+    // the same path as the stop button is what makes that message true. A ref
+    // because `end` is declared below and closes over this uploader.
+    onBoundReached: () => void endRef.current?.(),
   });
   const uploader = injectedUploader ?? ownUploader;
 
@@ -169,6 +180,12 @@ export default function RecorderControl({
       }
     }
   }, [elapsedSeconds, stop, uploader, recordingId, sendControl]);
+
+  // In an effect, not during render: the bound handler only fires from a
+  // timer, so it never needs a value newer than the last commit.
+  useEffect(() => {
+    endRef.current = end;
+  }, [end]);
 
   if (!consentGranted) {
     return (

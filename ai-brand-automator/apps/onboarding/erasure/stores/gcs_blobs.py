@@ -33,11 +33,23 @@ class GCSBlobStore(ErasureStore):
         recordings = MeetingRecording.objects.filter(
             tenant_id=tenant_id, session_id__in=session_ids
         )
-        for rec in recordings.only("upload_gcs_path", "transcript_gcs_path"):
+        for rec in recordings.only(
+            "upload_gcs_path", "transcript_gcs_path", "stream_assets"
+        ):
             if rec.upload_gcs_path:
                 paths.append({"path": rec.upload_gcs_path, "bucket": ""})
             if rec.transcript_gcs_path:
                 paths.append({"path": rec.transcript_gcs_path, "bucket": ""})
+            # O-07: per-mic objects are only reachable through this column.
+            # The BrandAsset sweep below cannot find them — recording assets
+            # are created without `onboarding_session`, so they do not match
+            # its filter — and an erasure that reports success while leaving a
+            # participant's audio in the bucket is the failure M-02 exists to
+            # prevent.
+            for entry in rec.stream_assets or []:
+                path = entry.get("gcs_path")
+                if path:
+                    paths.append({"path": path, "bucket": ""})
 
         assets = BrandAsset.objects.filter(
             tenant_id=tenant_id, onboarding_session_id__in=session_ids

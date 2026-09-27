@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import json
+import re
 import uuid
 
 from django.db import IntegrityError
@@ -918,7 +919,6 @@ class MeetingRecordingViewSet(
         )
 
     @action(detail=True, methods=["post"], url_path="upload-session")
-    @db_transaction.atomic
     def upload_session(self, request, pk=None):
         """``POST /recordings/{id}/upload-session/`` — mint or resume (AC-1).
 
@@ -927,37 +927,159 @@ class MeetingRecordingViewSet(
         restart", and minting a second session for a recording that already
         has one would strand every byte already accepted by the first — the
         operator would re-upload a meeting they had already given us.
+
+        O-07: an optional ``stream_index`` in the body selects a per-mic
+        session instead, held in ``stream_assets``. The same idempotency rule
+        applies per stream, for the same reason. A request without the field
+        takes the single-stream path unchanged.
         """
-        recording = self.get_queryset().select_for_update(of=("self",)).get(pk=pk)
+        stream_index = request.data.get("stream_index")
+        if stream_index is not None:
+            return self._stream_upload_session(request, pk, stream_index)
 
-        if not recording.upload_session_url:
-            try:
-                url, path = create_resumable_session(
-                    recording, origin=request.headers.get("Origin", "")
-                )
-            except UploadSessionError as exc:
-                # 503, not 500: the recording is fine and the operator can
-                # retry. A 500 tells the browser to give up on a meeting that
-                # is still running.
-                return Response(
-                    {"error": "upload_unavailable", "detail": str(exc)},
-                    status=http.HTTP_503_SERVICE_UNAVAILABLE,
-                )
-            recording.upload_session_url = url
-            recording.upload_gcs_path = path
-            recording.save(update_fields=["upload_session_url", "upload_gcs_path"])
+        with db_transaction.atomic():
+            recording = self.get_queryset().select_for_update(of=("self",)).get(pk=pk)
 
-        return Response(
-            {
-                "session_url": recording.upload_session_url,
-                "gcs_path": recording.upload_gcs_path,
-                # AC-3: the browser shows this when uploads are failing, and
-                # it comes from configuration rather than being hardcoded in a
-                # component. §18.2: "these strings are the entire user
-                # experience of a failure".
-                "degraded_message": degraded_message(),
-            }
+            if not recording.upload_session_url:
+                try:
+                    url, path = create_resumable_session(
+                        recording, origin=request.headers.get("Origin", "")
+                    )
+                except UploadSessionError as exc:
+                    # 503, not 500: the recording is fine and the operator can
+                    # retry. A 500 tells the browser to give up on a meeting
+                    # that is still running.
+                    return Response(
+                        {"error": "upload_unavailable", "detail": str(exc)},
+                        status=http.HTTP_503_SERVICE_UNAVAILABLE,
+                    )
+                recording.upload_session_url = url
+                recording.upload_gcs_path = path
+                recording.save(update_fields=["upload_session_url", "upload_gcs_path"])
+
+            return Response(
+                {
+                    "session_url": recording.upload_session_url,
+                    "gcs_path": recording.upload_gcs_path,
+                    # AC-3: the browser shows this when uploads are failing, and
+                    # it comes from configuration rather than being hardcoded in
+                    # a component. §18.2: "these strings are the entire user
+                    # experience of a failure".
+                    "degraded_message": degraded_message(),
+                }
+            )
+
+    def _stream_upload_session(self, request, pk, raw_index):
+        """Mint or resume one mic's session (O-07 AC-1).
+
+        Keyed on ``stream_index`` within ``stream_assets``. Re-minting for a
+        stream that already has a session would strand that mic's uploaded
+        bytes exactly as it would for the single-stream path, and the operator
+        would lose one participant's audio rather than the whole meeting —
+        which is harder to notice.
+
+        The GCS round trip happens **outside** the row lock. The browser opens
+        one session per mic concurrently against the same recording row, so
+        holding the lock across the mint would make N requests queue behind
+        each other, each waiting a full network round trip, and tie up N
+        workers per recording. The lock is taken afterwards, only to merge the
+        result into the JSON column.
+        """
+        # Parsed rather than coerced. `int(1.5)` is 1, so a client bug that
+        # sends a fraction would silently upload to the wrong mic's object
+        # instead of saying so. Booleans are ints in Python and are excluded
+        # for the same reason.
+        if isinstance(raw_index, bool):
+            stream_index = None
+        elif isinstance(raw_index, int):
+            stream_index = raw_index
+        elif isinstance(raw_index, str) and re.fullmatch(r"-?\d+", raw_index.strip()):
+            # Form-encoded clients send strings; the value is still integral.
+            # A full match, not a stripped prefix: `"--5".lstrip("-")` is all
+            # digits but `int("--5")` raises, which would answer a malformed
+            # body with a 500 instead of the 400 below.
+            stream_index = int(raw_index)
+        else:
+            stream_index = None
+
+        if stream_index is None:
+            return Response(
+                {
+                    "error": "invalid_stream_index",
+                    "detail": "stream_index must be an integer.",
+                },
+                status=http.HTTP_400_BAD_REQUEST,
+            )
+        # O-03 carries the index in a single byte, so the protocol cannot
+        # address a stream outside this range.
+        if not 0 <= stream_index <= 255:
+            return Response(
+                {
+                    "error": "invalid_stream_index",
+                    "detail": "stream_index must be between 0 and 255.",
+                },
+                status=http.HTTP_400_BAD_REQUEST,
+            )
+
+        def payload(entry):
+            return Response(
+                {
+                    "session_url": entry["session_url"],
+                    "gcs_path": entry["gcs_path"],
+                    "stream_index": stream_index,
+                    "degraded_message": degraded_message(),
+                }
+            )
+
+        recording = self.get_queryset().get(pk=pk)
+        existing = next(
+            (
+                s
+                for s in recording.stream_assets or []
+                if s.get("stream_index") == stream_index
+            ),
+            None,
         )
+        # The resume case takes no lock and makes no GCS call, which is the
+        # common one: the browser re-asks after a reconnect.
+        if existing and existing.get("session_url"):
+            return payload(existing)
+
+        try:
+            url, path = create_resumable_session(
+                recording,
+                origin=request.headers.get("Origin", ""),
+                stream_index=stream_index,
+            )
+        except UploadSessionError as exc:
+            return Response(
+                {"error": "upload_unavailable", "detail": str(exc)},
+                status=http.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        with db_transaction.atomic():
+            locked = self.get_queryset().select_for_update(of=("self",)).get(pk=pk)
+            streams = list(locked.stream_assets or [])
+            entry = next(
+                (s for s in streams if s.get("stream_index") == stream_index), None
+            )
+            if entry and entry.get("session_url"):
+                # A concurrent request for this same mic won the race. Return
+                # the winner's session so both clients address one object; the
+                # session minted above is left empty and GCS expires it. Two
+                # live sessions for one mic would split its audio across two
+                # objects, which is worse than one abandoned session.
+                return payload(entry)
+            if entry is None:
+                entry = {"stream_index": stream_index}
+                streams.append(entry)
+            entry["session_url"] = url
+            entry["gcs_path"] = path
+            streams.sort(key=lambda s: s.get("stream_index", 0))
+            locked.stream_assets = streams
+            locked.save(update_fields=["stream_assets", "updated_at"])
+
+        return payload(entry)
 
     @action(detail=True, methods=["post"])
     @db_transaction.atomic
@@ -1026,6 +1148,14 @@ class MeetingRecordingViewSet(
             .order_by("stream_index")
             .values("name", "role", "mic_label", "stream_index", "checked_in_at")
         )
+
+        # O-07 AC-4: one BrandAsset per mic, registered inside this same
+        # atomic block as the legacy asset above. Finalisation is all-or-none
+        # across streams — a half-registered meeting would send some
+        # participants' audio through ingestion and silently drop the rest.
+        if self._register_stream_assets(recording, request, attendees):
+            fields.append("stream_assets")
+
         consent_qs = ConsentRecord.objects.filter(
             session=recording.session, revoked_at__isnull=True
         ).order_by("-granted_at")
@@ -1139,6 +1269,79 @@ class MeetingRecordingViewSet(
         )
         recording.finalise_key = key
         return asset
+
+    def _register_stream_assets(self, recording, request, attendees) -> bool:
+        """One BrandAsset per mic stream (O-07 AC-1, AC-4).
+
+        Returns whether ``stream_assets`` changed, so the caller can include
+        it in ``update_fields`` rather than saving the column unconditionally.
+
+        Replay-safe for the same reason ``_register_asset`` is, by a different
+        mechanism: the browser retries finalisation after a network drop, and a
+        second BrandAsset would put one participant's audio through ingestion
+        and into RAG twice. Here the guard is the landing path — unique per
+        mint — rather than an idempotency key, because the key identifies the
+        request and what needs identifying is the object.
+
+        ``speaker_name`` is denormalised onto the entry from O-05's roll call
+        rather than looked up later. The attendee row is editable and the
+        asset is an archive: what the archive claims about who was recorded
+        must be what was true when the recording stopped.
+        """
+        streams = list(recording.stream_assets or [])
+        if not streams:
+            return False
+
+        speaker_names = {
+            a["stream_index"]: a.get("name", "") for a in attendees if a.get("name")
+        }
+
+        company = recording.session.company
+        changed = False
+
+        for entry in streams:
+            index = entry.get("stream_index")
+            path = entry.get("gcs_path")
+            if entry.get("brand_asset_id") or not path:
+                # Already registered, or nothing was uploaded for this mic —
+                # a stream whose session was never minted. Inventing an asset
+                # for absent bytes is worse than leaving the entry bare.
+                continue
+
+            # The landing path is the replay guard: it carries a fresh uuid per
+            # mint, so one already attached to an asset means this stream was
+            # registered by an earlier finalisation attempt.
+            existing = BrandAsset.objects.filter(
+                tenant=recording.tenant, gcs_path=path
+            ).first()
+            asset = existing or BrandAsset.objects.create(
+                tenant=recording.tenant,
+                company=company,
+                # Set, unlike the single-stream asset, so the M-02 BrandAsset
+                # store can find these rows. `DjangoBrandAssetStore` filters on
+                # `onboarding_session`, so leaving it null would delete the
+                # audio from the bucket while the rows describing it — path,
+                # file name, speaker — survived the erasure.
+                onboarding_session=recording.session,
+                file_name=path.rsplit("/", 1)[-1],
+                # "other" for the same reason as the single-stream asset:
+                # §10.1 calls this audio and curation branches on the value.
+                file_type="other",
+                file_size=0,
+                gcs_path=path,
+            )
+            entry["brand_asset_id"] = str(asset.pk)
+            # Set on both branches. A resumed finalisation must leave the entry
+            # in the same state a first-pass one would, or the archive's claim
+            # about who was recorded depends on how many times the browser
+            # retried.
+            if index in speaker_names:
+                entry["speaker_name"] = speaker_names[index]
+            changed = True
+
+        if changed:
+            recording.stream_assets = streams
+        return changed
 
 
 class FieldProvenanceViewSet(
@@ -3256,9 +3459,7 @@ def session_transcribe_clip(request, pk):
         "X-Service-Token": oia_token,
         "Content-Type": "application/octet-stream",
         "X-Audio-Codec": request.headers.get("X-Audio-Codec", "WEBM_OPUS"),
-        "X-Audio-Sample-Rate": request.headers.get(
-            "X-Audio-Sample-Rate", "48000"
-        ),
+        "X-Audio-Sample-Rate": request.headers.get("X-Audio-Sample-Rate", "48000"),
         "X-Audio-Language": request.headers.get("X-Audio-Language", "en-US"),
     }
 

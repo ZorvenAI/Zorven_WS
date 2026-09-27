@@ -412,6 +412,7 @@ describe('F-03 · the operator can see whether audio is safe', () => {
     uploadedBytes: 0,
     pendingBytes: 0,
     message: null,
+    streams: [],
     finalise: async () => {},
     ...over,
   });

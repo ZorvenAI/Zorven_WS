@@ -347,6 +347,7 @@ class MeetingRecordingSerializer(serializers.ModelSerializer):
 
     has_summary = serializers.SerializerMethodField()
     has_transcript = serializers.SerializerMethodField()
+    stream_count = serializers.SerializerMethodField()
 
     class Meta:
         model = MeetingRecording
@@ -357,6 +358,12 @@ class MeetingRecordingSerializer(serializers.ModelSerializer):
             "status",
             "duration_s",
             "audio_asset",
+            # O-07: a count, never the stream_assets blob. Each entry holds a
+            # landing path and a resumable session URL — the latter carries
+            # its own authorisation, so serialising the list would hand every
+            # library reader a writable credential for somebody's meeting
+            # audio. The library only needs to know how many mics there were.
+            "stream_count",
             # transcript_gcs_path is deliberately absent. It is an internal
             # bucket path, and FR-LIB-01 says media is served "only through
             # short-lived signed URLs minted per request" — handing out the
@@ -376,6 +383,9 @@ class MeetingRecordingSerializer(serializers.ModelSerializer):
 
     def get_has_transcript(self, obj) -> bool:
         return bool(obj.transcript)
+
+    def get_stream_count(self, obj) -> int:
+        return len(obj.stream_assets or [])
 
 
 class MeetingRecordingDetailSerializer(MeetingRecordingSerializer):
