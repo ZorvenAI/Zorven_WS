@@ -34,6 +34,13 @@ logger = logging.getLogger(__name__)
 #: ride the pipeline that already exists rather than growing a parallel one.
 LANDING_TEMPLATE = "_landing/{tenant_id}/{token}_{recording_id}.opus"
 
+#: O-07 AC-1's path, one per mic. The card illustrates this as
+#: `recordings/{id}/stream-{index}.webm`, which is not used: dropping the
+#: `_landing/` prefix would take per-stream audio off the ingestion pipeline
+#: that the single-stream path rides, and `.webm` would contradict the
+#: content type both paths actually upload.
+STREAM_LANDING_TEMPLATE = "_landing/{tenant_id}/{token}_{recording_id}_s{index}.opus"
+
 #: What the browser records. Opus in a WebM or Ogg container, per F-02.
 CONTENT_TYPE = "audio/webm"
 
@@ -42,21 +49,34 @@ class UploadSessionError(Exception):
     """A resumable session could not be created."""
 
 
-def landing_path(recording) -> str:
+def landing_path(recording, stream_index: int | None = None) -> str:
     """Where this recording's object lands.
 
     The uuid is not decoration. Two recordings on the same session could
     otherwise collide if a row id were ever reused, and a landing path that
     collides silently overwrites somebody's meeting.
+
+    ``stream_index`` selects the O-07 per-mic path. ``None`` keeps the
+    single-stream path byte-for-byte, so a legacy recording lands exactly
+    where it did before this story.
     """
-    return LANDING_TEMPLATE.format(
+    if stream_index is None:
+        return LANDING_TEMPLATE.format(
+            tenant_id=recording.tenant_id or "public",
+            token=uuid.uuid4().hex[:12],
+            recording_id=recording.pk,
+        )
+    return STREAM_LANDING_TEMPLATE.format(
         tenant_id=recording.tenant_id or "public",
         token=uuid.uuid4().hex[:12],
         recording_id=recording.pk,
+        index=stream_index,
     )
 
 
-def create_resumable_session(recording, *, origin: str = "") -> tuple[str, str]:
+def create_resumable_session(
+    recording, *, origin: str = "", stream_index: int | None = None
+) -> tuple[str, str]:
     """Open a GCS resumable session and return ``(session_url, gcs_path)``.
 
     ``origin`` is passed to GCS so it returns the CORS headers the browser
@@ -80,7 +100,7 @@ def create_resumable_session(recording, *, origin: str = "") -> tuple[str, str]:
             "Google Cloud Storage is not configured; audio cannot be uploaded."
         )
 
-    path = landing_path(recording)
+    path = landing_path(recording, stream_index)
     blob = bucket.blob(path)
     try:
         session_url = blob.create_resumable_upload_session(
@@ -90,7 +110,11 @@ def create_resumable_session(recording, *, origin: str = "") -> tuple[str, str]:
     except Exception as exc:  # noqa: BLE001 - surfaced, never swallowed
         logger.warning(
             "resumable_session_failed",
-            extra={"recording_id": recording.pk, "error": type(exc).__name__},
+            extra={
+                "recording_id": recording.pk,
+                "stream_index": stream_index,
+                "error": type(exc).__name__,
+            },
         )
         raise UploadSessionError(
             "Could not open an upload session with Google Cloud Storage."

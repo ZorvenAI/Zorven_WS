@@ -12,5 +12,9 @@ pydantic>=2.9.0
 pydantic-settings>=2.5.0
 anthropic>=0.84.0
 prometheus-client>=0.21.0
-sqlalchemy>=2.0.0
+# The asyncio extra, not bare sqlalchemy: phase1's test_coverage_properties
+# imports prompt-optimization-svc's tenant_config, which imports
+# sqlalchemy.ext.asyncio. That module needs greenlet, and without it the import
+# fails at collection — aborting the whole phase rather than failing one test.
+sqlalchemy[asyncio]>=2.0.0
 aiokafka>=0.11.0

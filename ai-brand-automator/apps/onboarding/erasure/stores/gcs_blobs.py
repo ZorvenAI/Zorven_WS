@@ -33,11 +33,22 @@ class GCSBlobStore(ErasureStore):
         recordings = MeetingRecording.objects.filter(
             tenant_id=tenant_id, session_id__in=session_ids
         )
-        for rec in recordings.only("upload_gcs_path", "transcript_gcs_path"):
+        for rec in recordings.only(
+            "upload_gcs_path", "transcript_gcs_path", "stream_assets"
+        ):
             if rec.upload_gcs_path:
                 paths.append({"path": rec.upload_gcs_path, "bucket": ""})
             if rec.transcript_gcs_path:
                 paths.append({"path": rec.transcript_gcs_path, "bucket": ""})
+            # O-07: a per-mic object that was never finalised has no BrandAsset
+            # for the sweep below to find, so this column is the only way to
+            # reach it. An erasure that reported success while leaving a
+            # participant's audio in the bucket is the failure M-02 exists to
+            # prevent.
+            for entry in rec.stream_assets or []:
+                path = entry.get("gcs_path")
+                if path:
+                    paths.append({"path": path, "bucket": ""})
 
         assets = BrandAsset.objects.filter(
             tenant_id=tenant_id, onboarding_session_id__in=session_ids
@@ -45,6 +56,19 @@ class GCSBlobStore(ErasureStore):
         for asset in assets.only("gcs_path", "gcs_bucket"):
             if asset.gcs_path:
                 paths.append({"path": asset.gcs_path, "bucket": asset.gcs_bucket})
+
+        # One entry per object. A finalised stream is reachable from both loops
+        # above, and `erase` treats a second delete of the same path as a
+        # failure — GCS reports the object already gone — which would put the
+        # whole erasure's `completeness_verified` at False and overstate
+        # `item_count`. The BrandAsset copy wins where both exist: it carries
+        # the real bucket, while `stream_assets` has no bucket to record.
+        by_path: dict[str, dict[str, str]] = {}
+        for entry in paths:
+            seen = by_path.get(entry["path"])
+            if seen is None or (not seen["bucket"] and entry["bucket"]):
+                by_path[entry["path"]] = entry
+        paths = list(by_path.values())
 
         return ErasureManifest(
             store_name=self.store_name,

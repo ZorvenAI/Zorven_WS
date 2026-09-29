@@ -1,16 +1,26 @@
 'use client';
 
 /**
- * Drains the recorder's queue to a resumable GCS session (F-03).
+ * Drains the recorder's queue into resumable GCS sessions (F-03, O-07).
  *
  * Separate from `useMeetingRecorder` on purpose. §4.3 draws durability and
- * analysis as two arrows for a reason the card spells out: "F-06's degraded
+ * analysis as two arrows for the reason the card spells out: "F-06's degraded
  * mode is only cheap because the durability path never depended on STT being
  * up." The recorder produces chunks; this decides where they go; neither knows
- * about the socket F-04 will add.
+ * about the socket F-04 added.
+ *
+ * O-07 makes the destination per-mic. One stream per microphone, each with its
+ * own resumable session, buffer, backoff and local bound — because the mics are
+ * the only reason the transcript can name a speaker, and concatenating two of
+ * them into one object produces bytes no decoder will accept. Before this story
+ * the hook absorbed every chunk regardless of which mic produced it, so a
+ * two-mic meeting uploaded one interleaved, unplayable object.
+ *
+ * A single-mic recording is one stream that sends no `stream_index`, which is
+ * the pre-O-07 request unchanged.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { apiClient } from '@/lib/api';
 import {
@@ -19,7 +29,6 @@ import {
   backoffMs,
   type UploadTransport,
 } from '@/lib/resumable-upload';
-import type { RecordedChunk } from '@/hooks/useMeetingRecorder';
 import type React from 'react';
 
 export type UploadStatus = 'idle' | 'uploading' | 'delayed' | 'degraded' | 'stopped';
@@ -29,9 +38,13 @@ export type UploadStatus = 'idle' | 'uploading' | 'delayed' | 'degraded' | 'stop
  *
  * The card is specific that it is minutes rather than megabytes, "because that
  * is the unit the operator-facing message needs" — nobody running a meeting
- * can act on "48 MB". Converted through the measured opus rate rather than a
+ * can act on "48 MB". Converted through a measured opus rate rather than a
  * guessed one: Chromium produces ~13.7 KB/s, so ten minutes is about 8 MB,
- * which is well inside what a browser will hold.
+ * well inside what a browser will hold.
+ *
+ * O-07 AC-2 applies it per stream. Each mic holds its own ten minutes: the
+ * limit exists because a browser can only buffer so much per object, and two
+ * mics sharing one allowance would halve the tolerance of every participant.
  */
 export const MAX_LOCAL_MINUTES = 10;
 export const BYTES_PER_SECOND = 13742;
@@ -41,25 +54,55 @@ export const BOUND_REACHED_MESSAGE =
   `Recording stopped: ${MAX_LOCAL_MINUTES} minutes of audio are waiting to ` +
   'upload and could not be saved. Check your connection and try again.';
 
-export interface UseChunkUploader {
+/**
+ * The key for a recording with no per-mic streams.
+ *
+ * Not a stream index: O-03 addresses streams in one byte, so 0–255 are all
+ * real. A recording in this mode sends no `stream_index` at all.
+ */
+const LEGACY_STREAM = -1;
+
+/** What the caller sees about one mic's upload. */
+export interface StreamUploadState {
+  streamIndex: number;
   status: UploadStatus;
-  /** Bytes GCS has acknowledged. The only number that means "safe". */
   uploadedBytes: number;
-  /** Bytes held locally, waiting. */
+  pendingBytes: number;
+}
+
+export interface UseChunkUploader {
+  /** Worst-of across streams: one meeting has one operator-facing status. */
+  status: UploadStatus;
+  /** Bytes GCS has acknowledged, summed. The only number that means "safe". */
+  uploadedBytes: number;
+  /** Bytes held locally, waiting, summed. */
   pendingBytes: number;
   message: string | null;
-  /** Call when the recording stops: flushes the tail and closes the object. */
+  /** Per-mic detail. One entry for a single-mic recording. */
+  streams: StreamUploadState[];
+  /** Call when the recording stops: flushes every tail and closes each object. */
   finalise: () => Promise<void>;
+}
+
+/** The subset of a recorder chunk this hook needs. */
+interface UploadableChunk {
+  blob: Blob;
+  streamIndex?: number;
 }
 
 export interface UseChunkUploaderOptions {
   recordingId: string | null;
-  chunksRef: React.RefObject<RecordedChunk[]>;
+  chunksRef: React.RefObject<readonly UploadableChunk[]>;
   chunkCount: number;
   recording: boolean;
+  /**
+   * One entry per mic (O-07). Omitted or empty means single-stream, which
+   * uploads exactly as it did before this story.
+   */
+  streams?: readonly { streamIndex: number }[];
   /** Injected in tests. */
   transport?: UploadTransport;
-  /** Called when the local bound is hit, so the recorder can stop (AC-3). */
+  /** Called when a local bound is hit, so the recorder can stop (AC-3). */
   onBoundReached?: () => void;
 }
 
@@ -68,148 +111,393 @@ interface SessionInfo {
   degraded_message: string;
 }
 
+/** Everything one stream needs to upload independently (AC-3). */
+interface StreamMachinery {
+  upload: ResumableUpload | null;
+  session: SessionInfo | null;
+  /** Chunks accepted from the recorder but not yet acknowledged by GCS. */
+  buffer: Blob[];
+  attempt: number;
+  busy: boolean;
+  halted: boolean;
+  /** Epoch ms before which no non-final flush should be attempted. */
+  nextAttemptAt: number;
+  /** The append in flight, so a close can wait for it rather than skip (AC-4). */
+  inflight: Promise<void> | null;
+  /** The session mint in flight, shared so one mic gets one writer. */
+  minting: Promise<SessionInfo | null> | null;
+}
+
+function blankStream(key: number): StreamUploadState {
+  return {
+    streamIndex: key,
+    status: 'idle',
+    uploadedBytes: 0,
+    pendingBytes: 0,
+  };
+}
+
+function newMachinery(): StreamMachinery {
+  return {
+    upload: null,
+    session: null,
+    buffer: [],
+    attempt: 0,
+    busy: false,
+    halted: false,
+    nextAttemptAt: 0,
+    inflight: null,
+    minting: null,
+  };
+}
+
+/** Worst-of precedence for the aggregate indicator. */
+const STATUS_RANK: Record<UploadStatus, number> = {
+  idle: 0,
+  uploading: 1,
+  delayed: 2,
+  degraded: 3,
+  stopped: 4,
+};
+
 export function useChunkUploader({
   recordingId,
   chunksRef,
   chunkCount,
   recording,
+  streams,
   transport,
   onBoundReached,
 }: UseChunkUploaderOptions): UseChunkUploader {
-  const [status, setStatus] = useState<UploadStatus>('idle');
-  const [uploadedBytes, setUploaded] = useState(0);
-  const [pendingBytes, setPending] = useState(0);
+  const keys = useMemo(() => {
+    if (!streams || streams.length === 0) return [LEGACY_STREAM];
+    return streams.map((s) => s.streamIndex);
+  }, [streams]);
+
+  const [perStream, setPerStream] = useState<Record<number, StreamUploadState>>({});
   const [message, setMessage] = useState<string | null>(null);
 
-  const upload = useRef<ResumableUpload | null>(null);
-  const session = useRef<SessionInfo | null>(null);
-  /** Chunks accepted from the recorder but not yet acknowledged by GCS. */
-  const buffer = useRef<Blob[]>([]);
-  const consumed = useRef(0);
-  const attempt = useRef(0);
-  const busy = useRef(false);
-  const halted = useRef(false);
+  /**
+   * The active keys, readable from a long-lived interval.
+   *
+   * The cadence effect must not depend on `keys` identity, or a caller passing
+   * a fresh `streams` array each render would re-create the interval before it
+   * could ever fire — the same defect the effect's own comment describes.
+   */
+  const keysRef = useRef(keys);
+  keysRef.current = keys;
 
-  const openSession = useCallback(async (): Promise<SessionInfo | null> => {
-    if (session.current || !recordingId) return session.current;
-    try {
-      const response = await apiClient.post(
-        `/onboarding/recordings/${recordingId}/upload-session/`,
-        {},
-      );
-      if (!response.ok) return null;
-      const body = (await response.json()) as SessionInfo;
-      session.current = body;
-      upload.current = new ResumableUpload(body.session_url, transport);
-      return body;
-    } catch {
-      return null;
+  const machinery = useRef<Map<number, StreamMachinery>>(new Map());
+  /**
+   * One cursor over the shared chunk array, not one per stream.
+   *
+   * The recorder appends every mic's chunks to the same array, so a single
+   * pass routing each chunk to its own buffer cannot drop or duplicate one.
+   * Per-stream cursors would each have to re-scan the whole array and agree
+   * about where they stopped.
+   */
+  const consumed = useRef(0);
+
+  const machineryFor = useCallback((key: number): StreamMachinery => {
+    let state = machinery.current.get(key);
+    if (!state) {
+      state = newMachinery();
+      machinery.current.set(key, state);
     }
-  }, [recordingId, transport]);
+    return state;
+  }, []);
 
   /**
-   * Take everything new from the recorder's queue.
+   * Update one stream's reported state, bailing out when nothing changed.
    *
-   * Indexed rather than drained: the recorder owns its array and F-04 will
-   * read the same one. Consuming it here would make the two readers race for
+   * The bail-out is load-bearing, not an optimisation. `absorb` patches every
+   * stream on every pass, and returning a fresh object each time would re-render
+   * on each pass; any caller whose `chunksRef` identity is not stable then has
+   * its absorb effect re-run, patch again, and render again without end. The
+   * pre-O-07 hook got this for free by storing a number, which React compares
+   * with `Object.is` before scheduling.
+   */
+  const patch = useCallback((key: number, next: Partial<StreamUploadState>) => {
+    setPerStream((prev) => {
+      const base = prev[key] ?? blankStream(key);
+      const merged = { ...base, ...next };
+      if (
+        base.status === merged.status &&
+        base.uploadedBytes === merged.uploadedBytes &&
+        base.pendingBytes === merged.pendingBytes &&
+        prev[key] !== undefined
+      ) {
+        return prev;
+      }
+      return { ...prev, [key]: merged };
+    });
+  }, []);
+
+  const openSession = useCallback(
+    async (key: number): Promise<SessionInfo | null> => {
+      const state = machineryFor(key);
+      if (state.session || !recordingId) return state.session;
+      // Concurrent callers share one mint. `apiClient.post` has no timeout, so
+      // a second caller arriving during a slow mint would otherwise open a
+      // second session and build a second ResumableUpload at offset 0 — two
+      // writers PUTting different bodies over the same byte range of one mic's
+      // object.
+      if (state.minting) return state.minting;
+      const mint = (async () => {
+        try {
+          const response = await apiClient.post(
+            `/onboarding/recordings/${recordingId}/upload-session/`,
+            // The legacy stream sends no stream_index, so the server takes the
+            // single-stream path it always took.
+            key === LEGACY_STREAM ? {} : { stream_index: key },
+          );
+          if (!response.ok) return null;
+          const body = (await response.json()) as SessionInfo;
+          state.session = body;
+          state.upload = new ResumableUpload(body.session_url, transport);
+          return body;
+        } catch {
+          return null;
+        } finally {
+          state.minting = null;
+        }
+      })();
+      state.minting = mint;
+      return mint;
+    },
+    [recordingId, transport, machineryFor],
+  );
+
+  /**
+   * Take everything new from the recorder's queue, routing by mic.
+   *
+   * Indexed rather than drained: the recorder owns its array and F-04 reads
+   * the same one. Consuming it here would make the two readers race for
    * chunks, and the loser silently misses audio.
    */
   const absorb = useCallback(() => {
-    const arr = chunksRef.current;
+    const arr = chunksRef.current ?? [];
+    const legacy = keys.length === 1 && keys[0] === LEGACY_STREAM;
     for (let i = consumed.current; i < arr.length; i += 1) {
-      buffer.current.push(arr[i].blob);
+      const chunk = arr[i];
+      let key = legacy ? LEGACY_STREAM : (chunk.streamIndex ?? keys[0]);
+      // A chunk tagged for a mic nobody declared would land on a key that
+      // neither the cadence nor `finalise` iterates, so its audio would be
+      // invisible — excluded from the byte counters and never uploaded — until
+      // its buffer alone crossed the bound and stopped the whole recording.
+      // It goes to the first declared stream instead: attributing a chunk to
+      // the wrong mic is recoverable, and losing it silently is not.
+      if (!legacy && !keys.includes(key)) key = keys[0];
+      machineryFor(key).buffer.push(chunk.blob);
     }
     consumed.current = arr.length;
-    setPending(buffer.current.reduce((total, blob) => total + blob.size, 0));
+    for (const [key, state] of machinery.current) {
+      patch(key, {
+        pendingBytes: state.buffer.reduce((total, blob) => total + blob.size, 0),
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chunksRef, chunkCount]);
+  }, [chunksRef, chunkCount, keys, machineryFor, patch]);
 
-  const flush = useCallback(
-    async ({ final }: { final: boolean }) => {
-      if (busy.current || halted.current) return;
-      const active = await openSession();
-      if (!active || !upload.current) {
-        setStatus('delayed');
-        return;
+  const flushStream = useCallback(
+    async (key: number, { final }: { final: boolean }) => {
+      const state = machineryFor(key);
+      // `halted` stops the cadence, never the close. The bound means "stop
+      // recording", not "discard what is already held" — and AC-3 rules out
+      // discarding, so a halted stream must still be allowed to finalise.
+      if (state.halted && !final) return;
+      if (state.busy) {
+        if (!final) return;
+        // AC-4: wait for the append already in flight rather than skipping the
+        // close. Returning here would leave the resumable session open with
+        // the bytes we had already PUT stranded and unrecoverable.
+        await state.inflight;
       }
+      // Per-stream backoff, honoured against a shared cadence rather than by
+      // re-arming a timer — see the effect below for why that has to be one
+      // interval and not one timer per attempt.
+      if (!final && Date.now() < state.nextAttemptAt) return;
 
-      const held = new Blob(buffer.current);
-      // Non-final chunks must be a whole number of 256 KiB units; the
-      // remainder waits. GCS rejects a misaligned intermediate PUT outright,
-      // and the upload cannot continue afterwards.
-      const length = final ? held.size : alignedLength(held.size);
-      if (length === 0 && !final) {
-        setStatus(status === 'degraded' ? 'degraded' : 'uploading');
-        return;
-      }
-
-      busy.current = true;
+      // Claim the stream before any await, not just before the PUT. Minting a
+      // session is a network call with no timeout, so a mint that outlives the
+      // cadence would let the next tick past this guard, build a second
+      // ResumableUpload at offset 0, and have both writers PUT different bodies
+      // over the same byte range.
+      state.busy = true;
       try {
-        const outcome = await upload.current.send(held.slice(0, length), { final });
+        const active = await openSession(key);
+        if (!active || !state.upload) {
+          patch(key, { status: 'delayed' });
+          return;
+        }
+
+        // How many buffered blobs this pass is responsible for. The recorder
+        // keeps appending during the PUT below, and those arrivals sit past
+        // `consumed`, so they can never be re-absorbed — rebuilding the buffer
+        // from the snapshot alone would drop every chunk recorded mid-append.
+        const sentCount = state.buffer.length;
+        const held = new Blob(state.buffer);
+        // Non-final chunks must be a whole number of 256 KiB units; the
+        // remainder waits. GCS rejects a misaligned intermediate PUT outright,
+        // and the upload cannot continue afterwards.
+        const length = final ? held.size : alignedLength(held.size);
+        if (length === 0 && !final) {
+          setPerStream((prev) => {
+            const current = prev[key]?.status;
+            // A stream already degraded or stopped is not promoted back to
+            // "uploading" by a flush that had nothing aligned to send.
+            if (
+              current === 'degraded' ||
+              current === 'stopped' ||
+              current === 'uploading'
+            ) {
+              return prev;
+            }
+            return {
+              ...prev,
+              [key]: { ...(prev[key] ?? blankStream(key)), status: 'uploading' },
+            };
+          });
+          return;
+        }
+
+        const inflight = state.upload.send(held.slice(0, length), { final });
+        state.inflight = inflight.then(
+          () => undefined,
+          () => undefined,
+        );
+        const outcome = await inflight;
         if (outcome.ok) {
           const rest = held.slice(length);
-          buffer.current = rest.size ? [rest] : [];
-          setPending(rest.size);
-          setUploaded(outcome.committed);
-          attempt.current = 0;
-          setStatus(final ? 'idle' : 'uploading');
-          setMessage(null);
+          const arrived = state.buffer.slice(sentCount);
+          state.buffer = rest.size ? [rest, ...arrived] : arrived;
+          state.attempt = 0;
+          state.nextAttemptAt = 0;
+          patch(key, {
+            pendingBytes: state.buffer.reduce((t, blob) => t + blob.size, 0),
+            uploadedBytes: outcome.committed,
+            // A halted stream stays "stopped". The bound handler finalises, so
+            // a successful close would otherwise erase the only explanation the
+            // operator gets for why recording ended.
+            status: state.halted ? 'stopped' : final ? 'idle' : 'uploading',
+          });
+          if (!state.halted) setMessage(null);
           return;
         }
 
         if (!outcome.retryable) {
-          setStatus('delayed');
-          setMessage(session.current?.degraded_message ?? null);
+          if (!state.halted) {
+            patch(key, { status: 'delayed' });
+            setMessage(state.session?.degraded_message ?? null);
+          }
           return;
         }
 
-        attempt.current += 1;
+        state.attempt += 1;
+        state.nextAttemptAt = Date.now() + backoffMs(state.attempt);
+        if (state.halted) return;
         // AC-2: "a transient 'Saving delayed' indicator, not an error". The
         // audio is not lost — it is held, and the next attempt sends it.
-        setStatus(attempt.current > 2 ? 'degraded' : 'delayed');
-        if (attempt.current > 2) {
+        patch(key, { status: state.attempt > 2 ? 'degraded' : 'delayed' });
+        if (state.attempt > 2) {
           // AC-3: the message comes from the breaker config the server
           // serves, never a string typed into this component.
-          setMessage(session.current?.degraded_message ?? null);
+          setMessage(state.session?.degraded_message ?? null);
         }
       } finally {
-        busy.current = false;
+        state.busy = false;
       }
     },
-    [openSession, status],
+    [openSession, machineryFor, patch],
   );
 
-  // Absorb whatever the recorder has produced, and enforce the bound.
+  // Absorb whatever the recorder has produced, and enforce the bound per mic.
   useEffect(() => {
     absorb();
-    if (halted.current) return;
-    const held = buffer.current.reduce((total, blob) => total + blob.size, 0);
-    if (held >= LOCAL_BOUND_BYTES) {
-      // AC-3: "when the local bound is reached, recording stops gracefully
-      // with an explicit message rather than silently discarding audio". The
-      // buffer is kept — dropping it is the one behaviour the criterion rules
-      // out — and the recorder is asked to stop.
-      halted.current = true;
-      setStatus('stopped');
-      setMessage(BOUND_REACHED_MESSAGE);
-      onBoundReached?.();
+    let tripped = false;
+    for (const [, state] of machinery.current) {
+      if (state.halted) continue;
+      const held = state.buffer.reduce((total, blob) => total + blob.size, 0);
+      if (held >= LOCAL_BOUND_BYTES) {
+        tripped = true;
+        break;
+      }
     }
-  }, [absorb, onBoundReached]);
+    if (!tripped) return;
 
-  // Retry on a cadence while there is anything to send.
+    // AC-3: "when the local bound is reached, recording stops gracefully with
+    // an explicit message rather than silently discarding audio". Every
+    // buffer is kept — dropping one is the behaviour the criterion rules out.
+    //
+    // One mic tripping halts them all, because the meeting is the unit: a
+    // transcript missing one participant from the ten-minute mark is not the
+    // legal record O-06 assembles, and letting the others run would hide that.
+    for (const [key, state] of machinery.current) {
+      state.halted = true;
+      patch(key, { status: 'stopped' });
+    }
+    setMessage(BOUND_REACHED_MESSAGE);
+    onBoundReached?.();
+  }, [absorb, onBoundReached, patch]);
+
+  /**
+   * Flush on a fixed cadence while recording.
+   *
+   * One interval, and deliberately nothing byte-related in the dependency
+   * array. A `setTimeout` re-armed whenever `pendingBytes` changed could never
+   * elapse: `MediaRecorder` is started with a 20 ms timeslice, so chunks — and
+   * therefore pending bytes — arrive about fifty times a second per mic, which
+   * is far more often than the 30 s cadence. The effect tore the timer down and
+   * re-armed it at full delay each time, so no incremental append ever ran and
+   * the entire meeting stayed in memory until the stop button. A tab crash at
+   * minute nine lost everything, which is the failure the resumable session
+   * exists to prevent.
+   *
+   * Per-stream backoff lives on the machinery (`nextAttemptAt`) instead, so one
+   * stream waiting out a retry cannot delay a healthy one (AC-3).
+   */
   useEffect(() => {
-    if (!recording || halted.current) return;
-    const delay = attempt.current > 0 ? backoffMs(attempt.current) : ALIGN_INTERVAL_MS;
-    const timer = setTimeout(() => void flush({ final: false }), delay);
-    return () => clearTimeout(timer);
-  }, [recording, flush, pendingBytes, uploadedBytes, status]);
+    if (!recording) return;
+    const timer = setInterval(() => {
+      for (const key of keysRef.current) {
+        void flushStream(key, { final: false });
+      }
+    }, ALIGN_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [recording, flushStream]);
 
   const finalise = useCallback(async () => {
     absorb();
-    await flush({ final: true });
-  }, [absorb, flush]);
+    // allSettled, not all: AC-4 finalises every stream. One mic whose session
+    // is unreachable must not stop the others from closing their objects.
+    await Promise.allSettled(
+      keys.map((key) => flushStream(key, { final: true })),
+    );
+  }, [absorb, flushStream, keys]);
 
-  return { status, uploadedBytes, pendingBytes, message, finalise };
+  const aggregate = useMemo(() => {
+    const entries = keys.map((key) => perStream[key] ?? blankStream(key));
+    const status = entries.reduce<UploadStatus>(
+      (worst, entry) =>
+        STATUS_RANK[entry.status] > STATUS_RANK[worst] ? entry.status : worst,
+      'idle',
+    );
+    return {
+      status,
+      uploadedBytes: entries.reduce((total, e) => total + e.uploadedBytes, 0),
+      pendingBytes: entries.reduce((total, e) => total + e.pendingBytes, 0),
+      streams: entries,
+    };
+  }, [keys, perStream]);
+
+  return {
+    status: aggregate.status,
+    uploadedBytes: aggregate.uploadedBytes,
+    pendingBytes: aggregate.pendingBytes,
+    message,
+    streams: aggregate.streams,
+    finalise,
+  };
 }
 
 /**

@@ -501,6 +501,25 @@ class MeetingRecording(models.Model):
     #: already finalised this row is answered from the row rather than
     #: creating a second BrandAsset for one recording.
     finalise_key = models.CharField(max_length=128, blank=True, default="")
+
+    # ── Per-stream uploads (O-07) ────────────────────────────────────
+    #
+    # One entry per mic, each with its own resumable session and its own
+    # BrandAsset. The singular fields above remain the single-mic path: a
+    # legacy recording keeps an empty list here and nothing about it changes.
+    #
+    # Separate objects rather than one mixed object because the mics are the
+    # only reason the transcript can name a speaker. Concatenating two mics
+    # into one opus stream produces bytes no decoder will accept, and the
+    # speaker attribution O-03 established would have nothing to point at.
+    stream_assets = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "[{stream_index, gcs_path, session_url, brand_asset_id, "
+            "speaker_name}] — empty for single-mic recordings"
+        ),
+    )
     duration_s = models.PositiveIntegerField(
         null=True,
         blank=True,
@@ -1218,9 +1237,7 @@ class MeetingAttendee(models.Model):
         related_name="attendees",
     )
     name = models.CharField(max_length=255)
-    role = models.CharField(
-        max_length=50, help_text="'operator' or 'participant'"
-    )
+    role = models.CharField(max_length=50, help_text="'operator' or 'participant'")
     mic_label = models.CharField(max_length=255, blank=True, default="")
     stream_index = models.PositiveSmallIntegerField()
     checked_in_at = models.DateTimeField(auto_now_add=True)
