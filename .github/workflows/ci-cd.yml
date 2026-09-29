@@ -25,6 +25,21 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      # Celery's broker and result backend both default to
+      # redis://localhost:6379/0 (settings.py), and several tests wait on a
+      # task result. Without a broker each of those burns 20 reconnect
+      # attempts before failing with "Retry limit exceeded while trying to
+      # reconnect to the Celery result store backend" — which reads as a code
+      # fault rather than a missing service, and costs about a minute apiece.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     
     steps:
       - uses: actions/checkout@v3
