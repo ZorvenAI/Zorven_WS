@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import uuid
 from typing import Any, AsyncIterator
 
@@ -90,6 +91,7 @@ from app.logic.live_lock import REFRESH_S, LiveLock, acquire
 from app.logic.coverage import compute_coverage
 from app.logic.field_map import WorkflowTarget, resolve_field, resolve_workflow_target
 from app.logic.live_session import LiveSessionManager, SegmentBatcher, SegmentBatch
+from app.logic.speaker_timeline import SpeakerTimeline
 from app.providers.stt import STTAdapter, STTResult, STTUnavailable
 from app.skills.models import SkillContext, TenantContext, Origin
 from app.skills.redact_pii import redact_text, RedactionResult
@@ -204,6 +206,40 @@ async def _audio_from_queue(
         yield chunk
 
 
+def _resolve_speaker(
+    t_start: float,
+    stt_state: dict[str, Any],
+    *,
+    speaker: int,
+    speaker_name: str | None,
+    speaker_role: str | None,
+) -> tuple[int, str | None, str | None]:
+    """Who was speaking at ``t_start`` (O-09).
+
+    Resolved per result rather than per stream, because O-09 feeds every mic
+    into one STT stream. By the transcript's own ``t_start`` and not by whichever
+    channel is open now: finals lag their audio by about a second, so attributing
+    on arrival would credit the operator's question to whoever answered it.
+
+    Falls back to the arguments when there is no timeline, which is the
+    single-mic path — it has no mic map and must stay exactly as it was.
+    """
+    timeline = stt_state.get("speaker_timeline")
+    if timeline is None:
+        return speaker, speaker_name, speaker_role
+
+    index = timeline.resolve(t_start)
+    if index is None:
+        # Audio that predates the first transition. Unattributed rather than
+        # credited to whoever spoke first.
+        return speaker, speaker_name, speaker_role
+
+    descriptor = (stt_state.get("stream_map") or {}).get(index)
+    if descriptor is None:
+        return index, speaker_name, speaker_role
+    return index, descriptor.speaker_name, descriptor.speaker_role
+
+
 async def _stt_loop(
     websocket: WebSocket,
     session: LiveSessionManager,
@@ -237,6 +273,13 @@ async def _stt_loop(
             sample_rate=sample_rate,
             codec=codec,
         ):
+            who, who_name, who_role = _resolve_speaker(
+                result.t_start,
+                stt_state,
+                speaker=speaker,
+                speaker_name=speaker_name,
+                speaker_role=speaker_role,
+            )
             if result.is_final:
                 await _emit_final(
                     websocket,
@@ -246,9 +289,9 @@ async def _stt_loop(
                     allowlist=allowlist,
                     batcher=batcher,
                     analysis_state=analysis_state,
-                    speaker=speaker,
-                    speaker_name=speaker_name,
-                    speaker_role=speaker_role,
+                    speaker=who,
+                    speaker_name=who_name,
+                    speaker_role=who_role,
                 )
             else:
                 import time as _time
@@ -258,8 +301,8 @@ async def _stt_loop(
                     websocket,
                     session,
                     result,
-                    speaker=speaker,
-                    speaker_name=speaker_name,
+                    speaker=who,
+                    speaker_name=who_name,
                 )
                 from app.metrics import record_stt_partial_latency
 
@@ -1254,7 +1297,7 @@ async def _handle_control(
             logger.info("live_start_malformed")
             return
 
-        if stt_state.get("audio_q") is not None or stt_state.get("stream_queues"):
+        if stt_state.get("audio_q") is not None:
             return
 
         await _cancel_recovery(stt_state)
@@ -1274,39 +1317,44 @@ async def _handle_control(
             batcher_obj.recording_id = start.recording_id
 
         if start.streams:
-            stream_map: dict[int, StreamDescriptor] = {}
-            stream_queues: dict[int, asyncio.Queue[bytes | None]] = {}
-            stream_tasks: dict[int, asyncio.Task[None]] = {}
-
-            for sd in start.streams:
-                stream_map[sd.stream_index] = sd
-                q: asyncio.Queue[bytes | None] = asyncio.Queue()
-                stream_queues[sd.stream_index] = q
-                t = asyncio.create_task(
-                    _stt_loop(
-                        websocket,
-                        session,
-                        stt,
-                        q,
-                        codec=start.codec,
-                        sample_rate=start.sample_rate,
-                        stt_state=stt_state,
-                        speaker=sd.stream_index,
-                        speaker_name=sd.speaker_name,
-                        speaker_role=sd.speaker_role,
-                    )
-                )
-                idx = sd.stream_index
-
-                def _on_done(_: Any, _idx: int = idx) -> None:
-                    stream_queues.pop(_idx, None)
-
-                t.add_done_callback(_on_done)
-                stream_tasks[sd.stream_index] = t
+            # O-09: one STT stream for all mics, not one per mic.
+            #
+            # O-03 gave each mic its own stream, which made attribution free —
+            # the stream was the speaker. The energy gate makes that untenable:
+            # it sends only the open channel, and `GoogleSTTAdapter` drives its
+            # rollover from arriving chunks, so a starved stream sails past
+            # Google's ~300 s cap without rolling over and is dead when its
+            # speaker finally talks. The gate guarantees one speaker at a time,
+            # which is exactly what makes a single stream sufficient — and it
+            # bills one channel's audio instead of N.
+            #
+            # Attribution moves to `SpeakerTimeline`, resolved by each result's
+            # own `t_start`.
+            stream_map: dict[int, StreamDescriptor] = {
+                sd.stream_index: sd for sd in start.streams
+            }
+            timeline = SpeakerTimeline()
+            gated_q: asyncio.Queue[bytes | None] = asyncio.Queue()
 
             stt_state["stream_map"] = stream_map
-            stt_state["stream_queues"] = stream_queues
-            stt_state["stream_tasks"] = stream_tasks
+            stt_state["speaker_timeline"] = timeline
+            stt_state["audio_q"] = gated_q
+            # The clock the timeline is measured on. Audio streams live, so
+            # "seconds since the first chunk" tracks the STT stream's own
+            # timeline closely enough to resolve a 300 ms hold.
+            stt_state["audio_epoch"] = None
+
+            stt_state["stt_task"] = asyncio.create_task(
+                _stt_loop(
+                    websocket,
+                    session,
+                    stt,
+                    gated_q,
+                    codec=start.codec,
+                    sample_rate=start.sample_rate,
+                    stt_state=stt_state,
+                )
+            )
 
             if session is not None:
                 try:
@@ -1356,44 +1404,26 @@ async def _handle_control(
     if frame_type == ClientFrameType.STOP.value:
         await _cancel_recovery(stt_state)
 
-        stop_queues: dict[int, asyncio.Queue[bytes | None]] | None = stt_state.get(
-            "stream_queues"
-        )
-        if stop_queues:
-            for sq in stop_queues.values():
-                sq.put_nowait(None)
-            stop_tasks: dict[int, asyncio.Task[None]] = stt_state.get(
-                "stream_tasks", {}
-            )
-            for st in stop_tasks.values():
-                if st is not None and not st.done():
+        # One teardown for both paths since O-09: multi-mic now feeds the same
+        # single queue and task that single-mic always did.
+        pending_q = stt_state.get("audio_q")
+        if pending_q is not None:
+            pending_q.put_nowait(None)
+            stt_state["audio_q"] = None
+            pending_task = stt_state.get("stt_task")
+            if pending_task is not None and not pending_task.done():
+                try:
+                    await asyncio.wait_for(pending_task, timeout=5.0)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    pending_task.cancel()
                     try:
-                        await asyncio.wait_for(st, timeout=5.0)
-                    except (asyncio.TimeoutError, asyncio.CancelledError):
-                        st.cancel()
-                        try:
-                            await st
-                        except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                            pass
-            stt_state["stream_queues"] = None
-            stt_state["stream_tasks"] = None
-            stt_state["stream_map"] = None
-        else:
-            pending_q = stt_state.get("audio_q")
-            if pending_q is not None:
-                pending_q.put_nowait(None)
-                stt_state["audio_q"] = None
-                pending_task = stt_state.get("stt_task")
-                if pending_task is not None and not pending_task.done():
-                    try:
-                        await asyncio.wait_for(pending_task, timeout=5.0)
-                    except (asyncio.TimeoutError, asyncio.CancelledError):
-                        pending_task.cancel()
-                        try:
-                            await pending_task
-                        except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                            pass
-                stt_state["stt_task"] = None
+                        await pending_task
+                    except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                        pass
+            stt_state["stt_task"] = None
+        stt_state["stream_map"] = None
+        stt_state["speaker_timeline"] = None
+        stt_state["audio_epoch"] = None
         logger.info("stt_stopped")
         return
 
@@ -1767,17 +1797,23 @@ async def _hold(
             # Binary audio → STT queue(s) (F-05, O-03)
             raw_bytes = message.get("bytes")
             if raw_bytes:
-                stream_queues = stt_state.get("stream_queues")
-                if stream_queues:
-                    if len(raw_bytes) > 1:
-                        stream_idx = raw_bytes[0]
-                        q = stream_queues.get(stream_idx)
-                        if q is not None:
-                            q.put_nowait(raw_bytes[1:])
+                audio_q = stt_state.get("audio_q")
+                if audio_q is None:
                     continue
-                elif stt_state.get("audio_q") is not None:
-                    stt_state["audio_q"].put_nowait(raw_bytes)
-                    continue
+                timeline = stt_state.get("speaker_timeline")
+                if timeline is not None and len(raw_bytes) > 1:
+                    # O-09: multi-mic frames carry their stream index in the
+                    # first byte. Every mic feeds the one stream; the index only
+                    # says who was speaking, and the gate has already ensured
+                    # that is one person at a time.
+                    if stt_state.get("audio_epoch") is None:
+                        stt_state["audio_epoch"] = time.monotonic()
+                    at = time.monotonic() - stt_state["audio_epoch"]
+                    timeline.record(at, raw_bytes[0])
+                    audio_q.put_nowait(raw_bytes[1:])
+                else:
+                    audio_q.put_nowait(raw_bytes)
+                continue
 
             await _handle_control(
                 websocket,
@@ -1838,18 +1874,11 @@ async def _hold(
         audio_q = stt_state.get("audio_q")
         if audio_q is not None:
             audio_q.put_nowait(None)
-        cleanup_stream_queues = stt_state.get("stream_queues")
-        if cleanup_stream_queues:
-            for sq in cleanup_stream_queues.values():
-                sq.put_nowait(None)
-        cleanup_stream_tasks = stt_state.get("stream_tasks") or {}
-        for st in cleanup_stream_tasks.values():
-            if st is not None and not st.done():
-                st.cancel()
-                try:
-                    await st
-                except asyncio.CancelledError:
-                    pass
+        # Unblock the STT loop's queue read before cancelling, so it can drain
+        # rather than being torn down mid-result.
+        cleanup_q = stt_state.get("audio_q")
+        if cleanup_q is not None:
+            cleanup_q.put_nowait(None)
         for key in ("stt_task", "recovery_task"):
             task = stt_state.get(key)
             if task is not None and not task.done():
