@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -51,6 +52,61 @@ class AssembledEvidence:
     company_id: int | None = None
     valid_recording_ids: set[str] = field(default_factory=set)
     valid_media_ids: set[str] = field(default_factory=set)
+
+
+def build_speaker_labels(segments: list[dict[str, Any]]) -> dict[int, str]:
+    """Map each speaker index to a non-identifying prompt label (O-08 AC-3).
+
+    Roles, not names. SKL-OIA-16 redacts PERSON from the transcript body before
+    it is stored, so prefixing lines with the attendee's real name would put
+    back — on every line — exactly what the redaction pass removed, in the
+    payload sent to a model provider. "Operator" and "Participant" carry the
+    whole discriminative value extraction needs (who asked, who answered) and
+    identify nobody.
+
+    Indices are appended only when two mics share a role, so the common
+    operator-plus-participant meeting reads "Operator:" and "Participant:"
+    rather than the noisier numbered form.
+    """
+    roles: dict[int, str] = {}
+    for seg in segments:
+        index = seg.get("speaker")
+        # Coerced, not assumed: the Django callback that stores a transcript
+        # validates only text and timestamps, so any JSON type can reach these
+        # fields. A raise here would cost the whole session its evidence.
+        role = str(seg.get("speaker_role") or "").strip()
+        if isinstance(index, bool) or not isinstance(index, int) or not role:
+            continue
+        roles.setdefault(index, role)
+
+    shared = Counter(roles.values())
+    seen: Counter[str] = Counter()
+    labels: dict[int, str] = {}
+    for index in sorted(roles):
+        role = roles[index]
+        pretty = role.replace("_", " ").title()
+        if shared[role] > 1:
+            seen[role] += 1
+            labels[index] = f"{pretty} {seen[role]}"
+        else:
+            labels[index] = pretty
+    return labels
+
+
+def attribute_segment(text: str, label: str | None) -> str:
+    """Prefix a transcript line with its speaker label.
+
+    In the block text rather than a field on ``EvidenceBlock``, because the
+    prompt is the only channel the model reads — a structured attribute would
+    be correct, auditable, and invisible to extraction.
+
+    An unlabelled speaker gets no prefix. A single-mic recording has no role
+    map, so "Speaker 0:" would spend tokens on every line to convey nothing.
+    """
+    clean = str(label or "").strip()
+    if not clean:
+        return text
+    return f"{clean}: {text}"
 
 
 class EvidenceAssembler:
@@ -353,7 +409,14 @@ class EvidenceAssembler:
     def _blocks_from_recordings(
         self, django_data: dict[str, Any]
     ) -> list[EvidenceBlock]:
-        """Build evidence blocks from recording transcripts."""
+        """Build evidence blocks from recording transcripts.
+
+        O-08 AC-3: segments carry their speaker into the block text. An
+        onboarding meeting is the operator asking and the business answering,
+        and an unattributed transcript lets extraction read the operator's own
+        leading phrasing as a claim about the business — the failure the whole
+        multi-mic epic exists to prevent.
+        """
         blocks: list[EvidenceBlock] = []
 
         for rec in django_data.get("recordings", []):
@@ -365,13 +428,16 @@ class EvidenceAssembler:
 
             segments_text: list[str] = []
             spans: list[EvidenceSpan] = []
+            labels = build_speaker_labels(transcript)
 
             for seg in transcript:
                 text = seg.get("text", "").strip()
                 if not text:
                     continue
 
-                segments_text.append(text)
+                segments_text.append(
+                    attribute_segment(text, labels.get(seg.get("speaker")))
+                )
 
                 t_start = seg.get("t_start")
                 t_end = seg.get("t_end")

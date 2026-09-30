@@ -193,3 +193,126 @@ async def test_token_estimation(redis_manager, settings):
     ]
     estimate = assembler._estimate_tokens(blocks)
     assert estimate == 150
+
+
+async def test_transcript_blocks_attribute_by_role(redis_manager, settings):
+    """O-08 AC-3: extraction can tell who asked from who answered.
+
+    The evidence text is the only channel the model reads. Before this, a
+    transcript arrived as an unattributed wall of lines, so extraction could
+    read the operator's own leading question as a claim the business made — the
+    failure the multi-mic epic exists to prevent.
+    """
+    assembler = EvidenceAssembler(redis=redis_manager, backend=None, settings=settings)
+
+    blocks = assembler._blocks_from_recordings(
+        {
+            "recordings": [
+                {
+                    "id": "rec-1",
+                    "transcript": [
+                        {
+                            "text": "so you focus on wholesale?",
+                            "speaker": 0,
+                            "speaker_name": "Devan Roy",
+                            "speaker_role": "operator",
+                            "t_start": 1.0,
+                            "t_end": 2.0,
+                        },
+                        {
+                            "text": "no, we are direct to consumer",
+                            "speaker": 1,
+                            "speaker_name": "Sarah Kelso",
+                            "speaker_role": "participant",
+                            "t_start": 3.0,
+                            "t_end": 4.0,
+                        },
+                    ],
+                }
+            ]
+        }
+    )
+
+    transcript_blocks = [b for b in blocks if b.source_type == "transcript"]
+    assert len(transcript_blocks) == 1
+    text = transcript_blocks[0].text
+    assert "Operator: so you focus on wholesale?" in text
+    # The premise and the correction are separable, which is the whole point:
+    # the business is direct to consumer, not wholesale.
+    assert "Participant: no, we are direct to consumer" in text
+    # Spans are unchanged — attribution must not disturb provenance.
+    assert len(transcript_blocks[0].spans) == 2
+
+
+async def test_no_attendee_name_reaches_the_prompt(redis_manager, settings):
+    """The guardrail this design exists for.
+
+    SKL-OIA-16 redacts PERSON from the stored body, so putting the attendee's
+    real name back on every line would hand a model provider exactly what the
+    redaction pass removed.
+    """
+    assembler = EvidenceAssembler(redis=redis_manager, backend=None, settings=settings)
+
+    blocks = assembler._blocks_from_recordings(
+        {
+            "recordings": [
+                {
+                    "id": "rec-1",
+                    "transcript": [
+                        {
+                            "text": "this is <PERSON> speaking",
+                            "speaker": 1,
+                            "speaker_name": "Sarah Kelso",
+                            "speaker_role": "participant",
+                            "t_start": 1.0,
+                            "t_end": 2.0,
+                        },
+                    ],
+                }
+            ]
+        }
+    )
+
+    text = [b for b in blocks if b.source_type == "transcript"][0].text
+    assert "Sarah Kelso" not in text
+    assert text == "Participant: this is <PERSON> speaking"
+
+
+async def test_a_single_mic_transcript_is_left_unlabelled(redis_manager, settings):
+    """O-08 AC-2 at the evidence layer.
+
+    A legacy recording has no role map. "Speaker 0:" on every line would spend
+    tokens to convey nothing.
+    """
+    assembler = EvidenceAssembler(redis=redis_manager, backend=None, settings=settings)
+
+    blocks = assembler._blocks_from_recordings(
+        {
+            "recordings": [
+                {
+                    "id": "rec-legacy",
+                    "transcript": [
+                        {
+                            "text": "we started in 2019",
+                            "speaker": 0,
+                            "speaker_name": None,
+                            "t_start": 1.0,
+                            "t_end": 2.0,
+                        },
+                        # Pre-O-08 rows have neither speaker field.
+                        {
+                            "text": "and grew from there",
+                            "speaker": 0,
+                            "t_start": 3.0,
+                            "t_end": 4.0,
+                        },
+                    ],
+                }
+            ]
+        }
+    )
+
+    text = [b for b in blocks if b.source_type == "transcript"][0].text
+    assert text == "we started in 2019\nand grew from there"
+    assert "Speaker" not in text
+    assert ":" not in text

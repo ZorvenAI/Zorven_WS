@@ -27,17 +27,20 @@ class TestExtractTranscriptSegments:
     """Filter and sort TranscriptFinal frames from a mixed buffer."""
 
     def _frame(self, type_: str, t_start: float, t_end: float, **kw):
-        return json.dumps(
-            {
-                "type": type_,
-                "text": kw.get("text", "hello"),
-                "speaker": 0,
-                "t_start": t_start,
-                "t_end": t_end,
-                "seq": 1,
-                "redaction_applied": kw.get("redaction_applied", False),
-            }
-        ).encode()
+        frame = {
+            "type": type_,
+            "text": kw.get("text", "hello"),
+            "speaker": kw.get("speaker", 0),
+            "t_start": t_start,
+            "t_end": t_end,
+            "seq": 1,
+            "redaction_applied": kw.get("redaction_applied", False),
+        }
+        # Omitted entirely unless asked for, so the single-mic shape — a frame
+        # with no speaker_name key at all — is what the AC-2 test exercises.
+        if "speaker_name" in kw:
+            frame["speaker_name"] = kw["speaker_name"]
+        return json.dumps(frame).encode()
 
     def test_filters_by_type(self):
         frames = [
@@ -62,6 +65,52 @@ class TestExtractTranscriptSegments:
         assert len(result) == 2
         assert result[0]["text"] == "inside"
         assert result[1]["text"] == "inside2"
+
+    def test_carries_the_speaker_name_into_the_persisted_segment(self):
+        """O-08 AC-1.
+
+        The buffered frame has carried speaker_name since O-03; this function
+        dropped it, so every persisted transcript held integer indices and
+        nothing downstream could name a speaker. The legal header O-06
+        assembles had to source names from MeetingAttendee instead.
+        """
+        frames = [
+            self._frame(
+                "transcript.final",
+                1.0,
+                2.0,
+                text="we roast in Kalyani",
+                speaker=1,
+                speaker_name="Sarah Kelso",
+            ),
+            self._frame(
+                "transcript.final",
+                3.0,
+                4.0,
+                text="and who buys it?",
+                speaker=0,
+                speaker_name="Devan Roy",
+            ),
+        ]
+
+        result = extract_transcript_segments(frames, 0.0, 10.0)
+
+        assert [s["speaker_name"] for s in result] == ["Sarah Kelso", "Devan Roy"]
+        assert [s["speaker"] for s in result] == [1, 0]
+
+    def test_a_single_mic_segment_persists_a_null_speaker_name(self):
+        """O-08 AC-2.
+
+        A legacy recording has no mic-to-attendee map, so the key must be
+        present and null rather than absent or invented — consumers check the
+        field, and a fabricated name in a legal transcript is worse than none.
+        """
+        frames = [self._frame("transcript.final", 1.0, 2.0, text="hello")]
+
+        result = extract_transcript_segments(frames, 0.0, 10.0)
+
+        assert "speaker_name" in result[0]
+        assert result[0]["speaker_name"] is None
 
     def test_sorts_by_t_start(self):
         frames = [
@@ -193,6 +242,62 @@ class TestFormatTranscript:
         assert "[01:05]" in result
         assert "[02:05]" in result
 
+    def test_attributes_lines_by_role(self):
+        """O-08: the summary prompt must distinguish question from answer.
+
+        The summary becomes an evidence block of its own, so an unattributed
+        prompt lets "so you focus on wholesale?" be summarised as "the business
+        focuses on wholesale" — which then competes with the correctly
+        attributed transcript block in extraction.
+        """
+        segments = [
+            {
+                "text": "so you focus on wholesale?",
+                "speaker": 0,
+                "speaker_role": "operator",
+                "t_start": 1.0,
+                "t_end": 2.0,
+            },
+            {
+                "text": "no, direct to consumer",
+                "speaker": 1,
+                "speaker_role": "participant",
+                "t_start": 3.0,
+                "t_end": 4.0,
+            },
+        ]
+
+        result = SummarizeRecording._format_transcript(segments)
+
+        assert "Operator: so you focus on wholesale?" in result
+        assert "Participant: no, direct to consumer" in result
+
+    def test_no_speaker_name_reaches_the_summary_prompt(self):
+        """Roles, never names — the body has already had PERSON redacted."""
+        segments = [
+            {
+                "text": "we roast in Kalyani",
+                "speaker": 1,
+                "speaker_name": "Sarah Kelso",
+                "speaker_role": "participant",
+                "t_start": 1.0,
+                "t_end": 2.0,
+            },
+        ]
+
+        result = SummarizeRecording._format_transcript(segments)
+
+        assert "Sarah Kelso" not in result
+        assert "Participant: we roast in Kalyani" in result
+
+    def test_a_single_mic_transcript_is_unlabelled(self):
+        """AC-2: no role map, so no labels."""
+        segments = [{"text": "we started in 2019", "speaker": 0, "t_start": 1.0}]
+
+        result = SummarizeRecording._format_transcript(segments)
+
+        assert result == "[00:01] we started in 2019"
+
     def test_redaction_marker(self):
         segments = [
             {
@@ -231,6 +336,12 @@ class TestTranscriptSegmentOutput:
         assert set(seg.keys()) == {
             "text",
             "speaker",
+            # O-08: both present on every segment, null when there is no mic
+            # map, so a consumer reads the field rather than testing for it.
+            # speaker_name is the legal record; speaker_role is what prompts
+            # are attributed by, so no name reaches a model provider.
+            "speaker_name",
+            "speaker_role",
             "t_start",
             "t_end",
             "redaction_applied",
