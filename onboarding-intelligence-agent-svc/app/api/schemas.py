@@ -175,6 +175,11 @@ class TranscriptFinal(ServerFrame):
     text: str
     speaker: int
     speaker_name: str | None = None
+    #: O-08. Carried alongside the name because prompts are attributed by role
+    #: rather than identity: "operator" and "participant" tell extraction who
+    #: asked and who answered without putting a person's name in a payload sent
+    #: to a model provider, which is what SKL-OIA-16 redacts the body for.
+    speaker_role: str | None = None
     t_start: float
     t_end: float
     redaction_applied: bool = False

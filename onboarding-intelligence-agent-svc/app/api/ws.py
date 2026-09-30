@@ -215,6 +215,7 @@ async def _stt_loop(
     stt_state: dict[str, Any],
     speaker: int = 0,
     speaker_name: str | None = None,
+    speaker_role: str | None = None,
 ) -> None:
     """Background task: feed audio to STT, emit frames.
 
@@ -247,6 +248,7 @@ async def _stt_loop(
                     analysis_state=analysis_state,
                     speaker=speaker,
                     speaker_name=speaker_name,
+                    speaker_role=speaker_role,
                 )
             else:
                 import time as _time
@@ -436,6 +438,7 @@ async def _emit_final(
     analysis_state: dict[str, Any] | None = None,
     speaker: int = 0,
     speaker_name: str | None = None,
+    speaker_role: str | None = None,
 ) -> None:
     """AC-4: persisted redacted, displayed unredacted.
 
@@ -464,6 +467,7 @@ async def _emit_final(
         text=redaction.text,
         speaker=speaker,
         speaker_name=speaker_name,
+        speaker_role=speaker_role,
         t_start=result.t_start,
         t_end=result.t_end,
         redaction_applied=redaction.applied,
@@ -478,6 +482,7 @@ async def _emit_final(
         text=result.text,
         speaker=speaker,
         speaker_name=speaker_name,
+        speaker_role=speaker_role,
         t_start=result.t_start,
         t_end=result.t_end,
         redaction_applied=False,
@@ -503,6 +508,7 @@ async def _emit_final(
             "text": redaction.text,
             "speaker": speaker,
             "speaker_name": speaker_name,
+            "speaker_role": speaker_role,
             "t_start": result.t_start,
             "t_end": result.t_end,
         }
@@ -1287,6 +1293,7 @@ async def _handle_control(
                         stt_state=stt_state,
                         speaker=sd.stream_index,
                         speaker_name=sd.speaker_name,
+                        speaker_role=sd.speaker_role,
                     )
                 )
                 idx = sd.stream_index

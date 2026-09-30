@@ -74,14 +74,31 @@ def enrich_segments(
     segments: list[dict[str, Any]],
     speaker_map: dict[int, str],
 ) -> list[dict[str, Any]]:
-    """Add speaker_name to each transcript segment (AC-4)."""
+    """Add speaker_name to each transcript segment (AC-4).
+
+    The name stored on the segment wins over the live attendee row (O-08).
+    ``speaker_map`` is rebuilt from ``MeetingAttendee`` on every read, so
+    preferring it meant editing an attendee after the meeting retroactively
+    changed what the legal transcript said had been spoken — and left the
+    persisted name, which O-08 exists to capture, used only when the attendee
+    row had been deleted.
+
+    This is the same rule O-07 applies to ``stream_assets``: what the archive
+    claims about who was recorded must be what was true when the recording
+    stopped. The map remains the fallback, which is what keeps pre-O-08
+    recordings — persisted with no name at all — rendering correctly.
+    """
     enriched = []
     for seg in segments:
         entry = dict(seg)
+        stored = entry.get("speaker_name")
+        if isinstance(stored, str) and stored.strip():
+            enriched.append(entry)
+            continue
         speaker = seg.get("speaker")
         if speaker is not None and speaker in speaker_map:
             entry["speaker_name"] = speaker_map[speaker]
-        elif "speaker_name" not in entry:
+        else:
             entry["speaker_name"] = None
         enriched.append(entry)
     return enriched

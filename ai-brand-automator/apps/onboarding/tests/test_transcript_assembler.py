@@ -108,6 +108,40 @@ class TestEnrichSegments:
         enriched = enrich_segments(segs, {})
         assert enriched[0]["speaker_name"] == "Already Set"
 
+    def test_the_archived_name_wins_over_an_edited_attendee(self, attendees):
+        """O-08: the transcript is a record of what was said, by whom, then.
+
+        ``speaker_map`` is rebuilt from MeetingAttendee on every read, so if it
+        won here, correcting an attendee row after the meeting would rewrite
+        what the legal transcript claims had been spoken — and the persisted
+        name would only ever be used when the attendee row was deleted.
+        """
+        segs = [{"text": "Hello", "speaker": 0, "speaker_name": "John Smith"}]
+        speaker_map = build_speaker_map(attendees)
+        speaker_map[0] = "Jonathan Smythe-Roy"  # the row was edited later
+
+        enriched = enrich_segments(segs, speaker_map)
+
+        assert enriched[0]["speaker_name"] == "John Smith"
+
+    def test_a_legacy_segment_still_falls_back_to_the_attendee_row(self, attendees):
+        """Pre-O-08 recordings persisted no name at all, so the map is the only
+        source they have — which is why it stays the fallback."""
+        segs = [{"text": "Hello", "speaker": 0}]
+
+        enriched = enrich_segments(segs, build_speaker_map(attendees))
+
+        assert enriched[0]["speaker_name"] == "John Smith"
+
+    def test_an_empty_stored_name_falls_back_rather_than_blanking(self, attendees):
+        """An operator who left a mic label blank stored "", which is not an
+        attribution. Falling back beats rendering a nameless line."""
+        segs = [{"text": "Hello", "speaker": 0, "speaker_name": "  "}]
+
+        enriched = enrich_segments(segs, build_speaker_map(attendees))
+
+        assert enriched[0]["speaker_name"] == "John Smith"
+
     def test_does_not_mutate_original(self, segments, attendees):
         speaker_map = build_speaker_map(attendees)
         enrich_segments(segments, speaker_map)

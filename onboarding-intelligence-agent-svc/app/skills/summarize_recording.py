@@ -134,12 +134,30 @@ class SummarizeRecording(BaseSkill):
 
     @staticmethod
     def _format_transcript(segments: list[dict[str, Any]]) -> str:
+        """Render the transcript for the summary prompt, attributed by role.
+
+        Unattributed, the summary could not tell the operator's leading question
+        from the business's answer — and the summary becomes an evidence block
+        of its own, so "so you focus on wholesale?" could reach extraction as
+        "the business focuses on wholesale", competing with the correctly
+        attributed transcript block.
+
+        Roles rather than names, for the reason ``build_speaker_labels``
+        documents: the body has already had PERSON redacted out of it.
+        """
+        from app.logic.evidence_assembler import (
+            attribute_segment,
+            build_speaker_labels,
+        )
+
+        labels = build_speaker_labels(segments)
         lines: list[str] = []
         for seg in segments:
             t = seg["t_start"]
             m, s = divmod(int(t), 60)
             tag = "[REDACTED] " if seg.get("redaction_applied") else ""
-            lines.append(f"[{m:02d}:{s:02d}] {tag}{seg['text']}")
+            said = attribute_segment(seg["text"], labels.get(seg.get("speaker")))
+            lines.append(f"[{m:02d}:{s:02d}] {tag}{said}")
         return "\n".join(lines)
 
     # -- LLM response parsing -------------------------------------------------
@@ -212,6 +230,10 @@ def extract_transcript_segments(
                 # `.get` with no default, so a single-mic recording persists
                 # null rather than a fabricated name (AC-2).
                 "speaker_name": frame.get("speaker_name"),
+                # The role, not the name, is what prompts are attributed by —
+                # it distinguishes who asked from who answered without sending
+                # a person's name to a model provider.
+                "speaker_role": frame.get("speaker_role"),
                 "t_start": float(t_start),
                 "t_end": float(t_end),
                 "redaction_applied": frame.get("redaction_applied", False),

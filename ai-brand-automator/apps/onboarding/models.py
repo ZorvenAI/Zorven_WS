@@ -540,9 +540,11 @@ class MeetingRecording(models.Model):
         default=list,
         blank=True,
         help_text=(
-            "[{text, speaker, speaker_name, t_start, t_end, "
-            "redaction_applied}] — speaker_name is null for single-mic "
-            "recordings, which have no mic-to-attendee map to resolve"
+            "[{text, speaker, speaker_name, speaker_role, t_start, t_end, "
+            "redaction_applied}] — both speaker fields are null for "
+            "single-mic recordings, which have no mic-to-attendee map. "
+            "speaker_name is the legal record; speaker_role is what model "
+            "prompts are attributed by, so no name is sent to a provider"
         ),
     )
     started_at = models.DateTimeField(auto_now_add=True)
