@@ -101,6 +101,18 @@ export default function RecorderControl({
     while (sentChunkIndex.current < chunks.length) {
       const chunk = chunks[sentChunkIndex.current];
       const streamIdx = 'streamIndex' in chunk ? (chunk as { streamIndex: number }).streamIndex : -1;
+      // O-09: only the mic the energy gate had open reaches STT. Separate mics
+      // in one room hear each other, and transcribing every copy makes the
+      // record say two people said the same sentence.
+      //
+      // The uploader deliberately does not consult this — every chunk still
+      // reaches its own GCS object, because a legal archive with holes in it is
+      // worse than one containing bleed.
+      const gated = 'gateOpen' in chunk && (chunk as { gateOpen: boolean }).gateOpen === false;
+      if (gated) {
+        sentChunkIndex.current += 1;
+        continue;
+      }
       chunk.blob.arrayBuffer().then((buf) => {
         if (streamIdx >= 0) {
           const audio = new Uint8Array(buf);
@@ -115,6 +127,16 @@ export default function RecorderControl({
       sentChunkIndex.current += 1;
     }
   }, [recording, chunkCount, sendBinary, chunksRef]);
+
+  // AC-6. Named from the mic assignments rather than shown as an index: the
+  // operator assigned "Sarah Kelso" to a mic, not "stream 1".
+  const activeIndex =
+    'activeStreamIndex' in live ? (live as UseMultiMicRecorder).activeStreamIndex : null;
+  const activeSpeaker =
+    activeIndex === null
+      ? null
+      : (micAssignments.find((a) => a.streamIndex === activeIndex)?.label ??
+        `Mic ${activeIndex}`);
 
   const ownUploader = useChunkUploader({
     recordingId,
@@ -245,6 +267,19 @@ export default function RecorderControl({
             className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-rose-400"
           />
           <span className="font-medium">Recording</span>
+          {/*
+            AC-6: which mic is feeding STT right now. Without it an operator
+            cannot tell a working gate from a mic that stopped being picked up,
+            and both look like a transcript missing somebody's words.
+          */}
+          {activeSpeaker && (
+            <span
+              className="rounded bg-rose-400/20 px-1.5 py-0.5 text-xs"
+              data-testid="active-speaker"
+            >
+              {activeSpeaker}
+            </span>
+          )}
           {/* tabular-nums so the row does not jitter as digits change. */}
           <span className="ml-auto tabular-nums" data-testid="elapsed">
             {formatElapsed(elapsedSeconds)}
