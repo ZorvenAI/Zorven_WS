@@ -705,6 +705,96 @@ def test_transcript_callback_stores_segments(
     assert recording.status == RecordingStatus.SUMMARIZED
 
 
+def test_the_callback_round_trips_speaker_names(
+    consented_session, public_tenant, settings
+):
+    """O-08 AC-1 across the service boundary.
+
+    The endpoint validates only text/t_start/t_end, so speaker_name reaches the
+    column without a serializer change — but nothing asserted that, and a
+    tightened validator could silently drop the names the agent worked out from
+    the mic map.
+    """
+    settings.OIA_SERVICE_TOKEN = "test-token"
+    recording = make_recording(
+        session=consented_session, status=RecordingStatus.UPLOADED
+    )
+    named = [
+        {
+            "text": "so you focus on wholesale?",
+            "speaker": 0,
+            "speaker_name": "Devan Roy",
+            "t_start": 0.0,
+            "t_end": 2.0,
+            "redaction_applied": False,
+        },
+        {
+            "text": "no, direct to consumer.",
+            "speaker": 1,
+            "speaker_name": "Sarah Kelso",
+            "t_start": 2.5,
+            "t_end": 4.0,
+            "redaction_applied": False,
+        },
+    ]
+    client = APIClient()
+    client.defaults["SERVER_NAME"] = "localhost"
+
+    response = client.patch(
+        summary_callback_url(recording),
+        data={
+            "summary": {"text": "A summary.", "key_moments": []},
+            "transcript": named,
+        },
+        format="json",
+        HTTP_X_SERVICE_TOKEN="test-token",
+        HTTP_X_TENANT_ID=str(public_tenant.pk),
+    )
+
+    assert response.status_code == 200
+    recording.refresh_from_db()
+    assert [s["speaker_name"] for s in recording.transcript] == [
+        "Devan Roy",
+        "Sarah Kelso",
+    ]
+
+
+def test_a_single_mic_callback_stores_a_null_speaker_name(
+    consented_session, public_tenant, settings
+):
+    """O-08 AC-2. A legacy recording keeps working, with the field present and
+    null rather than a fabricated name in what is meant to be a legal record."""
+    settings.OIA_SERVICE_TOKEN = "test-token"
+    recording = make_recording(
+        session=consented_session, status=RecordingStatus.UPLOADED
+    )
+    client = APIClient()
+    client.defaults["SERVER_NAME"] = "localhost"
+
+    client.patch(
+        summary_callback_url(recording),
+        data={
+            "summary": {"text": "A summary.", "key_moments": []},
+            "transcript": [
+                {
+                    "text": "we started in 2019",
+                    "speaker": 0,
+                    "speaker_name": None,
+                    "t_start": 0.0,
+                    "t_end": 2.0,
+                    "redaction_applied": False,
+                }
+            ],
+        },
+        format="json",
+        HTTP_X_SERVICE_TOKEN="test-token",
+        HTTP_X_TENANT_ID=str(public_tenant.pk),
+    )
+
+    recording.refresh_from_db()
+    assert recording.transcript[0]["speaker_name"] is None
+
+
 def test_transcript_endpoint_returns_segments(consented_session, public_tenant, viewer):
     """GET /recordings/{id}/transcript/ returns stored segments."""
     recording = make_recording(

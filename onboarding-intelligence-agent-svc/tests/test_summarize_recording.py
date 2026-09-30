@@ -27,17 +27,20 @@ class TestExtractTranscriptSegments:
     """Filter and sort TranscriptFinal frames from a mixed buffer."""
 
     def _frame(self, type_: str, t_start: float, t_end: float, **kw):
-        return json.dumps(
-            {
-                "type": type_,
-                "text": kw.get("text", "hello"),
-                "speaker": 0,
-                "t_start": t_start,
-                "t_end": t_end,
-                "seq": 1,
-                "redaction_applied": kw.get("redaction_applied", False),
-            }
-        ).encode()
+        frame = {
+            "type": type_,
+            "text": kw.get("text", "hello"),
+            "speaker": kw.get("speaker", 0),
+            "t_start": t_start,
+            "t_end": t_end,
+            "seq": 1,
+            "redaction_applied": kw.get("redaction_applied", False),
+        }
+        # Omitted entirely unless asked for, so the single-mic shape — a frame
+        # with no speaker_name key at all — is what the AC-2 test exercises.
+        if "speaker_name" in kw:
+            frame["speaker_name"] = kw["speaker_name"]
+        return json.dumps(frame).encode()
 
     def test_filters_by_type(self):
         frames = [
@@ -62,6 +65,52 @@ class TestExtractTranscriptSegments:
         assert len(result) == 2
         assert result[0]["text"] == "inside"
         assert result[1]["text"] == "inside2"
+
+    def test_carries_the_speaker_name_into_the_persisted_segment(self):
+        """O-08 AC-1.
+
+        The buffered frame has carried speaker_name since O-03; this function
+        dropped it, so every persisted transcript held integer indices and
+        nothing downstream could name a speaker. The legal header O-06
+        assembles had to source names from MeetingAttendee instead.
+        """
+        frames = [
+            self._frame(
+                "transcript.final",
+                1.0,
+                2.0,
+                text="we roast in Kalyani",
+                speaker=1,
+                speaker_name="Sarah Kelso",
+            ),
+            self._frame(
+                "transcript.final",
+                3.0,
+                4.0,
+                text="and who buys it?",
+                speaker=0,
+                speaker_name="Devan Roy",
+            ),
+        ]
+
+        result = extract_transcript_segments(frames, 0.0, 10.0)
+
+        assert [s["speaker_name"] for s in result] == ["Sarah Kelso", "Devan Roy"]
+        assert [s["speaker"] for s in result] == [1, 0]
+
+    def test_a_single_mic_segment_persists_a_null_speaker_name(self):
+        """O-08 AC-2.
+
+        A legacy recording has no mic-to-attendee map, so the key must be
+        present and null rather than absent or invented — consumers check the
+        field, and a fabricated name in a legal transcript is worse than none.
+        """
+        frames = [self._frame("transcript.final", 1.0, 2.0, text="hello")]
+
+        result = extract_transcript_segments(frames, 0.0, 10.0)
+
+        assert "speaker_name" in result[0]
+        assert result[0]["speaker_name"] is None
 
     def test_sorts_by_t_start(self):
         frames = [
@@ -231,6 +280,9 @@ class TestTranscriptSegmentOutput:
         assert set(seg.keys()) == {
             "text",
             "speaker",
+            # O-08: present on every segment, null when there is no mic map, so
+            # a consumer can read the field rather than test for its existence.
+            "speaker_name",
             "t_start",
             "t_end",
             "redaction_applied",

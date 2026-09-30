@@ -53,6 +53,24 @@ class AssembledEvidence:
     valid_media_ids: set[str] = field(default_factory=set)
 
 
+def attribute_segment(text: str, speaker_name: str | None) -> str:
+    """Prefix a transcript line with who said it (O-08 AC-3).
+
+    In the block text rather than a field on ``EvidenceBlock``, because the
+    prompt is the only channel the model reads — a structured attribute would
+    be correct, auditable, and invisible to extraction.
+
+    An unnamed speaker gets no prefix. A single-mic recording has no
+    mic-to-attendee map, so a label like "Speaker 0:" would spend tokens on
+    every line to convey nothing, and invites the model to treat an index as a
+    person's identity.
+    """
+    name = (speaker_name or "").strip()
+    if not name:
+        return text
+    return f"{name}: {text}"
+
+
 class EvidenceAssembler:
     """Gather session evidence from Django and Redis into a working context."""
 
@@ -353,7 +371,14 @@ class EvidenceAssembler:
     def _blocks_from_recordings(
         self, django_data: dict[str, Any]
     ) -> list[EvidenceBlock]:
-        """Build evidence blocks from recording transcripts."""
+        """Build evidence blocks from recording transcripts.
+
+        O-08 AC-3: segments carry their speaker into the block text. An
+        onboarding meeting is the operator asking and the business answering,
+        and an unattributed transcript lets extraction read the operator's own
+        leading phrasing as a claim about the business — the failure the whole
+        multi-mic epic exists to prevent.
+        """
         blocks: list[EvidenceBlock] = []
 
         for rec in django_data.get("recordings", []):
@@ -371,7 +396,7 @@ class EvidenceAssembler:
                 if not text:
                     continue
 
-                segments_text.append(text)
+                segments_text.append(attribute_segment(text, seg.get("speaker_name")))
 
                 t_start = seg.get("t_start")
                 t_end = seg.get("t_end")

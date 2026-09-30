@@ -204,6 +204,14 @@ def extract_transcript_segments(
             {
                 "text": frame.get("text", ""),
                 "speaker": frame.get("speaker", 0),
+                # O-08 AC-1. The buffered frame has carried this since O-03;
+                # dropping it here was why the persisted transcript held only
+                # integer indices, so nothing downstream could name a speaker
+                # even though the mics had already established who was talking.
+                #
+                # `.get` with no default, so a single-mic recording persists
+                # null rather than a fabricated name (AC-2).
+                "speaker_name": frame.get("speaker_name"),
                 "t_start": float(t_start),
                 "t_end": float(t_end),
                 "redaction_applied": frame.get("redaction_applied", False),

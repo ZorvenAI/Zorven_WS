@@ -539,7 +539,11 @@ class MeetingRecording(models.Model):
     transcript = models.JSONField(
         default=list,
         blank=True,
-        help_text="[{text, speaker, t_start, t_end, redaction_applied}]",
+        help_text=(
+            "[{text, speaker, speaker_name, t_start, t_end, "
+            "redaction_applied}] — speaker_name is null for single-mic "
+            "recordings, which have no mic-to-attendee map to resolve"
+        ),
     )
     started_at = models.DateTimeField(auto_now_add=True)
     stopped_at = models.DateTimeField(null=True, blank=True)
