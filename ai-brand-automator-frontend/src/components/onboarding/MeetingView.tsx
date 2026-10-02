@@ -249,6 +249,35 @@ export default function MeetingView({
         </div>
       )}
 
+      {/*
+        #662. A dropped live socket stops transcription for the rest of the
+        meeting: the server cancels its STT task on close, and nothing re-sends
+        the `start` frame that would spawn a new one.
+
+        Nothing else on screen changes — the recorder keeps running, the timer
+        keeps counting, the tab title still says "Recording", and the audio
+        still uploads, because durability is deliberately independent of STT
+        (F-03, §4.3). So without this the operator finishes a meeting believing
+        it was transcribed and gets a transcript that stops at the drop.
+
+        `reconnecting`, not `connecting`: the first connect is routine and must
+        not raise an alarm.
+      */}
+      {(socket.status === 'reconnecting' || socket.status === 'closed') && (
+        <div
+          role="alert"
+          data-testid="transcription-stopped-banner"
+          className="shrink-0 flex items-center gap-2 rounded border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-sm text-rose-200"
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+          <span>
+            {socket.status === 'reconnecting'
+              ? 'Live transcription stopped — reconnecting. Audio is still being recorded and saved.'
+              : 'Live transcription has stopped and will not resume. Audio is still being recorded and saved — stop and start the recording to transcribe again.'}
+          </span>
+        </div>
+      )}
+
       <ConsentModal
         open={consentOpen}
         onCancel={() => setConsentOpen(false)}

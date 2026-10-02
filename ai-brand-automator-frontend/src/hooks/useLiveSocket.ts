@@ -16,7 +16,21 @@ import { apiClient } from '@/lib/api';
 
 // ── Types ──
 
-export type LiveSocketStatus = 'idle' | 'connecting' | 'live' | 'degraded' | 'closed';
+/**
+ * `reconnecting` is deliberately distinct from `connecting`.
+ *
+ * Both open a socket, but they mean opposite things to an operator: the first
+ * connect is routine, while a reconnect means the live socket dropped
+ * mid-meeting and transcription has stopped. They shared one value, so the UI
+ * could not tell them apart and showed nothing for either — see #662.
+ */
+export type LiveSocketStatus =
+  | 'idle'
+  | 'connecting'
+  | 'reconnecting'
+  | 'live'
+  | 'degraded'
+  | 'closed';
 
 export interface LiveSocketError {
   code: string;
@@ -143,7 +157,11 @@ export function useLiveSocket({
       }
       if (retriesRef.current < MAX_RECONNECT_ATTEMPTS) {
         retriesRef.current += 1;
-        setStatus('connecting');
+        // Not 'connecting': this socket was open and dropped, which stops
+        // transcription until a fresh `start` frame is sent. The recorder and
+        // the GCS upload are unaffected, so nothing else about the screen
+        // changes — which is exactly why this state has to be visible.
+        setStatus('reconnecting');
         reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
       } else {
         setStatus('closed');
