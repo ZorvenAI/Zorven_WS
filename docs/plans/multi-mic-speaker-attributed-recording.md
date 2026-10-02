@@ -330,6 +330,80 @@ integer indices) in the `MeetingRecording.transcript` JSON field.
 - AC-2: Legacy single-mic recordings continue to work with `speaker_name: null`.
 - AC-3: The PROCESS pipeline can read speaker names from the transcript.
 
+#### O-09: Multi-Channel Audio Interface with Energy-Gated Speaker Detection
+
+**What**: Replace the "N separate USB mics" capture model with a "1
+multi-channel audio interface, N channels" model using `ChannelSplitterNode`.
+Add energy-gated speaker detection so that only the channel with the highest
+energy feeds STT at any moment, eliminating acoustic bleed.
+
+**Background**: A multi-channel USB audio interface (Focusrite Scarlett 2i2,
+Zoom H6, etc.) exposes N input channels as a single device to the OS. The
+channels are electrically isolated at the preamp — no acoustic bleed between
+channels. The Web Audio API captures all channels via a single `getUserMedia`
+call with `channelCount: N`, then a `ChannelSplitterNode` routes each channel
+to its own processing path. An energy gate ensures only one channel's audio
+reaches STT at any moment, preventing the same utterance from being
+transcribed on multiple streams.
+
+**Frontend changes**:
+- `useAudioDevices.ts` — detect multi-channel devices and report channel
+  count. Prefer multi-channel devices over separate USB mics in the device
+  list.
+- `MicSetup.tsx` — when a multi-channel device is selected, show channels
+  instead of separate devices. Let the operator assign a speaker to each
+  channel (e.g., Channel 1 → Operator, Channel 2 → Participant).
+- New hook `useChannelSplitter.ts`:
+  - Single `getUserMedia({ audio: { deviceId, channelCount: N } })`.
+  - `AudioContext` + `createChannelSplitter(N)` → routes each output to its
+    own `AnalyserNode` (for RMS energy) and `MediaStreamDestination` (for
+    recording).
+  - Energy gate: per-channel RMS computed over 100ms sliding window. Only the
+    channel with the highest RMS above a minimum threshold (~0.01) feeds the
+    WebSocket. A hold timer (~300ms) prevents rapid toggling during
+    overlapping speech.
+- `RecorderControl.tsx` — active speaker indicator: highlights which
+  channel/speaker is currently feeding STT.
+- Fallback: if no multi-channel device is detected, fall back to O-01's
+  separate-device model. The energy gate still applies across separate
+  devices.
+
+**Backend changes**: None — the WebSocket multi-stream protocol (O-03) and
+STT routing are unchanged. The energy gate and channel splitting happen
+entirely in the browser before audio reaches the WebSocket.
+
+**Acceptance criteria**:
+- AC-1: Multi-channel audio interfaces are detected and offered in mic setup.
+  The operator assigns a speaker to each channel.
+- AC-2: A single `getUserMedia` call captures all channels.
+  `ChannelSplitterNode` routes each channel to its own processing path. Each
+  channel maps to an existing `streamIndex`.
+- AC-3: At any moment, per-channel RMS energy is computed over a ~100ms
+  window. Only the channel with the highest energy above a minimum threshold
+  is forwarded to STT. Other channels are suppressed.
+- AC-4: Speaker transitions have a ~300ms hold period to avoid rapid toggling
+  during overlapping speech. No duplicate or dropped transcript segments.
+- AC-5: If no multi-channel device is detected, the system falls back to the
+  N-device model from O-01. The energy gate still applies across separate
+  devices.
+- AC-6: During recording, the operator sees which channel/mic is currently
+  active (highlight or indicator on the speaker's name).
+
+**Technical notes**:
+1. Frontend only — the WebSocket protocol, OIA service STT routing, and
+   Django models are unchanged.
+2. `ChannelSplitterNode` API:
+   `audioContext.createChannelSplitter(channelCount)` → connect each output to
+   its own `AnalyserNode` and `MediaStreamDestination`.
+3. Energy computation: `RMS = sqrt(mean(samples²))` over 100ms. Minimum
+   threshold (~0.01) prevents silence attribution. Hold timer prevents
+   toggling on brief overlap.
+4. Cost impact: only one STT stream is active at a time (the loudest
+   channel), so GCP STT cost is effectively halved compared to N parallel
+   streams.
+
+---
+
 ## 5. Dependency Graph
 
 ```
@@ -342,10 +416,13 @@ O-01 (Mic Setup UI)
 
 O-01 → O-05 (Voice Roll Call) → O-06 (Legal Transcript Header)
 
+O-03 + O-05 → O-09 (Multi-Channel + Energy Gate)
+
 O-03 + O-05 + O-08 → O-06 (all must land before the legal doc assembler)
 ```
 
 **Critical path**: O-01 → O-02 → O-03 → O-08 → O-06
+**Bleed mitigation path**: O-03 + O-05 → O-09
 
 ## 6. Testing Strategy
 
@@ -361,6 +438,7 @@ O-03 + O-05 + O-08 → O-06 (all must land before the legal doc assembler)
 | O-06 | Header assembly with all metadata fields; missing data handled gracefully |
 | O-07 | Per-stream upload sessions; per-stream bound enforcement |
 | O-08 | Speaker name resolution from stream map; legacy fallback |
+| O-09 | ChannelSplitter routing; energy gate selects loudest channel; hold timer prevents toggling; fallback to separate devices |
 
 ### 6.2 Integration Tests
 
@@ -388,6 +466,10 @@ O-03 + O-05 + O-08 → O-06 (all must land before the legal doc assembler)
 
 STT is the dominant cost. Linear scaling with mic count. For a typical
 onboarding meeting (30–60 min), 2-mic cost is ~$1.44–$2.88 per meeting.
+
+**After O-09 (energy gate)**: Only one STT stream is active at a time, so
+the effective cost is ~$1.44/hour regardless of mic count — the energy gate
+suppresses idle channels, halving STT cost for a 2-mic setup.
 
 ## 8. Git Workflow
 
