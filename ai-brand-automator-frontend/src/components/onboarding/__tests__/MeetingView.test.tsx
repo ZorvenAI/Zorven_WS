@@ -669,3 +669,83 @@ describe('O-04 · speaker-labelled transcript', () => {
     expect(screen.getByText('Follow-up')).toBeInTheDocument();
   });
 });
+
+// ── #662 · a dropped live socket must not fail silently ──────────────
+
+describe('#662 · the operator is told when transcription stops', () => {
+  /**
+   * The server cancels its STT task when the socket closes, and nothing
+   * re-sends the `start` frame that would spawn a new one — so transcription
+   * is over for the rest of the meeting.
+   *
+   * Everything else keeps working, which is the trap: the recorder runs, the
+   * timer counts, the audio uploads (durability is independent of STT by
+   * design). Without a banner the operator finishes the meeting believing it
+   * was transcribed.
+   */
+  it('warns while reconnecting, and says the audio is still safe', () => {
+    mockSocketStatus = 'reconnecting';
+    mockSocketError = null;
+
+    render(<MeetingView questions={QUESTIONS} consent={GRANTED} />);
+
+    const banner = screen.getByTestId('transcription-stopped-banner');
+    expect(banner).toHaveTextContent(/transcription interrupted/i);
+    // The reassurance matters as much as the warning: an operator who thinks
+    // the recording is lost may stop the meeting.
+    //
+    // "any recording in progress", not "the recording": the socket is enabled
+    // on consent, so this banner can appear before Record is ever pressed, and
+    // asserting that audio is being saved would then be false.
+    expect(banner).toHaveTextContent(/any recording in progress/i);
+    expect(banner).toHaveTextContent(/still being saved/i);
+  });
+
+  it('tells the operator how to recover once it has given up', () => {
+    mockSocketStatus = 'closed';
+    mockSocketError = null;
+
+    render(<MeetingView questions={QUESTIONS} consent={GRANTED} />);
+
+    const banner = screen.getByTestId('transcription-stopped-banner');
+    expect(banner).toHaveTextContent(/will not resume/i);
+    // Reload, not "stop and start the recording". The socket effect keys on
+    // [sessionId, enabled] and `enabled` is consent, so neither changes when
+    // recording stops — that advice could not be followed.
+    expect(banner).toHaveTextContent(/reload the page/i);
+  });
+
+  it('uses alert, not status, so it is announced', () => {
+    // A silent failure that is merely rendered is still missable. `status` is
+    // polite and may never be read out mid-meeting.
+    mockSocketStatus = 'closed';
+    mockSocketError = null;
+
+    render(<MeetingView questions={QUESTIONS} consent={GRANTED} />);
+
+    expect(screen.getByTestId('transcription-stopped-banner')).toHaveAttribute(
+      'role',
+      'alert',
+    );
+  });
+
+  it('stays quiet on the first connect', () => {
+    // `connecting` is routine. Warning here would train operators to ignore
+    // the banner that matters.
+    mockSocketStatus = 'connecting';
+    mockSocketError = null;
+
+    render(<MeetingView questions={QUESTIONS} consent={GRANTED} />);
+
+    expect(screen.queryByTestId('transcription-stopped-banner')).toBeNull();
+  });
+
+  it('stays quiet while live', () => {
+    mockSocketStatus = 'live';
+    mockSocketError = null;
+
+    render(<MeetingView questions={QUESTIONS} consent={GRANTED} />);
+
+    expect(screen.queryByTestId('transcription-stopped-banner')).toBeNull();
+  });
+});
