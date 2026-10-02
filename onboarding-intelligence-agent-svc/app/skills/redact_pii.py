@@ -11,10 +11,15 @@ Two entry points, one engine:
   chain (IG-04). Wraps ``redact_text()`` so the registry path and the
   direct path use the same code.
 
-G-01 replaces the F-05 pattern-only engine with spaCy NER, enabling
-PERSON and LOCATION detection. The analyser is loaded once at first use.
-§8.3 requires <200 ms per segment; spaCy ``en_core_web_sm`` typically
-runs in <5 ms.
+G-01 replaces the F-05 pattern-only engine with spaCy NER, enabling PERSON
+detection. The analyser is loaded once at first use. §8.3 requires <200 ms per
+segment; spaCy ``en_core_web_sm`` typically runs in <5 ms.
+
+LOCATION is deliberately **not** in ``_DEFAULT_ENTITIES``. A brand's own city
+is part of its identity — "we roast in Kalyani" is the kind of specific the
+research brief exists to capture — and redacting it turned the operator's
+notes into "we roast in <LOCATION>". The entity set is configurable through
+``OIA_PII_ENTITIES``, so an operator who needs it can ask for it.
 """
 
 from __future__ import annotations
@@ -38,7 +43,6 @@ _DEFAULT_ENTITIES = [
     "IBAN_CODE",
     "US_SSN",
     "US_ITIN",
-    "LOCATION",
 ]
 
 _analyzer: Any = None
@@ -61,7 +65,8 @@ def _ensure_engines() -> bool:
 
     G-01 replaces the F-05 ``_PatternNlpEngine`` with Presidio's default
     ``AnalyzerEngine()``, which auto-detects spaCy when ``en_core_web_sm``
-    is installed. This enables PERSON and LOCATION detection via NER.
+    is installed. This enables PERSON detection via NER — see the module
+    docstring for why LOCATION is left out of the default set.
 
     Falls back to pattern-only recognition when spaCy is unavailable.
     """

@@ -2935,6 +2935,11 @@ def session_evidence(request, pk):
             "has_questionnaire": session.questionnaire is not None,
             "ocr_pending_count": ocr_pending_count,
             "company_id": session.company_id,
+            # The agent allowlists this so PROCESS-mode egress redaction does
+            # not strip a person-shaped business name out of its own brand
+            # profile — "Sarah Johnson Consulting" became "<PERSON> Consulting"
+            # without it (#655).
+            "company_name": str(session.company) if session.company else None,
         },
         status=http.HTTP_200_OK,
     )

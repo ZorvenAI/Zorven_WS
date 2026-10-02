@@ -329,6 +329,221 @@ def _agent_role_for(user, tenant) -> str:
     return str(membership.role).upper()
 
 
+def _extract_company_from_prompt(message: str, db_name: str) -> str:
+    """Use the company name from the prompt if the user named one explicitly.
+
+    Patterns like "onboarding of <Name>", "prepare for <Name>", "meeting
+    with <Name>" indicate the user is asking about a specific company. If
+    that name differs from the DB company, prefer the user's intent — they
+    may be onboarding a new company not yet in the system.
+    """
+    import re
+
+    # The captured name, and the boundary that ends it. Shared so the three
+    # phrasings cannot drift apart.
+    name = r"([\w][\w\s&.-]{0,60}?)"
+    boundary = r"(?:\s*[.,;!?]|\s+(?:company|is|which|that|they)|\s*$)"
+    patterns = [
+        r"(?:onboarding\s+(?:of|for)\s+(?:the\s+)?)" + name + boundary,
+        r"(?:meeting\s+with\s+)" + name + boundary,
+        r"(?:(?:questionnaire|prepare|prep)\s+for\s+(?:the\s+)?)" + name + boundary,
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, message, re.IGNORECASE)
+        if match:
+            extracted = match.group(1).strip().rstrip(".")
+            if extracted and len(extracted) > 1:
+                return extracted
+    return db_name
+
+
+def _md_url(url: str) -> str:
+    """Make a URL safe to put inside Markdown link parentheses (#658).
+
+    A Wikipedia URL like ``.../Acme_(company)`` closed the link at its own first
+    bracket, so the chat bubble showed garbled text instead of a link. Encoding
+    just the brackets is enough and leaves the URL readable; angle-bracket syntax
+    would also work but renders the raw URL when a client does not support it.
+    """
+    return url.replace("(", "%28").replace(")", "%29")
+
+
+def _format_prep_response(summary: str, brief: dict) -> str:
+    """Turn a research brief into a readable chat message."""
+    if not brief or brief.get("degraded"):
+        return summary
+
+    company = brief.get("company_name", "this company")
+    facts = brief.get("facts", [])
+    competitors = brief.get("competitors_seen", [])
+    dp = brief.get("digital_presence") or {}
+    unknowns = brief.get("open_unknowns", [])
+
+    parts = [
+        f"Here's your briefing on **{company}** ahead of the onboarding meeting:\n"
+    ]
+
+    if facts:
+        parts.append("### Key findings")
+        for fact in facts:
+            stmt = fact.get("statement", "")
+            url = fact.get("source_url", "")
+            if stmt:
+                cite = f" ([source]({_md_url(url)}))" if url else ""
+                parts.append(f"- {stmt}{cite}")
+        parts.append("")
+
+    if competitors:
+        parts.append("### Competitors & alternatives")
+        parts.append(", ".join(f"**{c}**" for c in competitors))
+        parts.append("")
+
+    website = dp.get("website")
+    socials = dp.get("social_profiles", [])
+    notes = dp.get("notes", "")
+    if website or socials or notes:
+        parts.append("### Digital presence")
+        if website:
+            parts.append(f"- Website: {website}")
+        if socials:
+            for profile in socials:
+                parts.append(f"- {profile}")
+        if notes:
+            parts.append(f"- {notes}")
+        parts.append("")
+
+    if unknowns:
+        parts.append("### Questions to cover in the meeting")
+        for i, q in enumerate(unknowns, 1):
+            q_text = q
+            if q_text.startswith("Unverified: "):
+                q_text = q_text.replace("Unverified: ", "Verify: ", 1)
+            parts.append(f"{i}. {q_text}")
+
+    return "\n".join(parts)
+
+
+def _persist_prep_questions(
+    tenant, user, company_name: str, chat_session_id: str, brief: dict
+) -> None:
+    """Save open_unknowns from the research brief as a questionnaire.
+
+    Closes the loop between chat prep and the onboarding session page:
+    questions generated in chat appear on the session's QuestionChecklist.
+    """
+    unknowns = brief.get("open_unknowns", [])
+    if not unknowns:
+        return
+
+    from apps.onboarding.models import (
+        OnboardingSession,
+        Questionnaire,
+        QuestionnaireStatus,
+        Question,
+        QuestionOrigin,
+        QuestionStatus,
+        WorkflowTarget,
+    )
+    from django.db import transaction
+
+    company = None
+    session_obj = None
+    try:
+        company = Company.objects.filter(
+            tenant=tenant, name__iexact=company_name
+        ).first()
+    except Exception:
+        pass
+
+    if company:
+        session_obj = (
+            OnboardingSession.objects.filter(tenant=tenant, company=company)
+            .exclude(status__in=["COMPLETED", "ARCHIVED"])
+            .first()
+        )
+        if not session_obj:
+            try:
+                session_obj = OnboardingSession.objects.create(
+                    tenant=tenant,
+                    company=company,
+                    status="PREPARING",
+                    created_by=user if user and user.is_authenticated else None,
+                )
+            except Exception:
+                pass
+
+    questions_data = []
+    for i, q_text in enumerate(unknowns):
+        text = str(q_text).strip()
+        if not text:
+            continue
+        if text.startswith("Unverified: "):
+            text = text.replace("Unverified: ", "", 1)
+        questions_data.append(
+            {
+                "order": i,
+                "text": text,
+                "workflow_target": WorkflowTarget.WF1,
+            }
+        )
+
+    if not questions_data:
+        return
+
+    try:
+        next_version = 1
+        if session_obj:
+            latest = (
+                Questionnaire.objects.filter(session=session_obj)
+                .order_by("-version")
+                .values_list("version", flat=True)
+                .first()
+            )
+            if latest:
+                next_version = latest + 1
+
+        with transaction.atomic():
+            questionnaire = Questionnaire.objects.create(
+                tenant=tenant,
+                company=company,
+                session=session_obj,
+                status=QuestionnaireStatus.DRAFT,
+                version=next_version,
+                question_count=len(questions_data),
+                source_chat_session_id=str(chat_session_id)[:64],
+            )
+            Question.objects.bulk_create(
+                [
+                    Question(
+                        questionnaire=questionnaire,
+                        order=q["order"],
+                        text=q["text"],
+                        origin=QuestionOrigin.PREPARED,
+                        workflow_target=q["workflow_target"],
+                        status=QuestionStatus.OPEN,
+                    )
+                    for q in questions_data
+                ]
+            )
+            questionnaire.status = QuestionnaireStatus.APPROVED
+            questionnaire.approved_by = user if user and user.is_authenticated else None
+            questionnaire.approved_at = timezone.now()
+            questionnaire.save(
+                update_fields=["status", "approved_by", "approved_at", "updated_at"]
+            )
+            if session_obj:
+                session_obj.questionnaire = questionnaire
+                session_obj.save(update_fields=["questionnaire", "updated_at"])
+        logger.info(
+            "Saved %d prep questions as questionnaire %s for %s",
+            len(questions_data),
+            questionnaire.pk,
+            company_name,
+        )
+    except Exception:
+        logger.exception("Failed to persist prep questions for %s", company_name)
+
+
 def _process_chat_message(
     request, session, message, tenant, is_new_session, serializer
 ):
@@ -395,6 +610,14 @@ def _process_chat_message(
         # than spawning a pipeline job the operator would have to go and find.
         from ai_services.onboarding_agent import dispatch_prep_turn
 
+        company_ctx = context.get("company", {})
+        db_name = company_ctx.get("name", "")
+        prep_name = _extract_company_from_prompt(message, db_name)
+        # Both empty means no company is known at all — a new tenant with no
+        # Company row, and a message that named none. Comparing them would say
+        # True and hand the DB's industry and website to a company that does not
+        # exist (#657).
+        uses_db_company = bool(db_name) and prep_name.lower() == db_name.lower()
         result = dispatch_prep_turn(
             tenant_id=tenant.id,
             user_id=request.user.id,
@@ -402,17 +625,38 @@ def _process_chat_message(
             trace_id=uuid.uuid4(),
             chat_session_id=session.session_id,
             prompt=message,
+            input_context={
+                "company_name": prep_name,
+                "industry": company_ctx.get("industry", "") if uses_db_company else "",
+                "website": company_ctx.get("website", "") if uses_db_company else "",
+                "operator_notes": message,
+            },
         )
 
         if result.ok:
             payload = result.payload or {}
-            ai_response = payload.get("output", {}).get(
-                "detail", "Preparation is under way."
+            output = payload.get("output", {})
+            brief = output.get("research_brief") or {}
+            ai_response = _format_prep_response(
+                output.get("detail", "Preparation is under way."),
+                brief,
             )
             metadata = {
                 "onboarding_prep": True,
                 "skill_id": payload.get("skill_id"),
             }
+            # Only when a company is actually named. Without the guard an empty
+            # name matched no Company, so the questionnaire was created with
+            # company=None and session=None — orphaned, invisible to the
+            # onboarding session page it exists to populate (#657).
+            if prep_name.strip():
+                _persist_prep_questions(
+                    tenant=tenant,
+                    user=request.user,
+                    company_name=prep_name,
+                    chat_session_id=session.session_id,
+                    brief=brief,
+                )
         else:
             # AC-3: name preparation as the thing that is unavailable and
             # point at the manual path. A generic error would leave the
