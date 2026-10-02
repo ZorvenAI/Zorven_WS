@@ -320,10 +320,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             stream_limit_s=settings.STT_STREAM_LIMIT_S,
             breaker=app.state.breakers.get("stt"),
         )
-        if adapter.configured:
-            app.state.stt = adapter
-        else:
-            app.state.stt = None
+        # Installed even when unconfigured. An absent adapter makes `ws.py`
+        # return from the `start` handler before it sets `recording_id`, so the
+        # frame is silently ignored, no ERR-07 reaches the operator, and the
+        # meeting is not recorded at all. Left in place, `_stt_loop` raises
+        # STTUnavailable, which is what switches the session to RECORD_ONLY and
+        # keeps the audio — F-06's degraded mode.
+        app.state.stt = adapter
+        if not adapter.configured:
             logger.warning(
                 "stt_not_configured",
                 detail="live transcription unavailable — set OIA_STT_PROJECT",
@@ -336,8 +340,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     live_llm = LLMProvider(settings.GEMINI_KEY, breaker=app.state.breakers.get("llm"))
     if live_llm.configured:
-        live_llm._ensure_client()
-        logger.info("llm_client_warmed")
+        # Guarded: this runs inside `lifespan`, and `_ensure_client` imports the
+        # SDK and builds a client, so a bad key format or import failure would
+        # abort startup rather than surfacing per call as LLMUnavailable.
+        try:
+            live_llm._ensure_client()
+            logger.info("llm_client_warmed")
+        except Exception:  # noqa: BLE001 - a cold client is not a failed boot
+            logger.warning("llm_warm_failed", detail="first call will pay the cost")
 
     app.state.skill_registry = SkillRegistry(
         providers={

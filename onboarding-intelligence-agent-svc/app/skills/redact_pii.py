@@ -106,9 +106,14 @@ def _is_allowlisted(matched_text: str, allowlist: list[str]) -> bool:
     "Kelso Coffee" or a person-like name like "Marlow & Sons" must survive
     when it appears in the allowlist.
 
-    Two checks: exact match (case-insensitive) and containment — "Kelso"
-    detected inside "Kelso Coffee" is allowlisted because the operator
+    Exact match, or either string appearing in the other **as whole words** —
+    "Kelso" detected inside "Kelso Coffee" is allowlisted because the operator
     named the business, not the person.
+
+    Word boundaries, not bare containment. `term in text` meant a short
+    allowlisted token exempted any longer name containing its letters: with
+    "SAP" on the list — which a fact mentioning "Sapient" was enough to put
+    there — the detected person "Sapna Rao" was left unredacted (#654 review).
     """
     lower = matched_text.lower().strip()
     if not lower:
@@ -119,9 +124,14 @@ def _is_allowlisted(matched_text: str, allowlist: list[str]) -> bool:
             continue
         if lower == term_lower:
             return True
-        if lower in term_lower or term_lower in lower:
+        if _whole_word(lower, term_lower) or _whole_word(term_lower, lower):
             return True
     return False
+
+
+def _whole_word(needle: str, haystack: str) -> bool:
+    """Whether ``needle`` appears in ``haystack`` on word boundaries."""
+    return re.search(rf"\b{re.escape(needle)}\b", haystack) is not None
 
 
 def redact_text(

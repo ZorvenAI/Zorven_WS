@@ -129,9 +129,16 @@ class Settings(BaseSettings):
     STT_RECOGNIZER: str = "_"
     STT_STREAM_LIMIT_S: int = 280
     STT_FAKE_FIXTURE: str = ""
+    #: LOCATION is deliberately absent. A brand's own city is part of its
+    #: identity — "we roast in Kalyani" is the kind of specific a research brief
+    #: exists to capture — and redacting it produced "we roast in <LOCATION>".
+    #: Set OIA_PII_ENTITIES to include it where that is wanted.
+    #:
+    #: This default is what decides, not `_DEFAULT_ENTITIES`:
+    #: `_configured_entities()` only falls back to that list when this setting
+    #: is empty, so dropping LOCATION there alone changed nothing (#659).
     PII_ENTITIES: str = (
-        "PERSON,PHONE_NUMBER,EMAIL_ADDRESS,CREDIT_CARD,"
-        "IBAN_CODE,US_SSN,US_ITIN,LOCATION"
+        "PERSON,PHONE_NUMBER,EMAIL_ADDRESS,CREDIT_CARD," "IBAN_CODE,US_SSN,US_ITIN"
     )
 
     # ── Video OCR (H-04, Design §8.4) ─────────────────────────

@@ -132,9 +132,13 @@ def _extract_business_names(payload: Any) -> list[str]:
             names.append(comp.strip())
     for fact in payload.get("facts") or []:
         if isinstance(fact, dict):
-            stmt = fact.get("statement", "")
+            stmt = str(fact.get("statement", ""))
             for token in _KNOWN_TECH_BRANDS:
-                if token.lower() in stmt.lower():
+                # Whole words only. Substring matching put "SAP" on the
+                # allowlist for a statement mentioning "Sapient", and "Meta" for
+                # one mentioning "metadata" — and an allowlisted "SAP" then
+                # exempted the person "Sapna Rao" from redaction entirely.
+                if re.search(rf"\b{re.escape(token)}\b", stmt, re.IGNORECASE):
                     names.append(token)
     return names
 

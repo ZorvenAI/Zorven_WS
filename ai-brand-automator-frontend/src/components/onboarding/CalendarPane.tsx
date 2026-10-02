@@ -283,14 +283,25 @@ export default function CalendarPane({ now }: CalendarPaneProps) {
                 role="gridcell"
                 aria-label={day.toDateString()}
                 tabIndex={0}
-                onClick={() => {
+                onClick={(e) => {
+                  // Only a click on the cell itself. The Cancel buttons render
+                  // inside it, so a bubbled click silently rewrote the Starts
+                  // field to the day of whichever meeting was cancelled — an
+                  // operator who had typed "Nov 12, 14:30" would then book
+                  // Nov 3 at 09:00.
+                  if (e.target !== e.currentTarget) return;
                   setSelectedDay(day);
                   setStartsAt(atNineAm(day));
                 }}
                 onKeyDown={(e) => {
+                  // Same guard, and it matters more here: preventDefault on a
+                  // bubbled Enter cancelled the nested button's own activation,
+                  // so Cancel could not be reached by keyboard at all.
+                  if (e.target !== e.currentTarget) return;
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    (e.currentTarget as HTMLDivElement).click();
+                    setSelectedDay(day);
+                    setStartsAt(atNineAm(day));
                   }
                 }}
                 className={`min-h-16 cursor-pointer rounded border p-1 transition-colors hover:border-brand-electric/40 ${
@@ -336,7 +347,10 @@ export default function CalendarPane({ now }: CalendarPaneProps) {
                     {canEdit && meeting.editable && (
                       <button
                         type="button"
-                        onClick={() => onCancel(meeting)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onCancel(meeting);
+                        }}
                         className="mt-0.5 text-[10px] text-rose-300 hover:underline"
                       >
                         Cancel

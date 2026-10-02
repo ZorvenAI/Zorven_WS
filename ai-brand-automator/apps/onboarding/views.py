@@ -2939,7 +2939,12 @@ def session_evidence(request, pk):
             # not strip a person-shaped business name out of its own brand
             # profile — "Sarah Johnson Consulting" became "<PERSON> Consulting"
             # without it (#655).
-            "company_name": str(session.company) if session.company else None,
+            # `.name`, not `str(company)`: Company.__str__ is
+            # "Name (tenant-name)", and this value becomes an egress-redaction
+            # allowlist entry matched by containment — so shipping the composite
+            # would allowlist the tenant's own name and let any PERSON matching
+            # it through OG-02 unredacted.
+            "company_name": getattr(session.company, "name", "") or None,
         },
         status=http.HTTP_200_OK,
     )

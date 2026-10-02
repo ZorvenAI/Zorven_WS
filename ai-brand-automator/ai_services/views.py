@@ -339,17 +339,26 @@ def _extract_company_from_prompt(message: str, db_name: str) -> str:
     """
     import re
 
-    # The captured name, and the boundary that ends it. Shared so the three
-    # phrasings cannot drift apart.
-    name = r"([\w][\w\s&.-]{0,60}?)"
-    boundary = r"(?:\s*[.,;!?]|\s+(?:company|is|which|that|they)|\s*$)"
+    # Capitalised words, at most four, separated by spaces or tabs — not `\s`,
+    # which crosses newlines, and not a lazy `[\w\s]` run, which with a `$`
+    # boundary alternative swallowed everything to end of string: "meeting with
+    # John Doe next week about pricing" captured the whole trailing phrase, and
+    # the mismatch then blanked the tenant's real industry and website too.
+    #
+    # Over-capturing is worse than not matching. A phrase this does not
+    # recognise falls through to the company already on the session, which is
+    # the better guess; a garbage name poisons the Tavily query as well.
+    name = r"([A-Z][\w&.'-]*(?:[ \t]+(?:&|[A-Z][\w&.'-]*)){0,3})"
+    # A newline ends a phrase as surely as a full stop does — without it,
+    # "questionnaire for Acme\n\nAlso list competitors" matched nothing.
+    boundary = r"(?i:\s*[.,;!?]|[ \t]*\n|[ \t]+(?:company|is|which|that|they)\b|\s*$)"
     patterns = [
-        r"(?:onboarding\s+(?:of|for)\s+(?:the\s+)?)" + name + boundary,
-        r"(?:meeting\s+with\s+)" + name + boundary,
-        r"(?:(?:questionnaire|prepare|prep)\s+for\s+(?:the\s+)?)" + name + boundary,
+        r"(?i:onboarding\s+(?:of|for)\s+(?:the\s+)?)" + name + boundary,
+        r"(?i:meeting\s+with\s+)" + name + boundary,
+        r"(?i:(?:questionnaire|prepare|prep)\s+for\s+(?:the\s+)?)" + name + boundary,
     ]
     for pattern in patterns:
-        match = re.search(pattern, message, re.IGNORECASE)
+        match = re.search(pattern, message)
         if match:
             extracted = match.group(1).strip().rstrip(".")
             if extracted and len(extracted) > 1:
@@ -378,6 +387,13 @@ def _format_prep_response(summary: str, brief: dict) -> str:
     competitors = brief.get("competitors_seen", [])
     dp = brief.get("digital_presence") or {}
     unknowns = brief.get("open_unknowns", [])
+
+    # Every section is conditional, so a brief that searched successfully but
+    # yielded nothing usable would render the header alone and drop
+    # `output.detail` — which Django puts in the chat bubble and the agent
+    # documents as "what the operator actually reads".
+    if not any((facts, competitors, dp, unknowns)):
+        return summary
 
     parts = [
         f"Here's your briefing on **{company}** ahead of the onboarding meeting:\n"
@@ -421,127 +437,6 @@ def _format_prep_response(summary: str, brief: dict) -> str:
             parts.append(f"{i}. {q_text}")
 
     return "\n".join(parts)
-
-
-def _persist_prep_questions(
-    tenant, user, company_name: str, chat_session_id: str, brief: dict
-) -> None:
-    """Save open_unknowns from the research brief as a questionnaire.
-
-    Closes the loop between chat prep and the onboarding session page:
-    questions generated in chat appear on the session's QuestionChecklist.
-    """
-    unknowns = brief.get("open_unknowns", [])
-    if not unknowns:
-        return
-
-    from apps.onboarding.models import (
-        OnboardingSession,
-        Questionnaire,
-        QuestionnaireStatus,
-        Question,
-        QuestionOrigin,
-        QuestionStatus,
-        WorkflowTarget,
-    )
-    from django.db import transaction
-
-    company = None
-    session_obj = None
-    try:
-        company = Company.objects.filter(
-            tenant=tenant, name__iexact=company_name
-        ).first()
-    except Exception:
-        pass
-
-    if company:
-        session_obj = (
-            OnboardingSession.objects.filter(tenant=tenant, company=company)
-            .exclude(status__in=["COMPLETED", "ARCHIVED"])
-            .first()
-        )
-        if not session_obj:
-            try:
-                session_obj = OnboardingSession.objects.create(
-                    tenant=tenant,
-                    company=company,
-                    status="PREPARING",
-                    created_by=user if user and user.is_authenticated else None,
-                )
-            except Exception:
-                pass
-
-    questions_data = []
-    for i, q_text in enumerate(unknowns):
-        text = str(q_text).strip()
-        if not text:
-            continue
-        if text.startswith("Unverified: "):
-            text = text.replace("Unverified: ", "", 1)
-        questions_data.append(
-            {
-                "order": i,
-                "text": text,
-                "workflow_target": WorkflowTarget.WF1,
-            }
-        )
-
-    if not questions_data:
-        return
-
-    try:
-        next_version = 1
-        if session_obj:
-            latest = (
-                Questionnaire.objects.filter(session=session_obj)
-                .order_by("-version")
-                .values_list("version", flat=True)
-                .first()
-            )
-            if latest:
-                next_version = latest + 1
-
-        with transaction.atomic():
-            questionnaire = Questionnaire.objects.create(
-                tenant=tenant,
-                company=company,
-                session=session_obj,
-                status=QuestionnaireStatus.DRAFT,
-                version=next_version,
-                question_count=len(questions_data),
-                source_chat_session_id=str(chat_session_id)[:64],
-            )
-            Question.objects.bulk_create(
-                [
-                    Question(
-                        questionnaire=questionnaire,
-                        order=q["order"],
-                        text=q["text"],
-                        origin=QuestionOrigin.PREPARED,
-                        workflow_target=q["workflow_target"],
-                        status=QuestionStatus.OPEN,
-                    )
-                    for q in questions_data
-                ]
-            )
-            questionnaire.status = QuestionnaireStatus.APPROVED
-            questionnaire.approved_by = user if user and user.is_authenticated else None
-            questionnaire.approved_at = timezone.now()
-            questionnaire.save(
-                update_fields=["status", "approved_by", "approved_at", "updated_at"]
-            )
-            if session_obj:
-                session_obj.questionnaire = questionnaire
-                session_obj.save(update_fields=["questionnaire", "updated_at"])
-        logger.info(
-            "Saved %d prep questions as questionnaire %s for %s",
-            len(questions_data),
-            questionnaire.pk,
-            company_name,
-        )
-    except Exception:
-        logger.exception("Failed to persist prep questions for %s", company_name)
 
 
 def _process_chat_message(
@@ -645,18 +540,6 @@ def _process_chat_message(
                 "onboarding_prep": True,
                 "skill_id": payload.get("skill_id"),
             }
-            # Only when a company is actually named. Without the guard an empty
-            # name matched no Company, so the questionnaire was created with
-            # company=None and session=None — orphaned, invisible to the
-            # onboarding session page it exists to populate (#657).
-            if prep_name.strip():
-                _persist_prep_questions(
-                    tenant=tenant,
-                    user=request.user,
-                    company_name=prep_name,
-                    chat_session_id=session.session_id,
-                    brief=brief,
-                )
         else:
             # AC-3: name preparation as the thing that is unavailable and
             # point at the manual path. A generic error would leave the
