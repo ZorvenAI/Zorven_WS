@@ -30,7 +30,7 @@ from app.providers.vision import VisionProvider
 from app.circuit_breaker.breaker import BreakerRegistry
 from app.logic.watchdog import watchdog_loop
 from app.metrics import record_circuit_state
-from app.providers.stt import GoogleSTTAdapter
+from app.providers.stt import FakeSTTAdapter, GoogleSTTAdapter
 from app.providers.tavily import TavilyProvider
 from app.services.backend_client import BackendClient
 from app.skills.registry import SkillRegistry
@@ -303,33 +303,58 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
 
     # F-05: STT adapter and IG-04 registration.
-    app.state.stt = GoogleSTTAdapter(
-        project=settings.STT_PROJECT,
-        location=settings.STT_LOCATION,
-        recognizer=settings.STT_RECOGNIZER,
-        credentials_path=settings.STT_CREDENTIALS,
-        stream_limit_s=settings.STT_STREAM_LIMIT_S,
-        breaker=app.state.breakers.get("stt"),
-    )
-    if not app.state.stt.configured:
-        logger.warning(
-            "stt_not_configured",
-            detail="live transcription unavailable — set OIA_STT_PROJECT",
+    if settings.STT_PROVIDER == "fake":
+        from pathlib import Path
+
+        fixture = settings.STT_FAKE_FIXTURE or None
+        app.state.stt = FakeSTTAdapter(
+            fixture_path=Path(fixture) if fixture else None,
         )
+        logger.info("stt_fake_enabled", fixture=fixture or "(empty — silent)")
+    else:
+        adapter = GoogleSTTAdapter(
+            project=settings.STT_PROJECT,
+            location=settings.STT_LOCATION,
+            recognizer=settings.STT_RECOGNIZER,
+            credentials_path=settings.STT_CREDENTIALS,
+            stream_limit_s=settings.STT_STREAM_LIMIT_S,
+            breaker=app.state.breakers.get("stt"),
+        )
+        # Installed even when unconfigured. An absent adapter makes `ws.py`
+        # return from the `start` handler before it sets `recording_id`, so the
+        # frame is silently ignored, no ERR-07 reaches the operator, and the
+        # meeting is not recorded at all. Left in place, `_stt_loop` raises
+        # STTUnavailable, which is what switches the session to RECORD_ONLY and
+        # keeps the audio — F-06's degraded mode.
+        app.state.stt = adapter
+        if not adapter.configured:
+            logger.warning(
+                "stt_not_configured",
+                detail="live transcription unavailable — set OIA_STT_PROJECT",
+            )
 
     # H-03: LIVE skill registry with OCR/Vision providers.
     ocr_provider = OCRProvider(breaker=app.state.breakers.get("vision"))
     vision_provider = VisionProvider(
         settings.GEMINI_KEY, breaker=app.state.breakers.get("vision")
     )
+    live_llm = LLMProvider(settings.GEMINI_KEY, breaker=app.state.breakers.get("llm"))
+    if live_llm.configured:
+        # Guarded: this runs inside `lifespan`, and `_ensure_client` imports the
+        # SDK and builds a client, so a bad key format or import failure would
+        # abort startup rather than surfacing per call as LLMUnavailable.
+        try:
+            live_llm._ensure_client()
+            logger.info("llm_client_warmed")
+        except Exception:  # noqa: BLE001 - a cold client is not a failed boot
+            logger.warning("llm_warm_failed", detail="first call will pay the cost")
+
     app.state.skill_registry = SkillRegistry(
         providers={
             "ocr": ocr_provider,
             "vision": vision_provider,
             "backend": app.state.backend,
-            "llm": LLMProvider(
-                settings.GEMINI_KEY, breaker=app.state.breakers.get("llm")
-            ),
+            "llm": live_llm,
             "redis": app.state.redis,
             "prompt_loader": app.state.prompt_loader,
             "producer": app.state.kafka,

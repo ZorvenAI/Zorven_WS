@@ -84,6 +84,13 @@ class ExtractAndMapFields(BaseSkill):
             valid_recording_ids=set(raw_rec) if raw_rec is not None else None,
             valid_media_ids=set(raw_med) if raw_med is not None else None,
             tenant_id=context.tenant_context.tenant_id,
+            # #655: the skill path gets the same allowlist as the executor, so
+            # the company's own name survives egress redaction either way.
+            allowlist=(
+                [str(context.input_context.get("company_name"))]
+                if context.input_context.get("company_name")
+                else None
+            ),
         )
 
         key_count = sum(

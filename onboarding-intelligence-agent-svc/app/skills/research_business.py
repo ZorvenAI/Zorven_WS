@@ -36,7 +36,8 @@ SKILL_ID = "SKL-OIA-01"
 #: highest-value output — SKL-OIA-02 turns them straight into questions. A
 #: model left to its own devices optimises for looking complete.
 PROMPT = """\
-You are preparing for a brand onboarding meeting with a business.
+You are a brand strategist preparing for an onboarding meeting with {company_name}.
+Your job is to give the operator a thorough briefing so they walk in informed.
 
 Operator-provided hints:
 - Company name: {company_name}
@@ -48,17 +49,39 @@ Web search results (the ONLY source material you may assert facts from):
 {sources}
 
 Produce a JSON object with exactly these keys:
-  "facts": a list of {{"statement": str, "source_url": str}}. Every statement
-    MUST be supported by one of the search results above, and source_url MUST
-    be that result's URL, copied exactly. If you cannot point to a result, do
-    not state it as a fact.
-  "competitors_seen": a list of competitor names appearing in the results.
+
+  "facts": a list of {{"statement": str, "source_url": str}}.
+    Write each statement as a complete, informative sentence a strategist would
+    find useful — not a fragment. Cover: what the company does, who they serve,
+    their key products/services, notable achievements, founding story, team
+    size, or market position. Every statement MUST be supported by one of the
+    search results above, and source_url MUST be that result's URL, copied
+    exactly. If you cannot point to a result, do not state it as a fact.
+    Aim for 6–10 facts when the sources are rich enough.
+
+  "competitors_seen": a list of competitor or alternative company names found
+    in the search results. Include direct competitors, companies mentioned
+    alongside {company_name}, and businesses in the same market segment. Even
+    if no competitor is named explicitly, identify companies serving similar
+    customers or offering similar services based on the search context.
+
   "digital_presence": {{"website": str or null, "social_profiles": [str],
     "notes": str}}.
-  "open_unknowns": a list of specific things you could NOT establish and that
-    an interviewer should ask about. This is the most valuable part of your
-    output. Be concrete — "what is their average order value" beats "more
-    financial detail". Aim for at least five when the sources are thin.
+    For notes, summarize what the search results reveal about their online
+    presence — do they have active social media, a blog, SEO visibility, paid
+    advertising, or customer reviews? Be specific.
+
+  "open_unknowns": a list of specific things you could NOT establish from the
+    search results that an interviewer should ask about in the meeting. This is
+    the most valuable part of your output. Think like a brand strategist:
+    - What is their unique selling proposition or competitive edge?
+    - Who is their ideal customer profile in detail?
+    - What are their revenue model and growth metrics?
+    - What marketing channels are working for them today?
+    - What brand identity elements exist (logo, colors, voice)?
+    - What are their biggest growth challenges right now?
+    Be concrete — "what is their monthly marketing budget" beats "more
+    financial detail". Aim for 6–8 questions.
 
 Return ONLY the JSON object, no prose and no code fence.
 """

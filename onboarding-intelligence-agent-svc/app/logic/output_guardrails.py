@@ -45,18 +45,66 @@ def scan_for_foreign_tenant(value: Any, own_tenant_id: str) -> str | None:
     return None
 
 
-def redact_value(value: Any) -> tuple[Any, bool]:
-    """Recursively redact PII in strings, dicts, and lists."""
+_URL_KEYS = frozenset(
+    {
+        "source_url",
+        "url",
+        "website",
+        "href",
+        "link",
+        "social_profiles",
+        "sources",
+    }
+)
+
+#: A whole string that is just a URL or bare host, with no spaces.
+#:
+#: Deliberately strict. A bare email does not match — `[\w.-]+` cannot cross the
+#: `@` — so `john@acme.com` under a `website` key is still redacted.
+_URL_RE = re.compile(
+    r"^(?:https?://|www\.)?[\w.-]+\.[a-z]{2,}(?:[/?#]\S*)?$",
+    re.IGNORECASE,
+)
+
+
+def _is_url(value: str) -> bool:
+    candidate = value.strip()
+    if not candidate or " " in candidate:
+        return False
+    return bool(_URL_RE.match(candidate))
+
+
+def redact_value(
+    value: Any, *, allowlist: list[str] | None = None, _key: str = ""
+) -> tuple[Any, bool]:
+    """Recursively redact PII in strings, dicts, and lists.
+
+    A string under a URL-ish key is left alone **only when it is actually a
+    URL**, because redacting inside one destroys it rather than protecting
+    anyone — and grounding depends on a citation URL matching the retrieved set
+    exactly.
+
+    The check is per string, after the type dispatch, not per key before it.
+    Keyed on the container, `social_profiles: ["twitter.com/acme", "CEO John Doe
+    - john@acme.com"]` returned unchanged in full: the key matched, so the list
+    was never walked and the email and name went out intact (#654).
+
+    Residual risk, accepted: PII inside a URL's own query string survives, since
+    narrowing further would start mangling the citations the exemption exists to
+    protect.
+    """
     from app.skills.redact_pii import redact_text
 
     if isinstance(value, str):
-        result = redact_text(value)
+        if _key in _URL_KEYS and _is_url(value):
+            return value, False
+        result = redact_text(value, allowlist=allowlist)
         return result.text, result.applied
     elif isinstance(value, dict):
         changed = False
         out: dict[str, Any] = {}
         for k, v in value.items():
-            new_v, did_change = redact_value(v)
+            new_v, did_change = redact_value(v, allowlist=allowlist, _key=k)
             out[k] = new_v
             changed = changed or did_change
         return out, changed
@@ -64,16 +112,96 @@ def redact_value(value: Any) -> tuple[Any, bool]:
         changed = False
         out_list: list[Any] = []
         for item in value:
-            new_item, did_change = redact_value(item)
+            new_item, did_change = redact_value(item, allowlist=allowlist, _key=_key)
             out_list.append(new_item)
             changed = changed or did_change
         return out_list, changed
     return value, False
 
 
+def _extract_business_names(payload: Any) -> list[str]:
+    """Pull company/brand names from the research brief for the allowlist."""
+    names: list[str] = []
+    if not isinstance(payload, dict):
+        return names
+    cn = payload.get("company_name")
+    if cn and isinstance(cn, str):
+        names.append(cn)
+    for comp in payload.get("competitors_seen") or []:
+        if isinstance(comp, str) and comp.strip():
+            names.append(comp.strip())
+    for fact in payload.get("facts") or []:
+        if isinstance(fact, dict):
+            stmt = str(fact.get("statement", ""))
+            for token in _KNOWN_TECH_BRANDS:
+                # Whole words only. Substring matching put "SAP" on the
+                # allowlist for a statement mentioning "Sapient", and "Meta" for
+                # one mentioning "metadata" — and an allowlisted "SAP" then
+                # exempted the person "Sapna Rao" from redaction entirely.
+                if re.search(rf"\b{re.escape(token)}\b", stmt, re.IGNORECASE):
+                    names.append(token)
+    return names
+
+
+_KNOWN_TECH_BRANDS = [
+    "Shopify",
+    "Zapier",
+    "Looker",
+    "HubSpot",
+    "Mailchimp",
+    "Canva",
+    "Salesforce",
+    "Stripe",
+    "Figma",
+    "Notion",
+    "Slack",
+    "Asana",
+    "Monday",
+    "Trello",
+    "Airtable",
+    "Webflow",
+    "Squarespace",
+    "Wix",
+    "WordPress",
+    "Semrush",
+    "Ahrefs",
+    "Moz",
+    "Hootsuite",
+    "Buffer",
+    "Sprout",
+    "Marketo",
+    "Pardot",
+    "ActiveCampaign",
+    "Klaviyo",
+    "Google",
+    "Meta",
+    "Facebook",
+    "Instagram",
+    "TikTok",
+    "LinkedIn",
+    "Twitter",
+    "YouTube",
+    "Pinterest",
+    "Amazon",
+    "Microsoft",
+    "Adobe",
+    "Oracle",
+    "SAP",
+    "Zendesk",
+    "Intercom",
+    "Drift",
+    "Freshworks",
+]
+
+
 def og02_egress_redact(payload: Any, context: SkillContext) -> Verdict:
     """OG-02: re-apply PII redaction on output before delivery."""
-    new_payload, changed = redact_value(payload)
+    allowlist: list[str] = []
+    company_name = (context.input_context or {}).get("company_name", "")
+    if company_name:
+        allowlist.append(company_name)
+    allowlist.extend(_extract_business_names(payload))
+    new_payload, changed = redact_value(payload, allowlist=allowlist)
     if changed:
         logger.info(
             "og02_chain_redaction",

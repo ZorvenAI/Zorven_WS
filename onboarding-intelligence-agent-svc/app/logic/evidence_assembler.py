@@ -50,6 +50,9 @@ class AssembledEvidence:
     compression_ratio: float = 1.0
     rag_chunks: list[EvidenceBlock] = field(default_factory=list)
     company_id: int | None = None
+    #: Allowlisted during PROCESS-mode egress redaction, so a person-shaped
+    #: business name is not stripped out of its own brand profile (#655).
+    company_name: str | None = None
     valid_recording_ids: set[str] = field(default_factory=set)
     valid_media_ids: set[str] = field(default_factory=set)
 
@@ -165,8 +168,10 @@ class EvidenceAssembler:
             )
 
         company_id = None
+        company_name = None
         if django_data and isinstance(django_data, dict):
             company_id = django_data.get("company_id")
+            company_name = django_data.get("company_name")
 
         evidence = AssembledEvidence(
             blocks=blocks,
@@ -176,6 +181,7 @@ class EvidenceAssembler:
             token_estimate=token_estimate,
             rag_chunks=[],
             company_id=company_id,
+            company_name=company_name,
             valid_recording_ids=valid_rec_ids,
             valid_media_ids=valid_media_ids,
         )
