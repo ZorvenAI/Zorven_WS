@@ -45,27 +45,35 @@ export interface TaggedChunk {
   blob: Blob;
   index: number;
   streamIndex: number;
-  /**
-   * Whether the energy gate had this mic open when the chunk was produced
-   * (O-09).
-   *
-   * Recorded at production rather than checked at send time: chunks arrive
-   * every 20 ms and the open channel changes between them, so asking "is this
-   * mic open now?" would mis-gate the audio either side of a handover.
-   *
-   * Only the WebSocket honours it. The GCS uploader ignores it entirely — the
-   * per-mic archive O-07 builds stays complete, because a legal record with
-   * holes in it is worse than one containing bleed.
-   */
-  gateOpen: boolean;
 }
 
 export interface UseMultiMicRecorder {
   state: RecorderState;
   error: string | null;
   elapsedSeconds: number;
+  /**
+   * Per-mic chunks, one WebM stream per microphone. O-07's GCS archive reads
+   * these, so they are never gated — a legal record with holes in it is worse
+   * than one containing bleed.
+   */
   chunksRef: React.RefObject<TaggedChunk[]>;
   chunkCount: number;
+  /**
+   * The gated stream: one WebM container carrying only whoever the gate had
+   * open, with `streamIndex` naming them (O-09). This is what goes to STT.
+   *
+   * It exists because gating cannot be done by dropping encoded chunks.
+   * Splicing two MediaRecorder outputs into one byte stream produces a
+   * malformed container: measured with ffmpeg, a strict parser recovers only
+   * the audio before the first handover and silently discards the rest, while
+   * a lenient one collapses every later timestamp onto the splice point —
+   * which would destroy the `t_start` attribution and provenance rely on.
+   *
+   * So the gate runs *before* the encoder, as gain on each mic's node, and one
+   * recorder captures the result.
+   */
+  gatedChunksRef: React.RefObject<TaggedChunk[]>;
+  gatedChunkCount: number;
   mimeType: string | null;
   /** The mic currently feeding STT, for AC-6's indicator. */
   activeStreamIndex: number | null;
@@ -81,6 +89,8 @@ interface StreamHandle {
   // Pinned to ArrayBuffer, not ArrayBufferLike: getByteTimeDomainData cannot
   // write into a SharedArrayBuffer-backed view.
   samples: Uint8Array<ArrayBuffer> | null;
+  /** Gain the gate drives: 1 when this mic is open, 0 when it is suppressed. */
+  gain: GainNode | null;
 }
 
 export function useMultiMicRecorder(
@@ -91,6 +101,8 @@ export function useMultiMicRecorder(
   const [elapsedSeconds, setElapsed] = useState(0);
   const chunksRef = useRef<TaggedChunk[]>([]);
   const [chunkCount, setChunkCount] = useState(0);
+  const gatedChunksRef = useRef<TaggedChunk[]>([]);
+  const [gatedChunkCount, setGatedChunkCount] = useState(0);
   const [mimeType, setMimeType] = useState<string | null>(null);
 
   const [activeStreamIndex, setActiveStreamIndex] = useState<number | null>(null);
@@ -100,6 +112,8 @@ export function useMultiMicRecorder(
   const startedAt = useRef(0);
   const ticker = useRef<ReturnType<typeof setInterval> | null>(null);
   const nextIndex = useRef(0);
+  const nextGatedIndex = useRef(0);
+  const gatedRecorderRef = useRef<MediaRecorder | null>(null);
   const gate = useRef(new EnergyGate());
   const gateTicker = useRef<ReturnType<typeof setInterval> | null>(null);
   /**
@@ -127,6 +141,15 @@ export function useMultiMicRecorder(
     }
     openChannel.current = null;
     setActiveStreamIndex(null);
+    const gated = gatedRecorderRef.current;
+    if (gated && gated.state !== 'inactive') {
+      try {
+        gated.stop();
+      } catch {
+        /* already stopped */
+      }
+    }
+    gatedRecorderRef.current = null;
     for (const h of handles.current) {
       if (h.recorder.state !== 'inactive') {
         try { h.recorder.stop(); } catch { /* already stopped */ }
@@ -179,19 +202,18 @@ export function useMultiMicRecorder(
         if (!event.data || event.data.size === 0) return;
         const index = nextIndex.current;
         nextIndex.current += 1;
-        chunksRef.current.push({
-          blob: event.data,
-          index,
-          streamIndex,
-          // A single-mic recording has one stream and no gate decision yet;
-          // treat it as open so the pre-O-09 path is unchanged.
-          gateOpen:
-            openChannel.current === null || openChannel.current === streamIndex,
-        });
+        chunksRef.current.push({ blob: event.data, index, streamIndex });
         setChunkCount((n) => n + 1);
       };
 
-      opened.push({ streamIndex, mediaStream, recorder, analyser: null, samples: null });
+      opened.push({
+        streamIndex,
+        mediaStream,
+        recorder,
+        analyser: null,
+        samples: null,
+        gain: null,
+      });
     }
 
     const context = new AudioContext({ sampleRate: SAMPLE_RATE });
@@ -201,26 +223,67 @@ export function useMultiMicRecorder(
     audioContext.current = context;
     startedAt.current = context.currentTime;
 
-    // O-09: one analyser per mic, so the gate can compare their energy.
-    // Wrapped because a jsdom AudioContext has no createAnalyser — the gate
-    // then never opens, `gateOpen` stays true for every chunk, and behaviour
-    // falls back to O-02's send-everything model rather than failing.
-    for (const h of opened) {
-      try {
+    // O-09: the gated graph. Each mic gets an analyser (to measure energy) and
+    // a gain node (for the gate to open or shut it), and all the gains feed one
+    // destination that a single recorder captures.
+    //
+    // The gate has to act here, on the signal, rather than on encoded chunks.
+    // Splicing two MediaRecorder outputs into one byte stream makes a malformed
+    // container — measured with ffmpeg, a strict parser recovers only the audio
+    // before the first handover and discards the rest, and a lenient one
+    // collapses every later timestamp onto the splice point.
+    //
+    // Wrapped because jsdom's AudioContext has none of these methods. The gate
+    // then never arms, `gatedChunksRef` stays empty, and callers fall back to
+    // the per-mic chunks — O-02's behaviour — rather than failing.
+    let gatedRecorder: MediaRecorder | null = null;
+    try {
+      const merged = context.createMediaStreamDestination();
+      for (const h of opened) {
+        const source = context.createMediaStreamSource(h.mediaStream);
         const analyser = context.createAnalyser();
         analyser.fftSize = 2048;
-        context.createMediaStreamSource(h.mediaStream).connect(analyser);
+        source.connect(analyser);
         h.analyser = analyser;
         h.samples = new Uint8Array(new ArrayBuffer(analyser.fftSize));
-      } catch {
+
+        const gain = context.createGain();
+        // Shut until the gate opens one, so a meeting never starts by sending
+        // every mic at once.
+        gain.gain.value = 0;
+        source.connect(gain);
+        gain.connect(merged);
+        h.gain = gain;
+      }
+      if (opened.length > 1) {
+        gatedRecorder = new MediaRecorder(merged.stream, { mimeType: type });
+        gatedRecorder.ondataavailable = (event: BlobEvent) => {
+          if (!event.data || event.data.size === 0) return;
+          const index = nextGatedIndex.current;
+          nextGatedIndex.current += 1;
+          // The open channel at the moment this slice was encoded — which is
+          // what tells the server who was speaking.
+          gatedChunksRef.current.push({
+            blob: event.data,
+            index,
+            streamIndex: openChannel.current ?? opened[0].streamIndex,
+          });
+          setGatedChunkCount((n) => n + 1);
+        };
+      }
+    } catch {
+      gatedRecorder = null;
+      for (const h of opened) {
         h.analyser = null;
+        h.gain = null;
       }
     }
 
     handles.current = opened;
+    gatedRecorderRef.current = gatedRecorder;
     setMimeType(type);
 
-    if (opened.length > 1 && opened.some((h) => h.analyser !== null)) {
+    if (gatedRecorder !== null) {
       gate.current = new EnergyGate();
       gateTicker.current = setInterval(() => {
         const rms = new Map<number, number>();
@@ -232,6 +295,11 @@ export function useMultiMicRecorder(
         if (rms.size === 0) return;
         const decision = gate.current.decide(rms, Date.now());
         openChannel.current = decision.active;
+        // Gain, not chunk filtering: the suppressed mics contribute silence to
+        // the merged signal, so the encoder sees one continuous stream.
+        for (const h of handles.current) {
+          if (h.gain) h.gain.gain.value = h.streamIndex === decision.active ? 1 : 0;
+        }
         if (decision.changed) setActiveStreamIndex(decision.active);
       }, GATE_INTERVAL_MS);
     }
@@ -239,6 +307,7 @@ export function useMultiMicRecorder(
     for (const h of opened) {
       h.recorder.start(TIMESLICE_MS);
     }
+    gatedRecorder?.start(TIMESLICE_MS);
 
     setState('recording');
     setElapsed(0);
@@ -300,6 +369,8 @@ export function useMultiMicRecorder(
     elapsedSeconds,
     chunksRef,
     chunkCount,
+    gatedChunksRef,
+    gatedChunkCount,
     mimeType,
     activeStreamIndex,
     start,

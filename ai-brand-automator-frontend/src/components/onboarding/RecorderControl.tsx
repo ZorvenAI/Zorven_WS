@@ -95,24 +95,25 @@ export default function RecorderControl({
   /** Set below, so the bound handler can reach `end` without a cycle. */
   const endRef = useRef<(() => Promise<void>) | null>(null);
 
+  // O-09: STT is fed the gated stream when there is one — a single WebM
+  // container holding only whoever the gate had open, with each chunk tagged
+  // with the mic that was speaking.
+  //
+  // Not the per-mic chunks: those are the GCS archive, which stays complete
+  // (bleed included) because a legal record with holes in it is worse. And they
+  // cannot be gated by selection anyway — splicing two MediaRecorder outputs
+  // into one byte stream makes a malformed container that drops everything
+  // after the first handover.
+  const gatedRef = 'gatedChunksRef' in live ? (live as UseMultiMicRecorder).gatedChunksRef : null;
+  const gatedCount = 'gatedChunkCount' in live ? (live as UseMultiMicRecorder).gatedChunkCount : 0;
+  const sttChunksRef = gatedCount > 0 ? gatedRef! : chunksRef;
+
   useEffect(() => {
     if (!recording || !sendBinary) return;
-    const chunks = chunksRef.current;
+    const chunks = sttChunksRef.current ?? [];
     while (sentChunkIndex.current < chunks.length) {
       const chunk = chunks[sentChunkIndex.current];
       const streamIdx = 'streamIndex' in chunk ? (chunk as { streamIndex: number }).streamIndex : -1;
-      // O-09: only the mic the energy gate had open reaches STT. Separate mics
-      // in one room hear each other, and transcribing every copy makes the
-      // record say two people said the same sentence.
-      //
-      // The uploader deliberately does not consult this — every chunk still
-      // reaches its own GCS object, because a legal archive with holes in it is
-      // worse than one containing bleed.
-      const gated = 'gateOpen' in chunk && (chunk as { gateOpen: boolean }).gateOpen === false;
-      if (gated) {
-        sentChunkIndex.current += 1;
-        continue;
-      }
       chunk.blob.arrayBuffer().then((buf) => {
         if (streamIdx >= 0) {
           const audio = new Uint8Array(buf);
@@ -126,7 +127,7 @@ export default function RecorderControl({
       });
       sentChunkIndex.current += 1;
     }
-  }, [recording, chunkCount, sendBinary, chunksRef]);
+  }, [recording, chunkCount, gatedCount, sendBinary, sttChunksRef]);
 
   // AC-6. Named from the mic assignments rather than shown as an index: the
   // operator assigned "Sarah Kelso" to a mic, not "stream 1".

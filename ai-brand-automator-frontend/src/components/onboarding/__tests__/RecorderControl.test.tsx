@@ -487,3 +487,84 @@ describe('F-03 · the operator can see whether audio is safe', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/could not be saved/i);
   });
 });
+
+// ── O-09 · STT is fed the gated stream, the archive keeps everything ──
+
+describe('O-09 · the gated stream feeds STT', () => {
+  /**
+   * Gating by *selecting* encoded chunks cannot work, which is why there is a
+   * separate gated stream at all. Measured with ffmpeg: splicing two
+   * MediaRecorder outputs into one byte stream makes a malformed WebM container
+   * — a strict parser recovers only the audio before the first handover and
+   * silently discards the rest, and a lenient one collapses every later
+   * timestamp onto the splice point, destroying the `t_start` that speaker
+   * attribution and evidence provenance both depend on.
+   *
+   * So the gate runs before the encoder and one recorder captures the result.
+   */
+  const gatedRecorder = (
+    gated: { blob: Blob; index: number; streamIndex: number }[],
+    perMic: { blob: Blob; index: number; streamIndex: number }[],
+  ) =>
+    ({
+      state: 'recording',
+      error: null,
+      elapsedSeconds: 1,
+      chunksRef: { current: perMic },
+      chunkCount: perMic.length,
+      gatedChunksRef: { current: gated },
+      gatedChunkCount: gated.length,
+      mimeType: 'audio/webm;codecs=opus',
+      activeStreamIndex: 1,
+      start: async () => {},
+      stop: async () => {},
+    }) as unknown as UseMeetingRecorder;
+
+  // jsdom's Blob has no arrayBuffer(), which the send path calls. Standing in
+  // for the missing browser API, not for any of our own code.
+  const blobOf = (n: number) =>
+    ({ size: n, arrayBuffer: async () => new ArrayBuffer(n) }) as unknown as Blob;
+
+  it('sends the gated chunks, not the per-mic ones', async () => {
+    const sent: Uint8Array[] = [];
+    const gated = [{ blob: blobOf(8), index: 0, streamIndex: 1 }];
+    // Two mics' worth of archive chunks, which must not be what STT receives.
+    const perMic = [
+      { blob: blobOf(32), index: 0, streamIndex: 0 },
+      { blob: blobOf(32), index: 1, streamIndex: 1 },
+    ];
+
+    render(
+      <RecorderControl
+        consentGranted
+        sessionId="s-1"
+        sendBinary={(d) => sent.push(new Uint8Array(d as Uint8Array))}
+        micAssignments={[
+          { deviceId: 'a', label: 'Devan Roy', role: 'operator', streamIndex: 0 },
+          { deviceId: 'b', label: 'Sarah Kelso', role: 'participant', streamIndex: 1 },
+        ]}
+        recorder={gatedRecorder(gated, perMic)}
+      />,
+    );
+
+    await waitFor(() => expect(sent.length).toBe(1));
+    // One chunk, prefixed with the mic that was open — not three.
+    expect(sent[0][0]).toBe(1);
+    expect(sent[0].length).toBe(1 + 8);
+  });
+
+  it('names the open mic for the operator', () => {
+    render(
+      <RecorderControl
+        consentGranted
+        sessionId="s-1"
+        micAssignments={[
+          { deviceId: 'b', label: 'Sarah Kelso', role: 'participant', streamIndex: 1 },
+        ]}
+        recorder={gatedRecorder([], [])}
+      />,
+    );
+
+    expect(screen.getByTestId('active-speaker')).toHaveTextContent('Sarah Kelso');
+  });
+});
