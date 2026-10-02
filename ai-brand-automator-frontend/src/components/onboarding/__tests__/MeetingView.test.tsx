@@ -690,10 +690,15 @@ describe('#662 · the operator is told when transcription stops', () => {
     render(<MeetingView questions={QUESTIONS} consent={GRANTED} />);
 
     const banner = screen.getByTestId('transcription-stopped-banner');
-    expect(banner).toHaveTextContent(/transcription stopped/i);
+    expect(banner).toHaveTextContent(/transcription interrupted/i);
     // The reassurance matters as much as the warning: an operator who thinks
     // the recording is lost may stop the meeting.
-    expect(banner).toHaveTextContent(/still being recorded and saved/i);
+    //
+    // "any recording in progress", not "the recording": the socket is enabled
+    // on consent, so this banner can appear before Record is ever pressed, and
+    // asserting that audio is being saved would then be false.
+    expect(banner).toHaveTextContent(/any recording in progress/i);
+    expect(banner).toHaveTextContent(/still being saved/i);
   });
 
   it('tells the operator how to recover once it has given up', () => {
@@ -704,7 +709,10 @@ describe('#662 · the operator is told when transcription stops', () => {
 
     const banner = screen.getByTestId('transcription-stopped-banner');
     expect(banner).toHaveTextContent(/will not resume/i);
-    expect(banner).toHaveTextContent(/stop and start the recording/i);
+    // Reload, not "stop and start the recording". The socket effect keys on
+    // [sessionId, enabled] and `enabled` is consent, so neither changes when
+    // recording stops — that advice could not be followed.
+    expect(banner).toHaveTextContent(/reload the page/i);
   });
 
   it('uses alert, not status, so it is announced', () => {

@@ -262,6 +262,17 @@ export default function MeetingView({
 
         `reconnecting`, not `connecting`: the first connect is routine and must
         not raise an alarm.
+
+        The copy says "any recording in progress" rather than asserting one is
+        running: the socket is enabled on consent, so this can show before the
+        operator ever presses Record, and a banner that claims audio is being
+        saved when nothing is recording is a false reassurance in the one place
+        that has to be trusted.
+
+        `closed` says reload, not "stop and start the recording". The socket
+        effect keys on [sessionId, enabled], and `enabled` is consent — neither
+        changes when recording stops, so nothing would reconnect and the advice
+        would be impossible to follow.
       */}
       {(socket.status === 'reconnecting' || socket.status === 'closed') && (
         <div
@@ -272,8 +283,8 @@ export default function MeetingView({
           <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
           <span>
             {socket.status === 'reconnecting'
-              ? 'Live transcription stopped — reconnecting. Audio is still being recorded and saved.'
-              : 'Live transcription has stopped and will not resume. Audio is still being recorded and saved — stop and start the recording to transcribe again.'}
+              ? 'Live transcription interrupted — reconnecting. Any recording in progress is unaffected and still being saved.'
+              : 'Live transcription is not running and will not resume on its own. Any recording in progress is still being saved but will not be transcribed — reload the page to restore transcription.'}
           </span>
         </div>
       )}

@@ -65,6 +65,8 @@ interface UseLiveSocketReturn {
 const BASE = '/onboarding';
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_ATTEMPTS = 5;
+/** How long a socket must hold before its reconnect budget is forgiven. */
+const STABLE_AFTER_MS = 10_000;
 const DEFERRED_CLOSE_MS = 200;
 
 function getOiaWsUrl(sessionId: string, ticket: string): string {
@@ -96,6 +98,7 @@ export function useLiveSocket({
   const [error, setError] = useState<LiveSocketError | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const retriesRef = useRef(0);
+  const startFrameRef = useRef<Record<string, unknown> | null>(null);
   const deferredCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sendBinary = useCallback((data: ArrayBuffer | Uint8Array) => {
@@ -106,6 +109,21 @@ export function useLiveSocket({
   }, []);
 
   const sendControl = useCallback((frame: Record<string, unknown>) => {
+    // Remember the `start` frame so a reconnect can replay it (#662).
+    //
+    // The server's STT task belongs to the socket: it is cancelled when the
+    // socket closes, and only a `start` frame spawns a new one. Nothing re-sent
+    // it, so a dropped socket ended transcription for the rest of the meeting
+    // even though the socket itself came back. Caching it here rather than in
+    // the recorder keeps the replay next to the reconnect it belongs to.
+    //
+    // `stop` clears it: the recording is over and replaying start would open an
+    // STT stream for a meeting that has ended.
+    if (frame.type === 'start') {
+      startFrameRef.current = frame;
+    } else if (frame.type === 'stop') {
+      startFrameRef.current = null;
+    }
     const ws = wsRef.current;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(frame));
@@ -127,6 +145,7 @@ export function useLiveSocket({
 
     let cancelled = false;
     let reconnectTimer: ReturnType<typeof setTimeout>;
+    let stableTimer: ReturnType<typeof setTimeout>;
 
     const handleMessage = (event: MessageEvent) => {
       if (typeof event.data !== 'string') return;
@@ -151,6 +170,11 @@ export function useLiveSocket({
 
     const handleClose = () => {
       wsRef.current = null;
+      // Cancel the stability window: this socket did not survive it, and a
+      // timer left running would forgive the retry budget on a connection that
+      // has already died — which is how a flapping socket never reaches
+      // 'closed'.
+      clearTimeout(stableTimer);
       if (cancelled) {
         setStatus('closed');
         return;
@@ -170,7 +194,13 @@ export function useLiveSocket({
 
     const connect = async () => {
       if (cancelled) return;
-      setStatus('connecting');
+      // Only the first attempt is 'connecting'. A retry keeps 'reconnecting',
+      // or the warning would vanish 3 s in and stay hidden for the rest of a
+      // slow attempt — the ticket POST has no timeout and the handshake can
+      // hang for tens of seconds, which is exactly when it matters.
+      if (retriesRef.current === 0) {
+        setStatus('connecting');
+      }
 
       let ticket: string;
       try {
@@ -200,9 +230,29 @@ export function useLiveSocket({
           ws.close();
           return;
         }
-        retriesRef.current = 0;
         setStatus('live');
         setError(null);
+
+        // Re-arm transcription on the new socket. The server's STT task belongs
+        // to the socket and is cancelled when it closes; only a `start` frame
+        // spawns another. Without this the socket is back and reports 'live'
+        // while the server has no STT task for it, so audio arrives and is
+        // dropped — the same silent failure, now behind a reassuring status.
+        const resume = startFrameRef.current;
+        if (resume) {
+          try {
+            ws.send(JSON.stringify(resume));
+          } catch {
+            /* a failed send closes the socket, and the next open retries */
+          }
+        }
+
+        // Retries are forgiven only once the socket has held for a while. A
+        // flapping connection — Cloud Run cutting it repeatedly — would
+        // otherwise reset the budget on every open and never reach 'closed'.
+        stableTimer = setTimeout(() => {
+          retriesRef.current = 0;
+        }, STABLE_AFTER_MS);
       };
 
       ws.onmessage = handleMessage;
@@ -232,6 +282,7 @@ export function useLiveSocket({
     return () => {
       cancelled = true;
       clearTimeout(reconnectTimer);
+      clearTimeout(stableTimer);
       // Defer the close so a strict-mode remount can cancel it and reuse
       // the connection. A real unmount lets the timer fire after 200 ms.
       deferredCloseRef.current = setTimeout(() => {
