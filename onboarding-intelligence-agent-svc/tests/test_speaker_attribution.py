@@ -14,7 +14,11 @@ from __future__ import annotations
 
 import pytest
 
-from app.logic.evidence_assembler import attribute_segment, build_speaker_labels
+from app.logic.evidence_assembler import (
+    attribute_segment,
+    build_speaker_labels,
+    label_for,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -132,3 +136,61 @@ def test_a_colon_in_the_spoken_text_is_left_alone():
         attribute_segment("the ratio is 2:1", "Participant")
         == "Participant: the ratio is 2:1"
     )
+
+
+# ── label_for ────────────────────────────────────────────────────────
+
+
+def test_a_real_index_resolves_to_its_label():
+    assert label_for({0: "Operator", 1: "Participant"}, 1) == "Participant"
+
+
+def test_a_boolean_does_not_alias_a_real_mic():
+    """The reason this helper exists rather than a bare `labels.get(...)`.
+
+    `hash(True) == hash(1)` and `True == 1`, so in a dict keyed by mic index
+    `labels.get(True)` returns **mic 1's label** — verified. A malformed segment
+    would therefore be attributed to a real speaker, and the attribution would
+    look entirely plausible in the transcript.
+
+    `build_speaker_labels` already refuses to build a label *from* a boolean;
+    this is the other half, where a label for key 1 legitimately exists.
+    """
+    labels = {0: "Operator", 1: "Participant"}
+
+    assert labels.get(True) == "Participant"  # what the guard is protecting against
+    assert label_for(labels, True) is None
+    assert label_for(labels, False) is None
+
+
+@pytest.mark.parametrize(
+    "speaker",
+    [
+        None,
+        "1",
+        1.0,
+        [1],
+        {"speaker": 1},
+        (1,),
+    ],
+)
+def test_a_malformed_index_resolves_to_nothing(speaker):
+    """Segments come from a JSON column whose writer validates only text and
+    timestamps, so any type can arrive here.
+
+    The unhashable cases are the ones that matter most: `labels.get([1])` raises
+    `TypeError: unhashable type`, and this runs inside evidence assembly, so it
+    would cost a whole session its evidence rather than one segment its label.
+    """
+    assert label_for({0: "Operator", 1: "Participant"}, speaker) is None
+
+
+def test_an_index_with_no_label_resolves_to_nothing():
+    """A mic the START frame never described. Distinct from a malformed index,
+    and handled the same way — no label rather than a guess."""
+    assert label_for({0: "Operator"}, 7) is None
+
+
+def test_an_empty_label_map_resolves_to_nothing():
+    """A single-mic recording builds no labels at all."""
+    assert label_for({}, 0) is None
