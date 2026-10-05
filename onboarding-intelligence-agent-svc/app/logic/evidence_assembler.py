@@ -96,6 +96,19 @@ def build_speaker_labels(segments: list[dict[str, Any]]) -> dict[int, str]:
     return labels
 
 
+def label_for(labels: dict[int, str], speaker: Any) -> str | None:
+    """The label for a segment's speaker index, tolerating a junk index.
+
+    Segments come from a JSON column whose writer validates only text and
+    timestamps, so ``speaker`` is ``Any``. Booleans are excluded for the reason
+    ``build_speaker_labels`` excludes them: ``isinstance(True, int)`` is true in
+    Python, and ``True`` is not mic 1.
+    """
+    if isinstance(speaker, bool) or not isinstance(speaker, int):
+        return None
+    return labels.get(speaker)
+
+
 def attribute_segment(text: str, label: str | None) -> str:
     """Prefix a transcript line with its speaker label.
 
@@ -442,7 +455,7 @@ class EvidenceAssembler:
                     continue
 
                 segments_text.append(
-                    attribute_segment(text, labels.get(seg.get("speaker")))
+                    attribute_segment(text, label_for(labels, seg.get("speaker")))
                 )
 
                 t_start = seg.get("t_start")

@@ -68,6 +68,26 @@ def exporter(_memory_exporter: InMemorySpanExporter) -> InMemorySpanExporter:
     return _memory_exporter
 
 
+def server_span(exporter: InMemorySpanExporter, name: str):
+    """The span the middleware opened, selected by name rather than position.
+
+    Not ``get_finished_spans()[0]``. The exporter is attached to the
+    *process-wide* tracer provider, so any other span finishing while the test
+    runs lands in the same list — and in CI one did, which made both of the
+    assertions below read a span the test never created: the parent check saw
+    an unrelated span id, and the "this is a new root" check saw a span that
+    had a parent.
+
+    Position was never the thing under test; the middleware's own span is.
+    """
+    matches = [span for span in exporter.get_finished_spans() if span.name == name]
+    assert matches, (
+        f"no span named {name!r} was exported; "
+        f"got {[s.name for s in exporter.get_finished_spans()]}"
+    )
+    return matches[-1]
+
+
 async def test_inbound_traceparent_is_continued(exporter):
     """The span the service opens belongs to the caller's trace."""
     from fastapi import FastAPI
@@ -86,12 +106,11 @@ async def test_inbound_traceparent_is_continued(exporter):
     assert response.json()["trace_id"] == UPSTREAM_TRACE_ID
     assert response.headers["X-Trace-Id"] == UPSTREAM_TRACE_ID
 
-    spans = exporter.get_finished_spans()
-    assert spans, "no span was exported"
-    assert format(spans[0].context.trace_id, "032x") == UPSTREAM_TRACE_ID
+    span = server_span(exporter, "GET /probe")
+    assert format(span.context.trace_id, "032x") == UPSTREAM_TRACE_ID
     # The server span is a child of the caller's span, not a new root.
-    assert spans[0].parent is not None
-    assert format(spans[0].parent.span_id, "016x") == UPSTREAM_SPAN_ID
+    assert span.parent is not None
+    assert format(span.parent.span_id, "016x") == UPSTREAM_SPAN_ID
 
 
 async def test_a_request_without_a_traceparent_starts_its_own_trace(exporter):
@@ -112,7 +131,7 @@ async def test_a_request_without_a_traceparent_starts_its_own_trace(exporter):
     trace_id = response.json()["trace_id"]
     assert trace_id != UPSTREAM_TRACE_ID
     assert trace_id != "0" * 32
-    assert exporter.get_finished_spans()[0].parent is None
+    assert server_span(exporter, "GET /probe").parent is None
 
 
 async def test_emitted_event_carries_the_inbound_trace_id(exporter):
