@@ -86,8 +86,16 @@ class FieldExtractor:
         valid_recording_ids: set[str] | None = None,
         valid_media_ids: set[str] | None = None,
         tenant_id: str | None = None,
+        allowlist: list[str] | None = None,
     ) -> ExtractionResult:
-        """Run extraction across all wizard pages."""
+        """Run extraction across all wizard pages.
+
+        ``allowlist`` names strings egress redaction must leave alone — the
+        company's own name, above all. PROCESS mode is the sole OG-02 defence
+        for this path, and without the allowlist a business called "Sarah
+        Johnson Consulting" had its name reduced to "<PERSON> Consulting" in the
+        profile built from its own meeting (#655).
+        """
         evidence_text = self._build_evidence_text(evidence_blocks)
         if not evidence_text.strip():
             logger.warning("extraction_no_evidence")
@@ -139,7 +147,7 @@ class FieldExtractor:
 
         # OG-02: egress redaction — sole defense for PROCESS mode
         # (IG-04 covers the PREP/LIVE chain path, not this one)
-        self._apply_egress_redaction(result)
+        self._apply_egress_redaction(result, allowlist)
 
         # OG-05: cross-tenant isolation — sole defense for PROCESS mode
         if tenant_id:
@@ -471,11 +479,13 @@ class FieldExtractor:
         return "KEY" if field_name in KEY_FIELDS else "SECONDARY"
 
     @staticmethod
-    def _apply_egress_redaction(result: "ExtractionResult") -> None:
+    def _apply_egress_redaction(
+        result: "ExtractionResult", allowlist: list[str] | None = None
+    ) -> None:
         """OG-02: re-apply PII redaction on egress values."""
         for entry in result.fields_written:
             value = entry.get("value")
-            new_value, changed = redact_value(value)
+            new_value, changed = redact_value(value, allowlist=allowlist)
             if changed:
                 logger.info(
                     "og02_egress_redaction",

@@ -92,8 +92,11 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
         ]
 
     def get_company_name(self, obj) -> str | None:
+        # `.name`, not `str(company)`: Company.__str__ is "Name (tenant-name)",
+        # so the session list rendered "Kalyani Roasters (kalyani)" once the
+        # frontend started displaying this field.
         company = getattr(obj, "company", None)
-        return str(company) if company else None
+        return getattr(company, "name", "") or None if company else None
 
     def get_legal_next_states(self, obj) -> list[str]:
         """Advertised so a caller does not have to hold §9.4 in its head.

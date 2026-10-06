@@ -274,6 +274,12 @@ class ProcessExecutor:
                         valid_recording_ids=evidence.valid_recording_ids,
                         valid_media_ids=evidence.valid_media_ids,
                         tenant_id=tenant.tenant_id,
+                        # #655: the company's own name must survive egress
+                        # redaction, or the profile built from its meeting
+                        # reports a redaction marker as the brand.
+                        allowlist=(
+                            [evidence.company_name] if evidence.company_name else None
+                        ),
                     )
                 except StepBudgetExceeded as exc:
                     logger.error(

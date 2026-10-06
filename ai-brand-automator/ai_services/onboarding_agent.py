@@ -142,6 +142,10 @@ def dispatch_prep_turn(
             ok=False, code=ERR_AGENT_UNAVAILABLE, message=UNAVAILABLE_MESSAGE
         )
 
+    # localhost, because this default only ever applies *outside* Docker:
+    # deployment/docker-compose.yml already sets OIA_SERVICE_URL to the service
+    # name. The documented local flow runs Django and the agent as host
+    # processes, where a compose hostname does not resolve.
     base_url = config("OIA_SERVICE_URL", default="http://localhost:8120")
     token = config("OIA_SERVICE_TOKEN", default="")
 
