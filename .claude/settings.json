@@ -1,5 +1,30 @@
 {
   "enabledPlugins": {
     "claude-mem@thedotmack": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "statusMessage": "Formatting with black",
+            "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/format-python.sh\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-env-files.sh\""
+          }
+        ]
+      }
+    ]
   }
 }
