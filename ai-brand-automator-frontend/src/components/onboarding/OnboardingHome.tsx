@@ -180,7 +180,7 @@ export default function OnboardingHome() {
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm text-white">
-                        {session.company ?? 'Unassigned company'}
+                        {session.company_name ?? session.company ?? 'Unassigned company'}
                       </p>
                       <p className="text-xs text-brand-silver">
                         Updated {new Date(session.updated_at).toLocaleString()}

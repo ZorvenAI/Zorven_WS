@@ -1,7 +1,8 @@
 """G-01 · PII redaction: NER-based detection, allowlist, RedactionResult.
 
 Upgraded from F-05's pattern-only tests. The engine now uses spaCy NER
-(via Presidio's AnalyzerEngine) so PERSON and LOCATION are detectable.
+(via Presidio's AnalyzerEngine) so PERSON is detectable. LOCATION is
+detectable but deliberately not in the default entity set — see #659.
 The function returns a RedactionResult with text, applied flag, and
 entity_types for EVT-103.
 """
@@ -55,11 +56,21 @@ def test_redact_ssn():
     assert "US_SSN" in result.entity_types
 
 
-def test_redact_location():
+def test_a_place_name_is_left_alone_by_default():
+    """LOCATION is not in the default entity set (#659).
+
+    A brand's own city is part of its identity — "we roast in Kalyani" is the
+    kind of specific a research brief exists to capture — so redacting it turned
+    the operator's notes into "we roast in <LOCATION>".
+
+    The old version of this test was `if result.applied: assert "LOCATION" in
+    ...`, which passed either way and is why the setting kept redacting it long
+    after the entity list stopped asking for it.
+    """
     result = redact_text("Our office is in San Francisco.")
-    assert result.applied is not None  # proves it's a RedactionResult, not str
-    if result.applied:
-        assert "LOCATION" in result.entity_types
+
+    assert "San Francisco" in result.text
+    assert "LOCATION" not in result.entity_types
 
 
 def test_redact_multiple_entities():

@@ -83,6 +83,14 @@ export interface CalendarPaneProps {
   now?: Date;
 }
 
+/** A clicked day as a `datetime-local` value, defaulting to 09:00. */
+function atNineAm(day: Date): string {
+  const yyyy = day.getFullYear();
+  const mm = String(day.getMonth() + 1).padStart(2, '0');
+  const dd = String(day.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}T09:00`;
+}
+
 export default function CalendarPane({ now }: CalendarPaneProps) {
   const { canEdit: canEditRole } = useTenantRole();
   // Hydration guard, per the project rule and E-01's review: useTenantRole
@@ -100,6 +108,17 @@ export default function CalendarPane({ now }: CalendarPaneProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  /**
+   * The Starts field's value, owned by React (#656).
+   *
+   * Clicking a day used to find the input with `document.querySelector` and
+   * assign `input.value` directly. React never saw that write, so its view of
+   * the field and the DOM disagreed: the next render could discard the date, and
+   * the query reached outside this component — it would have found any other
+   * `input[name="starts"]` on the page first.
+   */
+  const [startsAt, setStartsAt] = useState('');
 
   const { from, to, days } = useMemo(() => windowFor(view, anchor), [view, anchor]);
   const zone = useMemo(() => viewerTimezone(), []);
@@ -143,20 +162,24 @@ export default function CalendarPane({ now }: CalendarPaneProps) {
     // what the operator meant, and toISOString then hands the server the UTC
     // instant. The zone name travels separately so the booking's own zone
     // survives a DST change (D-01 AC-2).
-    const startsAt = new Date(starts);
-    const endsAt = new Date(startsAt.getTime() + minutes * 60_000);
+    const startsInstant = new Date(starts);
+    const endsAt = new Date(startsInstant.getTime() + minutes * 60_000);
 
     setSaving(true);
     setError(null);
     try {
       await createMeeting({
         session: String(form.get('session')),
-        starts_at: startsAt.toISOString(),
+        starts_at: startsInstant.toISOString(),
         ends_at: endsAt.toISOString(),
         timezone: zone,
       });
       await load();
       event.currentTarget.reset();
+      // reset() clears the uncontrolled fields; the controlled one needs this
+      // or the date stays behind after a successful booking.
+      setStartsAt('');
+      setSelectedDay(null);
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : 'Could not schedule.');
     } finally {
@@ -259,9 +282,33 @@ export default function CalendarPane({ now }: CalendarPaneProps) {
                 key={day.toISOString()}
                 role="gridcell"
                 aria-label={day.toDateString()}
-                className={`min-h-16 rounded border border-white/5 p-1 ${
-                  outside ? 'opacity-40' : ''
-                } ${sameDay(day, today) ? 'ring-1 ring-brand-electric/40' : ''}`}
+                tabIndex={0}
+                onClick={(e) => {
+                  // Only a click on the cell itself. The Cancel buttons render
+                  // inside it, so a bubbled click silently rewrote the Starts
+                  // field to the day of whichever meeting was cancelled — an
+                  // operator who had typed "Nov 12, 14:30" would then book
+                  // Nov 3 at 09:00.
+                  if (e.target !== e.currentTarget) return;
+                  setSelectedDay(day);
+                  setStartsAt(atNineAm(day));
+                }}
+                onKeyDown={(e) => {
+                  // Same guard, and it matters more here: preventDefault on a
+                  // bubbled Enter cancelled the nested button's own activation,
+                  // so Cancel could not be reached by keyboard at all.
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedDay(day);
+                    setStartsAt(atNineAm(day));
+                  }
+                }}
+                className={`min-h-16 cursor-pointer rounded border p-1 transition-colors hover:border-brand-electric/40 ${
+                  outside ? 'opacity-40 border-white/5' : 'border-white/5'
+                } ${sameDay(day, today) ? 'ring-1 ring-brand-electric/40' : ''} ${
+                  selectedDay && sameDay(day, selectedDay) ? 'border-brand-electric bg-brand-electric/10' : ''
+                }`}
               >
                 <span className="text-[10px] text-brand-silver">{day.getDate()}</span>
                 {dayMeetings.map((meeting) => (
@@ -300,7 +347,10 @@ export default function CalendarPane({ now }: CalendarPaneProps) {
                     {canEdit && meeting.editable && (
                       <button
                         type="button"
-                        onClick={() => onCancel(meeting)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onCancel(meeting);
+                        }}
                         className="mt-0.5 text-[10px] text-rose-300 hover:underline"
                       >
                         Cancel
@@ -330,8 +380,14 @@ export default function CalendarPane({ now }: CalendarPaneProps) {
             <select
               name="session"
               required
-              className="mt-1 block rounded border border-white/10 bg-transparent px-2 py-1 text-sm text-white"
+              disabled={sessions.length === 0}
+              className="mt-1 block rounded border border-white/10 bg-transparent px-2 py-1 text-sm text-white disabled:opacity-50"
             >
+              {sessions.length === 0 && (
+                <option value="" className="bg-brand-midnight">
+                  No sessions — create one first
+                </option>
+              )}
               {sessions.map((session) => (
                 <option key={session.id} value={session.id} className="bg-brand-midnight">
                   {session.company ?? 'Unassigned'}
@@ -345,6 +401,8 @@ export default function CalendarPane({ now }: CalendarPaneProps) {
               type="datetime-local"
               name="starts"
               required
+              value={startsAt}
+              onChange={(e) => setStartsAt(e.target.value)}
               className="mt-1 block rounded border border-white/10 bg-transparent px-2 py-1 text-sm text-white"
             />
           </label>
@@ -359,7 +417,7 @@ export default function CalendarPane({ now }: CalendarPaneProps) {
               className="mt-1 block w-20 rounded border border-white/10 bg-transparent px-2 py-1 text-sm text-white"
             />
           </label>
-          <button type="submit" className="btn-primary text-sm" disabled={saving}>
+          <button type="submit" className="btn-primary text-sm" disabled={saving || sessions.length === 0}>
             {saving ? 'Scheduling…' : 'Schedule a meeting'}
           </button>
           {error && (

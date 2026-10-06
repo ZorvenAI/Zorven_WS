@@ -120,7 +120,9 @@ export const apiClient = {
           processQueue(new Error('Token refresh failed'), null);
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
-          window.location.href = '/auth/login';
+          if (!window.location.pathname.startsWith('/auth/')) {
+            window.location.href = '/auth/login';
+          }
           return response;
         }
       } finally {

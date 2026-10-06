@@ -12,7 +12,10 @@ from __future__ import annotations
 
 _FALLBACK_PROMPTS: dict[str, str] = {
     "oia.research_brief": (
-        "You are preparing for a brand onboarding meeting with a business.\n"
+        "You are a brand strategist preparing for an onboarding meeting with "
+        "{company_name}.\n"
+        "Your job is to give the operator a thorough briefing so they walk in "
+        "informed.\n"
         "\n"
         "Operator-provided hints:\n"
         "- Company name: {company_name}\n"
@@ -24,21 +27,47 @@ _FALLBACK_PROMPTS: dict[str, str] = {
         "{sources}\n"
         "\n"
         "Produce a JSON object with exactly these keys:\n"
-        '  "facts": a list of {{"statement": str, "source_url": str}}.'
-        " Every statement\n"
-        "    MUST be supported by one of the search results above,"
-        " and source_url MUST\n"
-        "    be that result's URL, copied exactly."
-        " If you cannot point to a result, do\n"
-        "    not state it as a fact.\n"
-        '  "competitors_seen": a list of competitor names appearing in the results.\n'
+        "\n"
+        '  "facts": a list of {{"statement": str, "source_url": str}}.\n'
+        "    Write each statement as a complete, informative sentence a strategist "
+        "would\n"
+        "    find useful — not a fragment. Cover: what the company does, who they "
+        "serve,\n"
+        "    their key products/services, notable achievements, founding story, team\n"
+        "    size, or market position. Every statement MUST be supported by one of "
+        "the\n"
+        "    search results above, and source_url MUST be that result's URL, copied\n"
+        "    exactly. If you cannot point to a result, do not state it as a fact.\n"
+        "    Aim for 6–10 facts when the sources are rich enough.\n"
+        "\n"
+        '  "competitors_seen": a list of competitor or alternative company names '
+        "found\n"
+        "    in the search results. Include direct competitors, companies mentioned\n"
+        "    alongside {company_name}, and businesses in the same market segment. "
+        "Even\n"
+        "    if no competitor is named explicitly, identify companies serving similar\n"
+        "    customers or offering similar services based on the search context.\n"
+        "\n"
         '  "digital_presence": {{"website": str or null, "social_profiles": [str],\n'
         '    "notes": str}}.\n'
-        '  "open_unknowns": a list of specific things you could NOT'
-        " establish and that\n"
-        "    an interviewer should ask about. This is the most valuable part of your\n"
-        '    output. Be concrete — "what is their average order value" beats "more\n'
-        '    financial detail". Aim for at least five when the sources are thin.\n'
+        "    For notes, summarize what the search results reveal about their online\n"
+        "    presence — do they have active social media, a blog, SEO visibility, "
+        "paid\n"
+        "    advertising, or customer reviews? Be specific.\n"
+        "\n"
+        '  "open_unknowns": a list of specific things you could NOT establish from '
+        "the\n"
+        "    search results that an interviewer should ask about in the meeting. This "
+        "is\n"
+        "    the most valuable part of your output. Think like a brand strategist:\n"
+        "    - What is their unique selling proposition or competitive edge?\n"
+        "    - Who is their ideal customer profile in detail?\n"
+        "    - What are their revenue model and growth metrics?\n"
+        "    - What marketing channels are working for them today?\n"
+        "    - What brand identity elements exist (logo, colors, voice)?\n"
+        "    - What are their biggest growth challenges right now?\n"
+        '    Be concrete — "what is their monthly marketing budget" beats "more\n'
+        '    financial detail". Aim for 6–8 questions.\n'
         "\n"
         "Return ONLY the JSON object, no prose and no code fence."
     ),

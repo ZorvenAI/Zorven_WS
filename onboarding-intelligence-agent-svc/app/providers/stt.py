@@ -455,9 +455,26 @@ class FakeSTTAdapter(STTAdapter):
         else:
             self._events = []
 
+    @property
+    def configured(self) -> bool:
+        """Always ready.
+
+        `/health/ready` reads this off whichever adapter is installed, and a fake
+        with no such attribute read as unconfigured — so readiness probes never
+        marked the container ready in precisely the mode this exists to provide.
+        """
+        return True
+
     @staticmethod
     def _load(path: Path) -> list[dict[str, Any]]:
         events: list[dict[str, Any]] = []
+        if not path.is_file():
+            # Logged and empty, not raised. This runs inside `lifespan`, so a
+            # mistyped OIA_STT_FAKE_FIXTURE took the service down with a raw
+            # traceback instead of falling back to the silent stream the
+            # constructor already supports.
+            logger.warning("stt_fake_fixture_missing", path=str(path))
+            return events
         for line in path.read_text().splitlines():
             line = line.strip()
             if line:
