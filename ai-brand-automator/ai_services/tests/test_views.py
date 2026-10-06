@@ -1470,3 +1470,65 @@ class TestChatSessionPinAndRename:
 
         cached = cache.get(cache_key)
         assert cached is None
+
+
+# ── #668 · a prep turn asks for questions, or only for research ──────
+
+
+class TestWantsQuestions:
+    """What makes the agent draft a questionnaire rather than only research.
+
+    `routes.py` gates SKL-OIA-02 on the caller saying it wants questions.
+    Django never said so, which left the whole sanctioned write path dormant
+    for chat — the gap #668 is actually about.
+    """
+
+    @pytest.mark.parametrize(
+        "message,expected",
+        [
+            ("draft me 12 questions for Acme", (True, 12)),
+            ("15 questions please", (True, 15)),
+            ("1 question on pricing", (True, 1)),
+            ("I need a questionnaire", (True, None)),
+            ("what should i ask Kelso Coffee?", (True, None)),
+            ("generate questions for the meeting", (True, None)),
+        ],
+    )
+    def test_a_request_for_questions_is_recognised(self, message, expected):
+        from ai_services.views import _wants_questions
+
+        assert _wants_questions(message) == expected
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "prepare for the Acme onboarding call",
+            "research Acme Ltd",
+            "prep for tomorrow's discovery call",
+            "tell me about their competitors",
+        ],
+    )
+    def test_research_only_turns_are_left_alone(self, message):
+        """Narrower than the intent classifier's `prep_action`, which lumps
+        "prepare" in with "questionnaire". Drafting questions nobody asked for
+        spends an LLM call on the wrong thing."""
+        from ai_services.views import _wants_questions
+
+        assert _wants_questions(message) == (False, None)
+
+    def test_a_count_alone_is_a_request(self):
+        """ "15 questions please" names none of the phrases but could hardly be
+        clearer, so the number is its own trigger."""
+        from ai_services.views import _wants_questions
+
+        assert _wants_questions("20 questions") == (True, 20)
+
+    def test_an_implausible_count_is_not_read_as_one(self):
+        """Bounded to two digits: a four-digit count is a typo. The phrase still
+        registers the request, and the agent picks the number."""
+        from ai_services.views import _wants_questions
+
+        assert _wants_questions("generate questions, maybe 1000 questions") == (
+            True,
+            None,
+        )

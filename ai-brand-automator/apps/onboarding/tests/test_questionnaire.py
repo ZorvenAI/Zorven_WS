@@ -942,3 +942,170 @@ def test_a_malformed_session_filter_returns_nothing_not_a_500(
     body = response.json()
     rows = body["results"] if isinstance(body, dict) else body
     assert rows == []
+
+
+# ── #668 · a second prep turn appends, and never touches what was approved ──
+
+
+@pytest.fixture
+def session(tenant):
+    from apps.onboarding.tests.factories import make_session
+
+    return make_session(tenant=tenant)
+
+
+def second_turn(api_client, tenant, session, text="Who is your ideal customer?"):
+    """A later prep turn carrying one new question plus WF3 coverage."""
+    return generate(
+        api_client,
+        tenant,
+        session_id=str(session.pk),
+        questions=[
+            {"text": text, "workflow_target": "WF1"},
+            {"text": "Which brand assets are in use?", "workflow_target": "WF3"},
+        ],
+    )
+
+
+def test_the_first_turn_on_a_session_is_version_one(api_client, tenant, session):
+    response = generate(api_client, tenant, session_id=str(session.pk))
+
+    assert response.status_code == 201, response.content
+    assert response.data["version"] == 1
+    assert response.data["appended_to_existing"] is False
+
+
+def test_a_second_turn_grows_the_draft_rather_than_versioning_it(
+    api_client, tenant, session
+):
+    """Nothing is approved, so there is no curation to protect and a new
+    version would be noise."""
+    generate(api_client, tenant, session_id=str(session.pk))
+
+    response = second_turn(api_client, tenant, session)
+
+    assert response.data["version"] == 1
+    assert response.data["appended_to_existing"] is True
+    assert Questionnaire.objects.filter(session=session).count() == 1
+    assert Questionnaire.objects.get(session=session).question_count == 5
+
+
+def test_a_turn_after_approval_opens_the_next_version(api_client, tenant, session):
+    """The case #668 exists for.
+
+    The first implementation of this repointed session.questionnaire at an
+    auto-generated set, so an operator's approved checklist vanished from the
+    page on their next chat message.
+    """
+    generate(api_client, tenant, session_id=str(session.pk))
+    approved = Questionnaire.objects.get(session=session)
+    approved.status = QuestionnaireStatus.APPROVED
+    approved.save(update_fields=["status"])
+    session.questionnaire = approved
+    session.save(update_fields=["questionnaire"])
+
+    response = second_turn(api_client, tenant, session)
+
+    assert response.data["version"] == 2
+    draft = Questionnaire.objects.get(version=2, session=session)
+    assert draft.status == QuestionnaireStatus.DRAFT
+    assert draft.supersedes_id == approved.pk
+
+    # The approved row is untouched, and still the session's.
+    approved.refresh_from_db()
+    session.refresh_from_db()
+    assert approved.status == QuestionnaireStatus.APPROVED
+    assert approved.question_count == 3
+    assert session.questionnaire_id == approved.pk
+
+
+def test_the_approved_questions_are_carried_into_the_new_version(
+    api_client, tenant, session
+):
+    """Carried forward, not replaced: the operator curated those, and a new
+    version that dropped them would lose the work by a slower route."""
+    generate(api_client, tenant, session_id=str(session.pk))
+    approved = Questionnaire.objects.get(session=session)
+    approved.status = QuestionnaireStatus.APPROVED
+    approved.save(update_fields=["status"])
+    carried = set(approved.questions.values_list("text", flat=True))
+
+    second_turn(api_client, tenant, session)
+
+    draft = Questionnaire.objects.get(version=2, session=session)
+    texts = set(draft.questions.values_list("text", flat=True))
+    assert carried <= texts
+    assert "Who is your ideal customer?" in texts
+
+
+def test_a_third_turn_appends_to_the_open_successor(api_client, tenant, session):
+    """`supersedes` is a OneToOneField, so a second draft for the same parent
+    cannot exist — a later turn has to join the one already open."""
+    generate(api_client, tenant, session_id=str(session.pk))
+    approved = Questionnaire.objects.get(session=session)
+    approved.status = QuestionnaireStatus.APPROVED
+    approved.save(update_fields=["status"])
+
+    second_turn(api_client, tenant, session, text="First follow-up?")
+    response = second_turn(api_client, tenant, session, text="Second follow-up?")
+
+    assert response.data["version"] == 2
+    assert response.data["appended_to_existing"] is True
+    assert Questionnaire.objects.filter(session=session).count() == 2
+    texts = set(
+        Questionnaire.objects.get(version=2, session=session).questions.values_list(
+            "text", flat=True
+        )
+    )
+    assert {"First follow-up?", "Second follow-up?"} <= texts
+
+
+def test_a_repeated_question_is_not_added_twice(api_client, tenant, session):
+    """Prep turns re-surface the same unknowns, and a questionnaire that asks
+    the operator the same thing four times is worse than one that asks once."""
+    generate(api_client, tenant, session_id=str(session.pk))
+    before = Questionnaire.objects.get(session=session).question_count
+
+    response = second_turn(api_client, tenant, session, text="What do you sell?")
+
+    # Only the WF3 question is new; the repeat is dropped, and case and spacing
+    # are not meaning.
+    assert response.data["questions_added"] == 1
+    assert Questionnaire.objects.get(session=session).question_count == before + 1
+
+
+def test_dedupe_ignores_case_and_spacing(api_client, tenant, session):
+    generate(api_client, tenant, session_id=str(session.pk))
+
+    response = second_turn(api_client, tenant, session, text="  WHAT   do you SELL? ")
+
+    assert response.data["questions_added"] == 1
+
+
+def test_a_set_without_wf3_is_still_refused_on_a_later_turn(
+    api_client, tenant, session
+):
+    """FR-PREP-08 is enforced at the boundary on every write, not only the
+    first — appending must not become a way around it."""
+    generate(api_client, tenant, session_id=str(session.pk))
+
+    response = generate(
+        api_client,
+        tenant,
+        session_id=str(session.pk),
+        questions=[{"text": "Only a WF1 question?", "workflow_target": "WF1"}],
+    )
+
+    assert response.status_code == 400
+    assert response.data["error"] == "no WF3 question was generated"
+
+
+def test_a_sessionless_write_is_unaffected(api_client, tenant):
+    """Prep precedes onboarding, so a questionnaire with no session is the
+    common case and must keep behaving as it did."""
+    generate(api_client, tenant)
+    response = generate(api_client, tenant)
+
+    assert response.data["version"] == 1
+    assert response.data["appended_to_existing"] is False
+    assert Questionnaire.objects.filter(session__isnull=True).count() == 2

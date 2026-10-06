@@ -366,6 +366,48 @@ def _extract_company_from_prompt(message: str, db_name: str) -> str:
     return db_name
 
 
+def _wants_questions(message: str) -> tuple[bool, int | None]:
+    """Whether this turn asked for questions, and how many (#668).
+
+    The agent researches on every prep turn but only drafts a questionnaire
+    when asked — ``routes.py`` gates that on the caller saying so. Django never
+    did, so SKL-OIA-02 and the whole sanctioned write path sat dormant for
+    chat.
+
+    Narrower than the intent classifier's ``prep_action``, which lumps
+    "prepare" in with "questionnaire": "prepare for the Acme call" is a request
+    to research, and spending an LLM call drafting questions nobody asked for
+    is the wrong default.
+
+    The count is returned only when the operator gave one. SKL-OIA-02 clamps
+    and defaults it, so Django does not carry a copy of that default.
+    """
+    msg = message.lower()
+
+    # A number of questions is itself the request — "15 questions please" names
+    # no phrase from the list below but could hardly be clearer. Bounded to two
+    # digits: a four-digit count is a typo, and the agent clamps anyway.
+    match = re.search(r"\b(\d{1,2})\s+questions?\b", msg)
+    if match:
+        return True, int(match.group(1))
+
+    asked = any(
+        phrase in msg
+        for phrase in (
+            "questionnaire",
+            "question list",
+            "questions for",
+            "questions to ask",
+            "what should i ask",
+            "what to ask",
+            "draft questions",
+            "prepare questions",
+            "generate questions",
+        )
+    )
+    return (True, None) if asked else (False, None)
+
+
 def _md_url(url: str) -> str:
     """Make a URL safe to put inside Markdown link parentheses (#658).
 
@@ -513,6 +555,7 @@ def _process_chat_message(
         # True and hand the DB's industry and website to a company that does not
         # exist (#657).
         uses_db_company = bool(db_name) and prep_name.lower() == db_name.lower()
+        wants_questions, asked_count = _wants_questions(message)
         result = dispatch_prep_turn(
             tenant_id=tenant.id,
             user_id=request.user.id,
@@ -525,6 +568,11 @@ def _process_chat_message(
                 "industry": company_ctx.get("industry", "") if uses_db_company else "",
                 "website": company_ctx.get("website", "") if uses_db_company else "",
                 "operator_notes": message,
+                # #668: what makes the agent draft a questionnaire rather than
+                # only research. `count` is sent only when the operator named
+                # one; the agent owns the default and the clamp.
+                "wants_questions": wants_questions,
+                **({"count": asked_count} if asked_count is not None else {}),
             },
         )
 
