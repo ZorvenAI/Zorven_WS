@@ -65,10 +65,24 @@ esac
 # which checkout owns the file is correct for a worktree, a second clone, and
 # the /private symlink form of a macOS temp path alike.
 git_bin=$(resolve git) || exit 0
-dir=$(dirname "$file")
+case "$file" in
+*/*) dir=${file%/*} ;;
+*) dir=. ;;
+esac
 [ -d "$dir" ] || exit 0
+
+# Canonicalise before comparing. git reports the physical root, so a path
+# spelled through a symlink -- /tmp vs /private/tmp on macOS, or a symlinked
+# checkout -- failed the prefix strip below, left `tree` empty, found no
+# requirements file and skipped formatting SILENTLY. Verified: a Django file
+# reached via a symlink to this repo got no formatting at all, where the
+# direct path correctly selected 23.12.1.
+dir=$(CDPATH= cd -P -- "$dir" && pwd -P) || exit 0
+file="$dir/${file##*/}"
+
 root=$("$git_bin" -C "$dir" rev-parse --show-toplevel 2>/dev/null) || exit 0
 [ -n "$root" ] || exit 0
+root=$(CDPATH= cd -P -- "$root" && pwd -P) || exit 0
 
 # Is this that monorepo at all? A .py in some unrelated checkout, in ~/.claude,
 # or in the session scratchpad is none of our business.
