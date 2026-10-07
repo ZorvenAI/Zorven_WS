@@ -5,33 +5,71 @@
 # which turned the \n inside two heredoc payloads into real newlines. That made
 # the JSON invalid, so those two cases were answered by the fail-closed
 # parse-deny instead of the check under test -- passing for the wrong reason.
-# Keep \n as two characters here, and keep `make-sure-it-fails` honest by
-# running this matrix against the previous version of the guard.
+# Keep \n as two characters here, and keep the suite honest by running it
+# against the previous version of the guard: it must fail there.
+#
+# The policy is WRITES ONLY. Reads are allowed, so the read cases below are
+# load-bearing: they are what distinguishes this policy from the blunt
+# mention-anything one it replaced.
+
+# ── writes, moves and deletions: DENY ───────────────────────────────────────
 DENY	heredoc write	{"tool_name":"Bash","tool_input":{"command":"cat > .env <<'EOF'\nK=v\nEOF"}}
 DENY	append redirect	{"tool_name":"Bash","tool_input":{"command":"printf 'K=v\\n' >> ai-brand-automator/.env"}}
 DENY	no-space redirect	{"tool_name":"Bash","tool_input":{"command":"echo K=v >.env.production"}}
+DENY	clobber redirect	{"tool_name":"Bash","tool_input":{"command":"echo K=v >| .env"}}
+DENY	stderr redirect	{"tool_name":"Bash","tool_input":{"command":"somecmd 2> .env"}}
+DENY	truncate via : >	{"tool_name":"Bash","tool_input":{"command":": > .env"}}
 DENY	tee -a	{"tool_name":"Bash","tool_input":{"command":"echo K=v | tee -a .env.local"}}
-DENY	cp template onto real	{"tool_name":"Bash","tool_input":{"command":"cp .env.example .env"}}
+DENY	cp onto real	{"tool_name":"Bash","tool_input":{"command":"cp .env.example .env"}}
 DENY	mv onto it	{"tool_name":"Bash","tool_input":{"command":"mv /tmp/x .env"}}
-DENY	sed -i	{"tool_name":"Bash","tool_input":{"command":"sed -i '' s/a/b/ .env.test"}}
+DENY	mv away from it	{"tool_name":"Bash","tool_input":{"command":"mv .env /tmp/stash"}}
+DENY	sed in place	{"tool_name":"Bash","tool_input":{"command":"sed -i '' s/a/b/ .env.test"}}
+DENY	perl in place	{"tool_name":"Bash","tool_input":{"command":"perl -i -pe s/a/b/ .env"}}
 DENY	dd of=	{"tool_name":"Bash","tool_input":{"command":"dd if=/tmp/x of=.env"}}
 DENY	rm	{"tool_name":"Bash","tool_input":{"command":"rm -f .env"}}
+DENY	truncate -s0	{"tool_name":"Bash","tool_input":{"command":"truncate -s0 .env"}}
+DENY	symlink over it	{"tool_name":"Bash","tool_input":{"command":"ln -sf /tmp/x .env"}}
 DENY	direnv write	{"tool_name":"Bash","tool_input":{"command":"echo export A=1 > .envrc"}}
 DENY	quoted nested path	{"tool_name":"Bash","tool_input":{"command":"cat > \"deployment/.env.production\" <<EOF\nA=1\nEOF"}}
-DENY	read: cat	{"tool_name":"Bash","tool_input":{"command":"cat .env"}}
-DENY	read: grep	{"tool_name":"Bash","tool_input":{"command":"grep SECRET_KEY .env"}}
-DENY	source	{"tool_name":"Bash","tool_input":{"command":"set -a && . ./.env && set +a"}}
+DENY	after a separator	{"tool_name":"Bash","tool_input":{"command":"cd ai-brand-automator && cat > .env <<EOF\nA=1\nEOF"}}
+DENY	home-relative target	{"tool_name":"Bash","tool_input":{"command":"echo A=1 > \"$HOME/.env\""}}
+DENY	sudo-wrapped write	{"tool_name":"Bash","tool_input":{"command":"sudo rm -f .env.production"}}
+DENY	unparseable + mentions	{"tool_name":"Bash","tool_input":{"command":"echo 'unbalanced > .env"}}
+DENY	glob delete prefix	{"tool_name":"Bash","tool_input":{"command":"rm -f .env*"}}
+DENY	glob delete suffix	{"tool_name":"Bash","tool_input":{"command":"rm -f *.env"}}
+DENY	glob delete dotted	{"tool_name":"Bash","tool_input":{"command":"rm -f .env.?"}}
+
+# ── reads and prose: allow (this is the policy change) ──────────────────────
+allow	read: cat	{"tool_name":"Bash","tool_input":{"command":"cat .env"}}
+allow	read: grep	{"tool_name":"Bash","tool_input":{"command":"grep SECRET_KEY .env"}}
+allow	read: source	{"tool_name":"Bash","tool_input":{"command":"set -a && . ./.env && set +a"}}
+allow	read: cp as source	{"tool_name":"Bash","tool_input":{"command":"cp .env /tmp/backup"}}
+allow	read: diff	{"tool_name":"Bash","tool_input":{"command":"diff .env .env.example"}}
+allow	listing	{"tool_name":"Bash","tool_input":{"command":"ls -la .env*"}}
+allow	glob lookalike delete	{"tool_name":"Bash","tool_input":{"command":"rm -rf .environment*"}}
+allow	venv delete	{"tool_name":"Bash","tool_input":{"command":"rm -rf .venv"}}
+allow	template glob delete	{"tool_name":"Bash","tool_input":{"command":"rm -f .env.example*"}}
+allow	git check-ignore	{"tool_name":"Bash","tool_input":{"command":"git check-ignore -v .env"}}
+allow	docker env-file	{"tool_name":"Bash","tool_input":{"command":"docker compose --env-file .env up"}}
+allow	prose in commit msg	{"tool_name":"Bash","tool_input":{"command":"git commit -m \"copy .env.example to .env\""}}
+allow	sed WITHOUT -i	{"tool_name":"Bash","tool_input":{"command":"sed s/a/b/ .env"}}
 allow	template read	{"tool_name":"Bash","tool_input":{"command":"cat ai-brand-automator/.env.example"}}
 allow	template to template	{"tool_name":"Bash","tool_input":{"command":"cp .env.example .env.sample"}}
+allow	write to template	{"tool_name":"Bash","tool_input":{"command":"echo A= > .env.example"}}
 allow	unrelated pytest	{"tool_name":"Bash","tool_input":{"command":"pytest -q -m unit"}}
 allow	word environment	{"tool_name":"Bash","tool_input":{"command":"echo configure the environment first"}}
 allow	venv creation	{"tool_name":"Bash","tool_input":{"command":"python3 -m venv .venv && .venv/bin/pip install -q black"}}
 allow	git status	{"tool_name":"Bash","tool_input":{"command":"git status --short"}}
+allow	redirect elsewhere	{"tool_name":"Bash","tool_input":{"command":"grep SECRET .env > /tmp/out.txt"}}
 allow	BashOutput shape	{"tool_name":"BashOutput","tool_input":{"bash_id":"abc"}}
+
+# ── Edit / Write / NotebookEdit: unchanged, any dotenv target is a write ────
 DENY	Write real dotenv	{"tool_name":"Write","tool_input":{"file_path":"/r/.env"}}
 DENY	Write direnv variant	{"tool_name":"Write","tool_input":{"file_path":"/r/.envrc.local"}}
 DENY	Write inside dotenv dir	{"tool_name":"Write","tool_input":{"file_path":"/r/config/.env/overrides"}}
+DENY	Write bare suffix	{"tool_name":"Write","tool_input":{"file_path":"/r/prod.env"}}
 allow	Write template	{"tool_name":"Write","tool_input":{"file_path":"/r/.env.example"}}
 allow	Edit ordinary py	{"tool_name":"Edit","tool_input":{"file_path":"/r/apps/views.py"}}
+allow	Edit lookalike	{"tool_name":"Edit","tool_input":{"file_path":"/r/.environment"}}
 DENY	NotebookEdit dotenv	{"tool_name":"NotebookEdit","tool_input":{"notebook_path":"/r/.env"}}
 allow	no path or command key	{"tool_name":"Edit","tool_input":{"old_string":"a"}}
