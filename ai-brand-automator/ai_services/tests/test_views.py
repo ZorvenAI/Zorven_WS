@@ -1516,12 +1516,22 @@ class TestWantsQuestions:
 
         assert _wants_questions(message) == (False, None)
 
-    def test_a_count_alone_is_a_request(self):
-        """ "15 questions please" names none of the phrases but could hardly be
-        clearer, so the number is its own trigger."""
+    def test_a_count_is_read_as_the_request_within_a_prep_turn(self):
+        """A count answers "how many" for a turn that already routed here.
+
+        This used to be titled "a count alone is a request", asserting that
+        the number is its own trigger. It is not: reaching this helper needs
+        classify_intent to return `onboarding_prep`, which needs a prep
+        subject as well as a prep action, and a bare count has neither. The
+        test passed and described behaviour the flow could not reach.
+        `TestQuestionsReachTheAgent` pins the real boundary.
+        """
         from ai_services.views import _wants_questions
 
-        assert _wants_questions("20 questions") == (True, 20)
+        assert _wants_questions("prepare for the onboarding call, 20 questions") == (
+            True,
+            20,
+        )
 
     def test_an_implausible_count_is_not_read_as_one(self):
         """Bounded to two digits: a four-digit count is a typo. The phrase still
@@ -1531,4 +1541,118 @@ class TestWantsQuestions:
         assert _wants_questions("generate questions, maybe 1000 questions") == (
             True,
             None,
+        )
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+class TestQuestionsReachTheAgent:
+    """#669 review · the signal has to survive the real chat path.
+
+    Every other test here calls `_wants_questions` directly, which proves what
+    the helper computes and nothing about whether the flow ever asks it. The
+    gap mattered: reaching the prep branch requires `classify_intent` to
+    return `onboarding_prep`, and that needs a prep SUBJECT -- "onboarding
+    call", "discovery call", "kickoff call" -- as well as a prep action. A
+    message the helper recognises can still be routed somewhere else entirely.
+
+    So these go through the endpoint with the real classifier in place, and
+    only the outbound dispatch is intercepted, to read the `input_context` the
+    agent would have received.
+    """
+
+    def url(self):
+        return reverse("chat_with_ai")
+
+    @staticmethod
+    def _ok_result():
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            ok=True,
+            payload={"output": {"detail": "Preparation is under way.", "facts": []}},
+            code=None,
+        )
+
+    @patch("ai_services.views._maybe_auto_title")
+    @patch("ai_services.onboarding_agent.dispatch_prep_turn")
+    def test_a_prep_turn_with_a_count_carries_it_to_the_agent(
+        self,
+        mock_dispatch,
+        _mock_auto_title,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        mock_dispatch.return_value = self._ok_result()
+
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"message": "prepare for the onboarding call with Acme, 15 questions"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert mock_dispatch.called, "the turn never reached the prep agent"
+        context = mock_dispatch.call_args.kwargs["input_context"]
+        assert context["wants_questions"] is True
+        assert context["count"] == 15
+
+    @patch("ai_services.views._maybe_auto_title")
+    @patch("ai_services.onboarding_agent.dispatch_prep_turn")
+    def test_a_research_only_prep_turn_does_not_ask_for_questions(
+        self,
+        mock_dispatch,
+        _mock_auto_title,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        """The gate has to distinguish, or it is not a gate: this turn routes
+        to the agent and must still say "research only"."""
+        mock_dispatch.return_value = self._ok_result()
+
+        response = authenticated_client_with_tenant.post(
+            self.url(),
+            {"message": "prepare for the onboarding call with Acme"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert mock_dispatch.called, "the turn never reached the prep agent"
+        context = mock_dispatch.call_args.kwargs["input_context"]
+        assert context["wants_questions"] is False
+        assert "count" not in context
+
+    @patch("ai_services.views._maybe_auto_title")
+    @patch("ai_services.onboarding_agent.dispatch_prep_turn")
+    def test_a_bare_count_never_reaches_the_prep_agent(
+        self,
+        mock_dispatch,
+        _mock_auto_title,
+        authenticated_client_with_tenant,
+        public_tenant,
+    ):
+        """The boundary the old unit test got wrong.
+
+        `_wants_questions("15 questions please")` is True, but the classifier
+        needs a prep subject, so this message is handled as ordinary
+        conversation and the helper is never consulted. Asserted here so the
+        claim lives next to the thing that decides it -- and so that making a
+        bare count route, if anyone ever wants that, has to change a test that
+        says what the behaviour is.
+        """
+        mock_dispatch.return_value = self._ok_result()
+
+        with patch("ai_services.views.ai_service") as mock_ai:
+            mock_ai.chat_with_brand_context.return_value = {
+                "content": "Sure.",
+                "thinking": "",
+            }
+            response = authenticated_client_with_tenant.post(
+                self.url(), {"message": "15 questions please"}, format="json"
+            )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert not mock_dispatch.called, (
+            "a bare count routed to the prep agent; if that is now intended, "
+            "the helper's docstring and this test both need updating"
         )

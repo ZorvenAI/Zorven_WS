@@ -17,6 +17,7 @@ from rest_framework.test import APIClient
 from apps.onboarding.field_map import all_mapped_fields
 from apps.onboarding.models import (
     DEPTH_NAMES,
+    OnboardingSession,
     Question,
     Questionnaire,
     QuestionnaireStatus,
@@ -1109,3 +1110,116 @@ def test_a_sessionless_write_is_unaffected(api_client, tenant):
     assert response.data["version"] == 1
     assert response.data["appended_to_existing"] is False
     assert Questionnaire.objects.filter(session__isnull=True).count() == 2
+
+
+# ── #669 review · what the count means, and what the lock protects ───
+
+
+def test_questions_added_counts_only_the_new_ones_on_a_new_version(
+    api_client, tenant, session
+):
+    """The number is "how many of mine were new", not "how big is the draft".
+
+    On the superseding path the new draft holds every approved question copied
+    forward plus whatever this turn added, so counting the rows written told a
+    caller that sent two questions that it had added five. The two existing
+    assertions on this field both sit on the DRAFT-append path, where nothing
+    is carried and the two readings agree -- which is exactly why this went
+    unnoticed until review.
+    """
+    generate(api_client, tenant, session_id=str(session.pk))
+    approved = Questionnaire.objects.get(session=session)
+    approved.status = QuestionnaireStatus.APPROVED
+    approved.save(update_fields=["status"])
+    carried_count = approved.questions.count()
+    assert carried_count == 3, "fixture changed; the arithmetic below assumes 3"
+
+    response = second_turn(api_client, tenant, session)
+
+    # second_turn sends two questions, neither of which is in the base set.
+    assert response.data["questions_added"] == 2
+    # And the draft really does hold both, on top of everything carried.
+    draft = Questionnaire.objects.get(version=2, session=session)
+    assert draft.question_count == carried_count + 2
+
+
+def test_a_concurrent_first_turn_waits_for_the_session_lock(
+    transactional_db, tenant, session
+):
+    """Two first turns at once used to create two version 1s.
+
+    Locking only the questionnaire cannot serialise the first turn: there is
+    no questionnaire row to lock yet, so both callbacks saw nothing and each
+    created its own version 1. The partial unique constraint does not catch
+    it either, because ``company`` is NULL before onboarding starts.
+
+    Rather than race two threads and hope the window opens, this holds the
+    session row locked and asserts the landing helper *waits* for it.
+
+    Two details decide whether this test can fail at all, and both were wrong
+    on the first attempt:
+
+    * The hold is ``FOR NO KEY UPDATE``, not ``FOR UPDATE``. Inserting a
+      questionnaire takes a ``FOR KEY SHARE`` lock on the session row it
+      references, which conflicts with ``FOR UPDATE`` -- so with that hold the
+      unfixed code blocked on the foreign key rather than on any lock of its
+      own, and the test passed either way. ``FOR NO KEY UPDATE`` tolerates the
+      foreign-key lock and conflicts only with a real ``FOR UPDATE``.
+    * It calls ``_land_questions`` directly instead of posting to the
+      endpoint. Measured: a threaded HTTP request here takes ~4.3 s of
+      middleware and fixture overhead, so the original 2 s "still blocked?"
+      window was below the unblocked baseline and was satisfied every time.
+      The helper is where the lock lives, and it returns in milliseconds, so
+      the window means something.
+    """
+    import threading
+
+    from django.db import connection
+
+    from apps.onboarding.views import _land_questions
+
+    finished = threading.Event()
+    outcome: dict[str, object] = {}
+
+    def land():
+        try:
+            with transaction.atomic():
+                outcome["result"] = _land_questions(
+                    tenant=tenant,
+                    company=None,
+                    session=session,
+                    cleaned=[
+                        {
+                            "text": "Concurrent?",
+                            "workflow_target": "WF1",
+                            "target_field": "",
+                        }
+                    ],
+                    depth=depth_from("standard"),
+                    chat_session_id="",
+                )
+        except Exception as exc:  # pragma: no cover - surfaced by the asserts
+            outcome["error"] = exc
+        finally:
+            connection.close()
+            finished.set()
+
+    with transaction.atomic():
+        OnboardingSession.objects.filter(pk=session.pk).select_for_update(
+            no_key=True
+        ).first()
+
+        worker = threading.Thread(target=land, daemon=True)
+        worker.start()
+        # Unblocked this takes milliseconds, so still waiting here means it is
+        # genuinely queued behind the row lock rather than merely slow.
+        still_blocked = not finished.wait(timeout=3.0)
+
+    worker.join(timeout=20)
+
+    assert still_blocked, (
+        "the landing helper did not wait for the session row lock, so two "
+        "first turns can still each create a version 1"
+    )
+    assert "error" not in outcome, outcome.get("error")
+    assert Questionnaire.objects.filter(session=session).count() == 1

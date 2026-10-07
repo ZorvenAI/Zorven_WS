@@ -384,9 +384,18 @@ def _wants_questions(message: str) -> tuple[bool, int | None]:
     """
     msg = message.lower()
 
-    # A number of questions is itself the request — "15 questions please" names
-    # no phrase from the list below but could hardly be clearer. Bounded to two
-    # digits: a four-digit count is a typo, and the agent clamps anyway.
+    # A count names the request within a turn that already routed here --
+    # "prepare for the onboarding call, 15 questions". Bounded to two digits:
+    # a four-digit count is a typo, and the agent clamps anyway.
+    #
+    # It is NOT a trigger on its own, and an earlier version of this comment
+    # claimed otherwise. Reaching this helper requires classify_intent to
+    # return `onboarding_prep`, which needs a prep SUBJECT ("onboarding call",
+    # "discovery call", ...) as well as a prep action. A bare "15 questions
+    # please" has neither and never arrives, so the count is read from prep
+    # turns only. `TestQuestionsReachTheAgent` in the tests pins that boundary
+    # through the real chat path, because asserting it on this function alone
+    # proved something the flow could not do.
     match = re.search(r"\b(\d{1,2})\s+questions?\b", msg)
     if match:
         return True, int(match.group(1))

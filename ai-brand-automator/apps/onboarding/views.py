@@ -2114,11 +2114,40 @@ def _land_questions(*, tenant, company, session, cleaned, depth, chat_session_id
     approved row is locked for update, because the partial unique constraint
     cannot bite while ``company`` is NULL and NULL is the common case before
     onboarding starts.
+
+    Locking, in the order it has to happen:
+
+    The **session** row is locked first, not the questionnaire. Locking only
+    the questionnaire leaves the first turn unserialised — there is no row to
+    lock yet — so two concurrent callbacks both saw ``existing is None`` and
+    each created its own version 1. The partial unique constraint does not
+    catch it either, for the same reason it does not catch a double revise:
+    ``company`` is NULL before onboarding starts. The session row always
+    exists, so locking it serialises the whole read-then-create sequence.
+
+    Both locks go through the tenant scope rather than the global manager, so
+    the lock and the permission check cannot disagree about which rows exist.
+    ``tests/test_locking_is_tenant_scoped.py`` enforces that by inspecting this
+    module's source, and it is right to: a global lock here is invisible until
+    two tenants collide.
+
+    Residual, accepted: a questionnaire with no session (``session is None``)
+    cannot be serialised this way, because there is no row to lock. Nothing
+    ties those rows together either, so "a duplicate version 1 for the
+    session" is not a state they can reach.
     """
     existing = None
     if session is not None:
+        # Serialise on the session before reading, or the first turn races.
+        (
+            OnboardingSession.objects.filter(tenant_scope_q(tenant))
+            .select_for_update()
+            .filter(pk=session.pk)
+            .first()
+        )
         existing = (
-            Questionnaire.objects.select_for_update(of=("self",))
+            Questionnaire.objects.filter(tenant_scope_q(tenant))
+            .select_for_update(of=("self",))
             .filter(session=session)
             .order_by("-version", "-id")
             .first()
@@ -2206,7 +2235,14 @@ def _land_questions(*, tenant, company, session, cleaned, depth, chat_session_id
     Question.objects.bulk_create(rows)
     target.question_count = target.questions.count()
     target.save(update_fields=["question_count", "updated_at"])
-    return target, len(rows), appended
+    # Carried rows are not additions. On the superseding path `rows` holds the
+    # whole new draft -- every approved question copied forward plus whatever
+    # was new -- so returning len(rows) reported the draft's size and told a
+    # caller that asked for two questions that it had added fifteen. The two
+    # existing assertions on this number both sat on the DRAFT-append path,
+    # where nothing is carried and the two expressions agree, which is why it
+    # read as correct.
+    return target, len(rows) - len(carried), appended
 
 
 @api_view(["POST"])
