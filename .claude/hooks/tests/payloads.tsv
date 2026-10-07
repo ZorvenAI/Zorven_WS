@@ -1,0 +1,37 @@
+# Expected verdicts for block-env-access.sh, one case per line:
+#   <want: DENY|allow>  <label>  <the JSON payload the hook receives on stdin>
+#
+# Fed with printf '%s', never '%b': an earlier version of this file used %b,
+# which turned the \n inside two heredoc payloads into real newlines. That made
+# the JSON invalid, so those two cases were answered by the fail-closed
+# parse-deny instead of the check under test -- passing for the wrong reason.
+# Keep \n as two characters here, and keep `make-sure-it-fails` honest by
+# running this matrix against the previous version of the guard.
+DENY	heredoc write	{"tool_name":"Bash","tool_input":{"command":"cat > .env <<'EOF'\nK=v\nEOF"}}
+DENY	append redirect	{"tool_name":"Bash","tool_input":{"command":"printf 'K=v\\n' >> ai-brand-automator/.env"}}
+DENY	no-space redirect	{"tool_name":"Bash","tool_input":{"command":"echo K=v >.env.production"}}
+DENY	tee -a	{"tool_name":"Bash","tool_input":{"command":"echo K=v | tee -a .env.local"}}
+DENY	cp template onto real	{"tool_name":"Bash","tool_input":{"command":"cp .env.example .env"}}
+DENY	mv onto it	{"tool_name":"Bash","tool_input":{"command":"mv /tmp/x .env"}}
+DENY	sed -i	{"tool_name":"Bash","tool_input":{"command":"sed -i '' s/a/b/ .env.test"}}
+DENY	dd of=	{"tool_name":"Bash","tool_input":{"command":"dd if=/tmp/x of=.env"}}
+DENY	rm	{"tool_name":"Bash","tool_input":{"command":"rm -f .env"}}
+DENY	direnv write	{"tool_name":"Bash","tool_input":{"command":"echo export A=1 > .envrc"}}
+DENY	quoted nested path	{"tool_name":"Bash","tool_input":{"command":"cat > \"deployment/.env.production\" <<EOF\nA=1\nEOF"}}
+DENY	read: cat	{"tool_name":"Bash","tool_input":{"command":"cat .env"}}
+DENY	read: grep	{"tool_name":"Bash","tool_input":{"command":"grep SECRET_KEY .env"}}
+DENY	source	{"tool_name":"Bash","tool_input":{"command":"set -a && . ./.env && set +a"}}
+allow	template read	{"tool_name":"Bash","tool_input":{"command":"cat ai-brand-automator/.env.example"}}
+allow	template to template	{"tool_name":"Bash","tool_input":{"command":"cp .env.example .env.sample"}}
+allow	unrelated pytest	{"tool_name":"Bash","tool_input":{"command":"pytest -q -m unit"}}
+allow	word environment	{"tool_name":"Bash","tool_input":{"command":"echo configure the environment first"}}
+allow	venv creation	{"tool_name":"Bash","tool_input":{"command":"python3 -m venv .venv && .venv/bin/pip install -q black"}}
+allow	git status	{"tool_name":"Bash","tool_input":{"command":"git status --short"}}
+allow	BashOutput shape	{"tool_name":"BashOutput","tool_input":{"bash_id":"abc"}}
+DENY	Write real dotenv	{"tool_name":"Write","tool_input":{"file_path":"/r/.env"}}
+DENY	Write direnv variant	{"tool_name":"Write","tool_input":{"file_path":"/r/.envrc.local"}}
+DENY	Write inside dotenv dir	{"tool_name":"Write","tool_input":{"file_path":"/r/config/.env/overrides"}}
+allow	Write template	{"tool_name":"Write","tool_input":{"file_path":"/r/.env.example"}}
+allow	Edit ordinary py	{"tool_name":"Edit","tool_input":{"file_path":"/r/apps/views.py"}}
+DENY	NotebookEdit dotenv	{"tool_name":"NotebookEdit","tool_input":{"notebook_path":"/r/.env"}}
+allow	no path or command key	{"tool_name":"Edit","tool_input":{"old_string":"a"}}
