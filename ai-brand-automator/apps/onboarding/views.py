@@ -2083,6 +2083,168 @@ class QuestionnaireViewSet(
         )
 
 
+def _normalised(text: str) -> str:
+    """A question's identity for dedupe: case and spacing are not meaning."""
+    return " ".join(text.lower().split())
+
+
+def _land_questions(*, tenant, company, session, cleaned, depth, chat_session_id):
+    """Where a generated set lands, and what it adds (#668).
+
+    Returns ``(questionnaire, created_count, appended)``.
+
+    A second prep turn used to create another version 1, because this endpoint
+    hardcoded the version and ignored whatever the session already had. Four
+    cases, and the one that matters is the third:
+
+    - nothing yet — version 1 DRAFT, which is what this endpoint always did.
+    - a DRAFT — append to it. Nothing is approved, so there is no curation to
+      protect and a new version would be noise.
+    - an APPROVED version — open version n+1 as a DRAFT with ``supersedes``
+      set, carrying the approved questions forward *and* appending the new
+      ones. The approved row is never mutated and ``session.questionnaire``
+      is left pointing at it, so the operator keeps the checklist they
+      approved until they approve its successor. Repointing it at a draft is
+      precisely the defect that got the first implementation of this removed.
+    - an APPROVED version already superseded — append to the existing
+      successor. ``supersedes`` is a OneToOneField, so a second draft for the
+      same parent cannot exist.
+
+    Mirrors ``QuestionnaireViewSet.revise``, which is C-04's pattern: the
+    approved row is locked for update, because the partial unique constraint
+    cannot bite while ``company`` is NULL and NULL is the common case before
+    onboarding starts.
+
+    Locking, in the order it has to happen:
+
+    The **session** row is locked first, not the questionnaire. Locking only
+    the questionnaire leaves the first turn unserialised — there is no row to
+    lock yet — so two concurrent callbacks both saw ``existing is None`` and
+    each created its own version 1. The partial unique constraint does not
+    catch it either, for the same reason it does not catch a double revise:
+    ``company`` is NULL before onboarding starts. The session row always
+    exists, so locking it serialises the whole read-then-create sequence.
+
+    Both locks go through the tenant scope rather than the global manager, so
+    the lock and the permission check cannot disagree about which rows exist.
+    ``tests/test_locking_is_tenant_scoped.py`` enforces that by inspecting this
+    module's source, and it is right to: a global lock here is invisible until
+    two tenants collide.
+
+    Residual, accepted: a questionnaire with no session (``session is None``)
+    cannot be serialised this way, because there is no row to lock. Nothing
+    ties those rows together either, so "a duplicate version 1 for the
+    session" is not a state they can reach.
+    """
+    existing = None
+    if session is not None:
+        # Serialise on the session before reading, or the first turn races.
+        (
+            OnboardingSession.objects.filter(tenant_scope_q(tenant))
+            .select_for_update()
+            .filter(pk=session.pk)
+            .first()
+        )
+        existing = (
+            Questionnaire.objects.filter(tenant_scope_q(tenant))
+            .select_for_update(of=("self",))
+            .filter(session=session)
+            .order_by("-version", "-id")
+            .first()
+        )
+
+    carried: list[Question] = []
+    appended = False
+
+    if existing is None:
+        target = Questionnaire.objects.create(
+            tenant=tenant,
+            company=company,
+            session=session,
+            status=QuestionnaireStatus.DRAFT,
+            version=1,
+            depth=depth,
+            question_count=0,
+            source_chat_session_id=chat_session_id,
+        )
+    elif existing.status == QuestionnaireStatus.DRAFT:
+        target = existing
+        appended = True
+    else:
+        successor = getattr(existing, "superseded_by", None)
+        if successor is not None:
+            target = successor
+            appended = True
+        else:
+            target = Questionnaire.objects.create(
+                tenant=existing.tenant,
+                company=existing.company,
+                session=existing.session,
+                status=QuestionnaireStatus.DRAFT,
+                version=existing.version + 1,
+                depth=depth,
+                question_count=0,
+                source_chat_session_id=chat_session_id,
+                supersedes=existing,
+            )
+            carried = list(existing.questions.order_by("order", "id"))
+
+    seen = {_normalised(q.text) for q in carried}
+    seen.update(_normalised(t) for t in target.questions.values_list("text", flat=True))
+
+    rows: list[Question] = []
+    order = target.questions.count()
+    for q in carried:
+        rows.append(
+            Question(
+                questionnaire=target,
+                order=order,
+                text=q.text,
+                origin=q.origin,
+                workflow_target=q.workflow_target,
+                target_field=q.target_field,
+                status=QuestionStatus.OPEN,
+            )
+        )
+        order += 1
+
+    for item in cleaned:
+        key = _normalised(item["text"])
+        if key in seen:
+            # Repeated prep turns re-surface the same unknowns, and a
+            # questionnaire that asks the operator the same thing four times is
+            # worse than one that asks it once.
+            continue
+        seen.add(key)
+        rows.append(
+            Question(
+                # No tenant field: B-01 scopes Question through its
+                # questionnaire rather than repeating the FK, so the tenant is
+                # one row away and cannot disagree with itself.
+                questionnaire=target,
+                order=order,
+                text=item["text"],
+                origin=QuestionOrigin.PREPARED,
+                workflow_target=item["workflow_target"],
+                target_field=item["target_field"],
+                status=QuestionStatus.OPEN,
+            )
+        )
+        order += 1
+
+    Question.objects.bulk_create(rows)
+    target.question_count = target.questions.count()
+    target.save(update_fields=["question_count", "updated_at"])
+    # Carried rows are not additions. On the superseding path `rows` holds the
+    # whole new draft -- every approved question copied forward plus whatever
+    # was new -- so returning len(rows) reported the draft's size and told a
+    # caller that asked for two questions that it had added fifteen. The two
+    # existing assertions on this number both sat on the DRAFT-append path,
+    # where nothing is carried and the two expressions agree, which is why it
+    # read as correct.
+    return target, len(rows) - len(carried), appended
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def create_questionnaire(request):
@@ -2218,35 +2380,20 @@ def create_questionnaire(request):
         company = session.company
 
     with db_transaction.atomic():
-        questionnaire = Questionnaire.objects.create(
+        questionnaire, created_count, appended = _land_questions(
             tenant=tenant,
             company=company,
             session=session,
-            status=QuestionnaireStatus.DRAFT,
-            version=1,
+            cleaned=cleaned,
             depth=depth_from(request.data.get("depth")),
-            question_count=len(cleaned),
-            source_chat_session_id=str(request.data.get("chat_session_id") or "")[:64],
-        )
-        Question.objects.bulk_create(
-            [
-                Question(
-                    # No tenant field: B-01 scopes Question through its
-                    # questionnaire rather than repeating the FK, so the
-                    # tenant is one row away and cannot disagree with itself.
-                    questionnaire=questionnaire,
-                    order=index,
-                    text=item["text"],
-                    origin=QuestionOrigin.PREPARED,
-                    workflow_target=item["workflow_target"],
-                    target_field=item["target_field"],
-                    status=QuestionStatus.OPEN,
-                )
-                for index, item in enumerate(cleaned)
-            ]
+            chat_session_id=str(request.data.get("chat_session_id") or "")[:64],
         )
 
     body = QuestionnaireSerializer(questionnaire).data
+    # So a caller can tell "a new version is open" from "your draft grew", and
+    # how much of what it sent was new rather than a repeat.
+    body["appended_to_existing"] = appended
+    body["questions_added"] = created_count
     if invented:
         body["dropped_target_fields"] = sorted(set(invented))
     if missing:

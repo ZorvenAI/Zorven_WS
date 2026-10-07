@@ -379,7 +379,14 @@ async def execute(request: Request, payload: ExecuteRequest) -> ExecuteResponse:
     # twelve questions".
     generated: dict[str, Any] | None = None
     stored: dict[str, Any] | None = None
-    if payload.input_context.get("count") is not None:
+    # `count` or `wants_questions`. The two were conflated, and the gate being
+    # a number meant Django could not say "yes, questions — you pick how many"
+    # without duplicating the agent's own default. SKL-OIA-02 already clamps and
+    # defaults the count, so a bare flag is enough.
+    if (
+        payload.input_context.get("count") is not None
+        or payload.input_context.get("wants_questions") is True
+    ):
         generated, stored = await request.app.state.prep.generate_questionnaire(
             tenant=tenant,
             brief=brief,
