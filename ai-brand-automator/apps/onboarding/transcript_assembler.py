@@ -67,7 +67,48 @@ def assemble_header(
     else:
         header["consent"] = None
 
+    header["transcript_completeness"] = _completeness(recording)
+
     return header
+
+
+def _completeness(recording: Any) -> dict[str, Any]:
+    """State whether the transcript covers the whole recording (#662).
+
+    A legal header that says nothing about coverage is read as a claim of
+    completeness, which is how #662 came about: a socket drop truncated the
+    transcript and the recording still finalised SUMMARIZED with
+    ``has_transcript: true``.
+
+    Three states, not two. ``unknown`` is for rows finalised before this was
+    detectable — asserting those are complete would invent a fact about
+    recordings nobody measured, and asserting they are partial would smear
+    every honest one.
+    """
+    complete = getattr(recording, "transcript_complete", None)
+    missing = getattr(recording, "transcript_missing_s", None)
+
+    if complete is None:
+        return {
+            "state": "unknown",
+            "missing_s": None,
+            "note": (
+                "Transcript coverage was not assessed for this recording. It "
+                "may be complete or may be missing audio that was not "
+                "transcribed."
+            ),
+        }
+    if complete:
+        return {"state": "complete", "missing_s": 0, "note": ""}
+    return {
+        "state": "partial",
+        "missing_s": missing,
+        "note": (
+            "Live transcription stopped before the recording ended, so this "
+            "transcript does not cover the whole meeting. The audio itself is "
+            "intact and can be re-transcribed."
+        ),
+    }
 
 
 def enrich_segments(

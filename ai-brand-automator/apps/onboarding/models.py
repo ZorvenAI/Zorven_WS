@@ -525,6 +525,24 @@ class MeetingRecording(models.Model):
         blank=True,
         help_text="Whole seconds; null while still RECORDING",
     )
+    transcript_complete = models.BooleanField(
+        null=True,
+        blank=True,
+        help_text=(
+            "#662 · whether the live transcript covers the whole recording. "
+            "NULL means never assessed — every row finalised before truncation "
+            "was detectable is in that state, and claiming those are complete "
+            "would be asserting something we cannot know."
+        ),
+    )
+    transcript_missing_s = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "#662 · whole seconds of recording the transcript does not cover; "
+            "NULL when never assessed, 0 when complete"
+        ),
+    )
     status = models.CharField(
         max_length=16,
         choices=RecordingStatus.choices,

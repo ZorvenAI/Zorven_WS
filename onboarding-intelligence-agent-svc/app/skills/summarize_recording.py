@@ -86,6 +86,18 @@ class SummarizeRecording(BaseSkill):
         segments = await self._read_transcript(
             tenant_id, session_id, started_at, stopped_at
         )
+        coverage = compute_transcript_coverage(
+            await self._read_markers(tenant_id, session_id),
+            started_at,
+            stopped_at,
+        )
+        if not coverage["complete"]:
+            logger.warning(
+                "summary_transcript_incomplete",
+                recording_id=recording_id,
+                missing_s=coverage["missing_s"],
+                gaps=len(coverage["gaps"]),
+            )
         if not segments:
             logger.warning("summary_no_transcript", recording_id=recording_id)
             summary: dict[str, Any] = {
@@ -97,6 +109,11 @@ class SummarizeRecording(BaseSkill):
             prompt = PROMPT_TEMPLATE.format(transcript=transcript_text)
             raw = await self._llm.generate(prompt, temperature=0.2)
             summary = self._parse_response(raw, segments)
+
+        # Carried on the summary rather than as a new write-back field: the
+        # summary dict is already persisted whole, so Django learns the
+        # transcript is partial through the call it already makes.
+        summary["transcript_coverage"] = coverage
 
         output: dict[str, Any] = {
             **summary,
@@ -131,6 +148,29 @@ class SummarizeRecording(BaseSkill):
             "Awaitable[list[Any]]", self._redis.client.lrange(key, 0, -1)
         )
         return extract_transcript_segments(raw_frames, started_at, stopped_at)
+
+    async def _read_markers(
+        self, tenant_id: str, session_id: str
+    ) -> list[dict[str, Any]]:
+        """Interruption markers for this session (#662).
+
+        Read straight from the key rather than through ``LiveSessionManager``:
+        finalisation runs long after the socket is gone, usually on another
+        Cloud Run instance, and there is no session object left to ask.
+        """
+        assert self._redis is not None
+        keys = self._redis.keys_for(tenant_id)
+        key = keys.live_markers(session_id)
+        raw = await cast("Awaitable[list[Any]]", self._redis.client.lrange(key, 0, -1))
+        markers: list[dict[str, Any]] = []
+        for item in raw or []:
+            try:
+                parsed = json.loads(item)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if isinstance(parsed, dict) and isinstance(parsed.get("at"), (int, float)):
+                markers.append(parsed)
+        return markers
 
     @staticmethod
     def _format_transcript(segments: list[dict[str, Any]]) -> str:
@@ -198,6 +238,70 @@ class SummarizeRecording(BaseSkill):
 
 
 # -- pure helpers (module-level for testability) ------------------------------
+
+
+def compute_transcript_coverage(
+    markers: list[dict[str, Any]],
+    started_at: float,
+    stopped_at: float,
+) -> dict[str, Any]:
+    """How much of the recording the transcript actually covers (#662).
+
+    Derived from interruption markers, **never** from where the transcript
+    happens to stop. The tempting rule -- "the last segment is far from
+    ``stopped_at``, so the transcript is truncated" -- is wrong, and wrong in
+    the direction that matters: an operator who says "thanks, I'll send that
+    over" and stops the recording forty seconds later leaves a forty-second
+    tail gap with nothing at all wrong. Labelling that recording's legal header
+    partial is its own correctness bug, and a header that cries wolf is ignored
+    exactly when it is right. Silence and a dead socket look identical from the
+    transcript alone, so only a positive signal counts.
+
+    An ``interrupted`` marker with no matching ``resumed`` ran to the end of
+    the recording: the socket never came back.
+    """
+    span = max(0.0, stopped_at - started_at)
+    gaps: list[dict[str, Any]] = []
+    open_at: float | None = None
+    open_reason = ""
+
+    for marker in sorted(markers, key=lambda m: float(m.get("at", 0.0))):
+        kind = marker.get("type")
+        at = float(marker.get("at", 0.0))
+        if kind == "transcript.interrupted":
+            # Two interruptions with no resume between them are one gap: the
+            # first is when transcription actually stopped.
+            if open_at is None:
+                open_at = at
+                open_reason = str(marker.get("reason", "") or "")
+        elif kind == "transcript.resumed" and open_at is not None:
+            gaps.append({"from": open_at, "to": at, "reason": open_reason})
+            open_at = None
+            open_reason = ""
+
+    if open_at is not None:
+        gaps.append({"from": open_at, "to": stopped_at, "reason": open_reason})
+
+    # Clamp into the recording window before measuring. A marker can land
+    # outside it -- the socket teardown races the stop -- and an unclamped gap
+    # could claim more missing time than the recording has.
+    clamped: list[dict[str, Any]] = []
+    missing = 0.0
+    for gap in gaps:
+        lo = max(started_at, min(float(gap["from"]), stopped_at))
+        hi = max(started_at, min(float(gap["to"]), stopped_at))
+        if hi - lo <= 0:
+            continue
+        clamped.append({"from": lo, "to": hi, "reason": gap["reason"]})
+        missing += hi - lo
+
+    missing = min(missing, span)
+    return {
+        "complete": not clamped,
+        "gaps": clamped,
+        "missing_s": round(missing, 3),
+        "recording_s": round(span, 3),
+    }
 
 
 def extract_transcript_segments(
