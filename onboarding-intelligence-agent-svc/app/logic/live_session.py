@@ -22,7 +22,7 @@ import json
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Awaitable, cast
 
 from app.api.schemas import Resync, ServerFrame
 from app.cache.redis_manager import TTL_LIVE
@@ -263,6 +263,51 @@ class LiveSessionManager:
         pipe.expire(key, TTL_LIVE)
         await pipe.execute()
         return payload
+
+    async def record_marker(self, kind: str, at: float, **fields: Any) -> None:
+        """Record that transcription stopped or restarted (#662).
+
+        Written to ``live_markers``, not to the replay buffer — see that key's
+        docstring for why putting a seq-less entry in ``live_frames`` would
+        corrupt a reconnect's replay window.
+
+        Best effort by design. This is called from the socket teardown path,
+        where the connection is already lost; raising here would turn "the
+        transcript is incomplete" into "cleanup crashed", and the marker exists
+        precisely so an incomplete transcript can be labelled rather than
+        salvaged.
+        """
+        keys = self._keys()
+        key = keys.live_markers(self.session_id)
+        payload = {"type": kind, "at": at, **fields}
+        try:
+            pipe = self.redis.client.pipeline(transaction=False)
+            pipe.rpush(key, json.dumps(payload))
+            pipe.ltrim(key, -BUFFER_FRAMES, -1)
+            pipe.expire(key, TTL_LIVE)
+            await pipe.execute()
+        except Exception:  # pragma: no cover - teardown must not raise
+            logger.warning(
+                "live_marker_write_failed",
+                session_id=self.session_id,
+                kind=kind,
+            )
+
+    async def read_markers(self) -> list[dict[str, Any]]:
+        """Every marker for this session, oldest first (#662)."""
+        keys = self._keys()
+        key = keys.live_markers(self.session_id)
+        raw = await cast("Awaitable[list[Any]]", self.redis.client.lrange(key, 0, -1))
+        markers: list[dict[str, Any]] = []
+        for item in raw or []:
+            try:
+                parsed = json.loads(item)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if isinstance(parsed, dict) and isinstance(parsed.get("at"), (int, float)):
+                markers.append(parsed)
+        markers.sort(key=lambda m: m["at"])
+        return markers
 
     async def replay_after(
         self, last_seq: int

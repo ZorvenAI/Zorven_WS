@@ -99,3 +99,71 @@ describe('O-06 · LegalTranscriptHeader', () => {
     expect(screen.getByText(/Pomodoro Owner/)).toBeInTheDocument();
   });
 });
+
+describe('#662 · transcript completeness notice', () => {
+  it('warns that a partial transcript does not cover the whole meeting', () => {
+    // The defect: a legal header over a transcript that stopped at the socket
+    // drop, with nothing on screen saying so.
+    render(
+      <LegalTranscriptHeader
+        header={makeHeader({
+          transcript_completeness: {
+            state: 'partial',
+            missing_s: 267,
+            note: 'Live transcription stopped before the recording ended, so this transcript does not cover the whole meeting. The audio itself is intact and can be re-transcribed.',
+          },
+        })}
+      />
+    );
+
+    const notice = screen.getByTestId('transcript-completeness-notice');
+    expect(notice).toBeInTheDocument();
+    expect(notice).toHaveTextContent('Partial transcript');
+    expect(notice).toHaveTextContent('4m 27s not transcribed');
+    // The actionable half: the audio survived, so this is recoverable.
+    expect(notice).toHaveTextContent('re-transcribed');
+  });
+
+  it('says coverage was not assessed rather than claiming completeness', () => {
+    render(
+      <LegalTranscriptHeader
+        header={makeHeader({
+          transcript_completeness: {
+            state: 'unknown',
+            missing_s: null,
+            note: 'Transcript coverage was not assessed for this recording.',
+          },
+        })}
+      />
+    );
+
+    expect(
+      screen.getByTestId('transcript-completeness-notice')
+    ).toHaveTextContent('not assessed');
+  });
+
+  it('shows nothing when the transcript is complete', () => {
+    render(
+      <LegalTranscriptHeader
+        header={makeHeader({
+          transcript_completeness: { state: 'complete', missing_s: 0, note: '' },
+        })}
+      />
+    );
+
+    expect(
+      screen.queryByTestId('transcript-completeness-notice')
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows nothing when the backend sent no coverage at all', () => {
+    // A response predating #662. Inventing a warning here would be as wrong as
+    // the silence this fixes.
+    render(<LegalTranscriptHeader header={makeHeader()} />);
+
+    expect(
+      screen.queryByTestId('transcript-completeness-notice')
+    ).not.toBeInTheDocument();
+  });
+});
+

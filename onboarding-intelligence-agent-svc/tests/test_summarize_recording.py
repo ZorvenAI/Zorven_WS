@@ -14,6 +14,7 @@ import pytest
 from app.skills.summarize_recording import (
     SummarizeRecording,
     _snap_to_boundary,
+    compute_transcript_coverage,
     extract_transcript_segments,
 )
 
@@ -391,3 +392,135 @@ class TestTranscriptSegmentOutput:
         segments = extract_transcript_segments(raw, 0.0, 10.0)
         assert segments[0]["speaker"] == 0
         assert segments[1]["speaker"] == 1
+
+
+# ── #662 · coverage, and the false positive it exists to avoid ───────
+
+
+class TestTranscriptCoverage:
+    """`compute_transcript_coverage` decides whether a legal header may imply
+    the transcript is whole."""
+
+    def test_no_markers_means_complete(self):
+        assert compute_transcript_coverage([], 100.0, 400.0) == {
+            "complete": True,
+            "gaps": [],
+            "missing_s": 0.0,
+            "recording_s": 300.0,
+        }
+
+    def test_a_silent_tail_is_not_truncation(self):
+        """AC-4, and the whole reason coverage is marker-driven.
+
+        A five-minute recording whose last words are two minutes in is the
+        ordinary shape of a meeting that ended with "thanks, I'll send that
+        over" and a stop button pressed later. Measuring the distance from the
+        last segment to `stopped_at` would call this partial, and a header that
+        cries wolf on honest recordings gets ignored on the one that matters.
+        There are no markers, so there is no truncation.
+        """
+        coverage = compute_transcript_coverage([], 0.0, 300.0)
+
+        assert coverage["complete"] is True
+        assert coverage["missing_s"] == 0.0
+
+    def test_an_unclosed_interruption_runs_to_the_end(self):
+        """The socket never came back, so everything after it is missing."""
+        coverage = compute_transcript_coverage(
+            [
+                {
+                    "type": "transcript.interrupted",
+                    "at": 120.0,
+                    "reason": "socket_closed",
+                }
+            ],
+            0.0,
+            300.0,
+        )
+
+        assert coverage["complete"] is False
+        assert coverage["missing_s"] == 180.0
+        assert coverage["gaps"] == [
+            {"from": 120.0, "to": 300.0, "reason": "socket_closed"}
+        ]
+
+    def test_a_reconnect_closes_the_gap(self):
+        coverage = compute_transcript_coverage(
+            [
+                {
+                    "type": "transcript.interrupted",
+                    "at": 100.0,
+                    "reason": "socket_closed",
+                },
+                {"type": "transcript.resumed", "at": 130.0},
+            ],
+            0.0,
+            300.0,
+        )
+
+        assert coverage["complete"] is False
+        assert coverage["missing_s"] == 30.0
+        assert len(coverage["gaps"]) == 1
+
+    def test_two_drops_are_two_gaps(self):
+        coverage = compute_transcript_coverage(
+            [
+                {"type": "transcript.interrupted", "at": 50.0},
+                {"type": "transcript.resumed", "at": 60.0},
+                {"type": "transcript.interrupted", "at": 200.0},
+                {"type": "transcript.resumed", "at": 230.0},
+            ],
+            0.0,
+            300.0,
+        )
+
+        assert len(coverage["gaps"]) == 2
+        assert coverage["missing_s"] == 40.0
+
+    def test_a_repeated_interruption_does_not_double_count(self):
+        """Two interruptions with no resume between them are one outage, and
+        the first is when transcription actually stopped."""
+        coverage = compute_transcript_coverage(
+            [
+                {"type": "transcript.interrupted", "at": 100.0},
+                {"type": "transcript.interrupted", "at": 150.0},
+                {"type": "transcript.resumed", "at": 200.0},
+            ],
+            0.0,
+            300.0,
+        )
+
+        assert len(coverage["gaps"]) == 1
+        assert coverage["missing_s"] == 100.0
+
+    def test_markers_outside_the_window_are_clamped(self):
+        """The teardown races the stop, so a marker can land past `stopped_at`.
+        An unclamped gap would claim more missing time than the recording
+        has."""
+        coverage = compute_transcript_coverage(
+            [{"type": "transcript.interrupted", "at": 500.0}],
+            0.0,
+            300.0,
+        )
+
+        assert coverage["missing_s"] <= coverage["recording_s"]
+        assert coverage["complete"] is True, "a gap entirely after the stop is no gap"
+
+    def test_markers_arriving_out_of_order_are_sorted(self):
+        coverage = compute_transcript_coverage(
+            [
+                {"type": "transcript.resumed", "at": 130.0},
+                {"type": "transcript.interrupted", "at": 100.0},
+            ],
+            0.0,
+            300.0,
+        )
+
+        assert coverage["missing_s"] == 30.0
+
+    def test_a_resume_with_no_interruption_is_ignored(self):
+        coverage = compute_transcript_coverage(
+            [{"type": "transcript.resumed", "at": 130.0}], 0.0, 300.0
+        )
+
+        assert coverage["complete"] is True
