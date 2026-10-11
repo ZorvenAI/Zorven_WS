@@ -138,6 +138,24 @@ class TenantKeys:
         """List · 4 h · transcript batches that mapped to no question (G-05)."""
         return f"{self._scope}live:{session_id}:unmapped"
 
+    def live_markers(self, session_id: str) -> str:
+        """List · 4 h · when transcription stopped and restarted (#662).
+
+        Deliberately **not** in ``live_frames``, which was the first design.
+        ``LiveSession.replay_after`` derives a *positional* offset from seq
+        arithmetic (``last_seq - oldest + 1``) and so assumes every element in
+        that list carries a contiguous seq. A seq-less marker sitting in it
+        would shift every position after itself, making a reconnect replay the
+        wrong slice — dropping real frames or re-sending delivered ones, with
+        no error to notice. Markers have no seq because they are not frames: no
+        client ever receives one.
+
+        Same TTL and the same durability argument as the frame buffer: the
+        socket is already gone when these are written, so a later finalisation
+        on another Cloud Run instance has to be able to read them.
+        """
+        return f"{self._scope}live:{session_id}:markers"
+
     def live_seq(self, session_id: str) -> str:
         """String · 4 h · the monotonic counter behind AC-4.
 

@@ -375,6 +375,14 @@ class MeetingRecordingSerializer(serializers.ModelSerializer):
             # a transcript is there yet, which is the same reasoning that
             # makes summary a presence flag.
             "has_transcript",
+            # #662: `has_transcript` stays a presence flag and keeps saying
+            # True for a truncated transcript -- there *is* one, and flipping
+            # it to False would hide the partial transcript rather than
+            # qualify it. This is the qualifier, and it is tri-state: null
+            # means coverage was never assessed, which is every row finalised
+            # before the agent started reporting it.
+            "transcript_complete",
+            "transcript_missing_s",
             "has_summary",
             "started_at",
             "stopped_at",

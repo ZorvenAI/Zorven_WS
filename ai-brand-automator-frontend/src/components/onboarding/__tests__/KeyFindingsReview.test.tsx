@@ -132,6 +132,10 @@ function setupMocks(
     duration_s: 120,
     audio_asset: null,
     has_transcript: true,
+    // #662 · the API always sends these; a fixture without
+    // them would not match the response it stands in for.
+    transcript_complete: null,
+    transcript_missing_s: null,
     has_summary: true,
     started_at: '2026-08-01T00:00:00Z',
     stopped_at: '2026-08-01T00:02:00Z',
@@ -275,6 +279,10 @@ it('shows recording summaries when available', async () => {
     duration_s: 120,
     audio_asset: null,
     has_transcript: true,
+    // #662 · the API always sends these; a fixture without
+    // them would not match the response it stands in for.
+    transcript_complete: null,
+    transcript_missing_s: null,
     has_summary: true,
     started_at: '2026-08-01T00:00:00Z',
     stopped_at: '2026-08-01T00:02:00Z',

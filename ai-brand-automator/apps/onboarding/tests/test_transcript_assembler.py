@@ -236,3 +236,74 @@ class TestRenderPlainText:
         text = render_plain_text(header, [])
         assert "MEETING TRANSCRIPT" in text
         assert "TRANSCRIPT" not in text.split("MEETING TRANSCRIPT")[1]
+
+
+class TestTranscriptCompleteness:
+    """#662 · the header must not imply the transcript is whole when it is not.
+
+    A `MagicMock` recording answers every attribute, so these set the two
+    fields explicitly. Leaving them to the mock would make the attribute
+    truthy and the test would pass while asserting nothing about the branch.
+    """
+
+    def test_a_complete_transcript_says_so(self, recording, attendees, consent):
+        recording.transcript_complete = True
+        recording.transcript_missing_s = 0
+
+        header = assemble_header(
+            recording=recording, attendees=attendees, consent=consent
+        )
+
+        assert header["transcript_completeness"]["state"] == "complete"
+        assert header["transcript_completeness"]["note"] == ""
+
+    def test_a_partial_transcript_is_labelled_with_what_is_missing(
+        self, recording, attendees, consent
+    ):
+        """The defect in #662: a legal header over a transcript that stops at
+        the socket drop, with nothing saying so."""
+        recording.transcript_complete = False
+        recording.transcript_missing_s = 266
+
+        header = assemble_header(
+            recording=recording, attendees=attendees, consent=consent
+        )
+
+        completeness = header["transcript_completeness"]
+        assert completeness["state"] == "partial"
+        assert completeness["missing_s"] == 266
+        # The actionable part: the audio survived the drop, so this is
+        # recoverable by re-transcribing rather than lost.
+        assert "re-transcribed" in completeness["note"]
+
+    def test_an_unassessed_transcript_claims_neither(
+        self, recording, attendees, consent
+    ):
+        """Rows finalised before coverage was reported are `unknown`.
+
+        Calling them complete would invent a fact about recordings nobody
+        measured; calling them partial would smear every honest one.
+        """
+        recording.transcript_complete = None
+        recording.transcript_missing_s = None
+
+        header = assemble_header(
+            recording=recording, attendees=attendees, consent=consent
+        )
+
+        completeness = header["transcript_completeness"]
+        assert completeness["state"] == "unknown"
+        assert completeness["missing_s"] is None
+        assert "not assessed" in completeness["note"]
+
+    def test_a_recording_without_the_fields_is_unknown(self, attendees, consent):
+        """An object predating the migration -- or any caller passing a plain
+        stub -- must not read as complete."""
+        rec = MagicMock(spec=["started_at", "stopped_at", "session_id"])
+        rec.started_at = datetime(2026, 9, 12, 14, 30, 0, tzinfo=timezone.utc)
+        rec.stopped_at = datetime(2026, 9, 12, 15, 30, 0, tzinfo=timezone.utc)
+        rec.session_id = 6
+
+        header = assemble_header(recording=rec, attendees=attendees, consent=consent)
+
+        assert header["transcript_completeness"]["state"] == "unknown"

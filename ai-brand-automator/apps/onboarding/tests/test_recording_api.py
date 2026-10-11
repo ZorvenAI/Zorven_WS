@@ -880,3 +880,138 @@ def test_transcript_endpoint_cross_tenant_404(consented_session, public_tenant):
     )
     response = client_for(other_user, other_tenant).get(transcript_url(recording))
     assert response.status_code == 404
+
+
+# ── #662 · a truncated transcript is recorded as truncated ───────────
+
+
+def test_the_callback_records_a_partial_transcript(
+    consented_session, public_tenant, settings
+):
+    """The core of #662.
+
+    Before this, a recording whose transcription died at the socket drop
+    finalised SUMMARIZED with has_transcript true and nothing anywhere saying
+    the legal transcript stopped early.
+    """
+    settings.OIA_SERVICE_TOKEN = "test-token"
+    recording = make_recording(
+        session=consented_session,
+        status=RecordingStatus.UPLOADED,
+    )
+    client = APIClient()
+    client.defaults["SERVER_NAME"] = "localhost"
+
+    response = client.patch(
+        summary_callback_url(recording),
+        data={
+            "summary": {
+                "text": "A summary.",
+                "key_moments": [],
+                "transcript_coverage": {
+                    "complete": False,
+                    "gaps": [{"from": 100.0, "to": 366.7, "reason": "socket_closed"}],
+                    "missing_s": 266.7,
+                    "recording_s": 1802.0,
+                },
+            },
+            "transcript": SAMPLE_SEGMENTS,
+        },
+        format="json",
+        HTTP_X_SERVICE_TOKEN="test-token",
+        HTTP_X_TENANT_ID=str(public_tenant.pk),
+    )
+
+    assert response.status_code == 200
+    recording.refresh_from_db()
+    assert recording.transcript_complete is False
+    assert recording.transcript_missing_s == 266
+    # Still a transcript, and still summarised — the partial record is kept and
+    # labelled, not withheld.
+    assert recording.status == RecordingStatus.SUMMARIZED
+    assert recording.transcript == SAMPLE_SEGMENTS
+
+
+def test_the_callback_records_a_complete_transcript(
+    consented_session, public_tenant, settings
+):
+    settings.OIA_SERVICE_TOKEN = "test-token"
+    recording = make_recording(
+        session=consented_session,
+        status=RecordingStatus.UPLOADED,
+    )
+    client = APIClient()
+    client.defaults["SERVER_NAME"] = "localhost"
+
+    client.patch(
+        summary_callback_url(recording),
+        data={
+            "summary": {
+                "text": "A summary.",
+                "key_moments": [],
+                "transcript_coverage": {
+                    "complete": True,
+                    "gaps": [],
+                    "missing_s": 0.0,
+                    "recording_s": 1802.0,
+                },
+            },
+        },
+        format="json",
+        HTTP_X_SERVICE_TOKEN="test-token",
+        HTTP_X_TENANT_ID=str(public_tenant.pk),
+    )
+
+    recording.refresh_from_db()
+    assert recording.transcript_complete is True
+    assert recording.transcript_missing_s == 0
+
+
+def test_a_callback_without_coverage_leaves_it_unassessed(
+    consented_session, public_tenant, settings
+):
+    """An older agent sends no coverage block. The columns must stay NULL
+    rather than defaulting to "complete", which would assert something about
+    the recording that nobody measured."""
+    settings.OIA_SERVICE_TOKEN = "test-token"
+    recording = make_recording(
+        session=consented_session,
+        status=RecordingStatus.UPLOADED,
+    )
+    client = APIClient()
+    client.defaults["SERVER_NAME"] = "localhost"
+
+    client.patch(
+        summary_callback_url(recording),
+        data={"summary": {"text": "A summary.", "key_moments": []}},
+        format="json",
+        HTTP_X_SERVICE_TOKEN="test-token",
+        HTTP_X_TENANT_ID=str(public_tenant.pk),
+    )
+
+    recording.refresh_from_db()
+    assert recording.transcript_complete is None
+    assert recording.transcript_missing_s is None
+
+
+def test_the_library_row_carries_the_coverage_qualifier(
+    consented_session, public_tenant, editor
+):
+    """`has_transcript` keeps meaning "there is one"; the qualifier says
+    whether it is whole. Flipping has_transcript would hide the partial
+    transcript instead of qualifying it."""
+    recording = make_recording(
+        session=consented_session,
+        status=RecordingStatus.SUMMARIZED,
+        transcript=SAMPLE_SEGMENTS,
+    )
+    recording.transcript_complete = False
+    recording.transcript_missing_s = 266
+    recording.save(update_fields=["transcript_complete", "transcript_missing_s"])
+
+    rows = client_for(editor, public_tenant).get(recordings_url(consented_session)).data
+
+    row = next(r for r in rows if str(r["id"]) == str(recording.pk))
+    assert row["has_transcript"] is True
+    assert row["transcript_complete"] is False
+    assert row["transcript_missing_s"] == 266

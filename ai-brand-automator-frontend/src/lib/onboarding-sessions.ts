@@ -161,6 +161,15 @@ export interface RecordingItem {
   duration_s: number | null;
   audio_asset: string | null;
   has_transcript: boolean;
+  /**
+   * #662 · whether the transcript covers the whole recording.
+   *
+   * `has_transcript` stays a presence flag and is `true` even for a truncated
+   * transcript, so this is the qualifier. `null` means coverage was never
+   * assessed — every row finalised before the agent started reporting it.
+   */
+  transcript_complete: boolean | null;
+  transcript_missing_s: number | null;
   has_summary: boolean;
   started_at: string;
   stopped_at: string | null;
@@ -211,6 +220,19 @@ export interface TranscriptConsent {
   scope: Record<string, boolean>;
 }
 
+/**
+ * Whether the transcript covers the whole recording (#662).
+ *
+ * `unknown` is a real state, not a gap in the data: recordings finalised
+ * before the agent reported coverage were never assessed, and rendering them
+ * as complete would assert something nobody measured.
+ */
+export interface TranscriptCompleteness {
+  state: 'complete' | 'partial' | 'unknown';
+  missing_s: number | null;
+  note: string;
+}
+
 /** Legal transcript header assembled from auto-captured metadata (O-06). */
 export interface TranscriptHeader {
   date: string | null;
@@ -221,6 +243,8 @@ export interface TranscriptHeader {
   session_company: string | null;
   attendees: TranscriptAttendee[];
   consent: TranscriptConsent | null;
+  /** Optional: absent from responses predating #662. */
+  transcript_completeness?: TranscriptCompleteness;
 }
 
 /** Response from GET /recordings/{id}/transcript/ (I-03, O-06). */

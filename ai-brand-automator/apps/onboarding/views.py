@@ -2812,6 +2812,23 @@ def update_recording_summary(request, pk):
         ):
             recording.transcript = transcript
             update_fields.append("transcript")
+
+        # #662: record whether the transcript covers the whole recording.
+        #
+        # Columns rather than a read through `summary["transcript_coverage"]`
+        # because the library list has to answer "is this partial?" for every
+        # row at once, and a free-form JSON blob cannot be filtered or
+        # indexed. They stay NULL when the agent sends no coverage block —
+        # "never assessed" is a third state, distinct from complete, and it is
+        # the honest answer for anything finalised by an older agent.
+        coverage = summary.get("transcript_coverage")
+        if isinstance(coverage, dict) and isinstance(coverage.get("complete"), bool):
+            recording.transcript_complete = coverage["complete"]
+            missing = coverage.get("missing_s")
+            if isinstance(missing, (int, float)) and missing >= 0:
+                recording.transcript_missing_s = int(missing)
+            update_fields += ["transcript_complete", "transcript_missing_s"]
+
         recording.status = RecordingStatus.SUMMARIZED
         recording.save(update_fields=update_fields)
 

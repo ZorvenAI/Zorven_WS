@@ -1197,6 +1197,11 @@ async def _handle_control(
     Malformed input is ignored, never fatal. A client bug must not end a
     meeting that is otherwise recording fine.
     """
+    # Wall clock for the #662 markers below, which are compared against the
+    # recording's started_at/stopped_at. Function-local to match the three
+    # other `import time as _time` sites in this module.
+    import time as _time
+
     if session is None:
         return
     raw = message.get("text")
@@ -1308,6 +1313,13 @@ async def _handle_control(
             stt_state["stream_queues"] = stream_queues
             stt_state["stream_tasks"] = stream_tasks
 
+            # #662: the multi-mic path needs the same resume marker as the
+            # single-stream one below. Only one of the two branches runs per
+            # start, and marking just one would make coverage correct for
+            # single-mic meetings and wrong for every multi-mic one.
+            if session is not None:
+                await session.record_marker("transcript.resumed", at=_time.time())
+
             if session is not None:
                 try:
                     await session.set_stream_map(
@@ -1345,6 +1357,13 @@ async def _handle_control(
             stt_state["audio_q"] = audio_q
             stt_state["stt_task"] = task
             task.add_done_callback(lambda _: stt_state.update(audio_q=None))
+            # #662: transcription is live from here. On a reconnect this is
+            # what closes the gap opened by the `interrupted` marker; on a
+            # first start it is a resume with nothing to resume, which
+            # coverage ignores. Review of #673 found this write missing
+            # altogether, so an interruption's gap always ran to the end of
+            # the recording even when STT came straight back.
+            await session.record_marker("transcript.resumed", at=_time.time())
             logger.info(
                 "stt_started",
                 codec=start.codec,
@@ -1394,6 +1413,17 @@ async def _handle_control(
                         except (asyncio.CancelledError, Exception):  # noqa: BLE001
                             pass
                 stt_state["stt_task"] = None
+
+        # #662: the positive evidence that completeness rests on.
+        #
+        # Without a marker for the clean ending, "no markers" would be the
+        # same observation for a session that finished normally and one whose
+        # marker writes failed, and coverage would have to guess. It guesses
+        # neither: this is what lets it answer `complete`, and its absence is
+        # what makes it answer "not assessed" instead of inventing one.
+        if session is not None:
+            await session.record_marker("transcript.stopped", at=_time.time())
+
         logger.info("stt_stopped")
         return
 
@@ -1835,6 +1865,19 @@ async def _hold(
             except Exception:  # noqa: BLE001
                 logger.warning("live_prompt_versions_persist_failed")
 
+        # #662: was transcription still running when this socket went away?
+        #
+        # Read before the teardown below nulls everything. The signal is the
+        # STT state itself rather than `recording_id`, which is set on `start`
+        # and never cleared and so cannot tell a clean stop from a dropped
+        # socket. The `stop` handler nulls each of these, so any of them still
+        # being set here means the operator never stopped — the socket died
+        # mid-recording and the transcript ends early.
+        was_transcribing = any(
+            stt_state.get(key) is not None
+            for key in ("audio_q", "stream_queues", "stt_task", "stream_tasks")
+        )
+
         audio_q = stt_state.get("audio_q")
         if audio_q is not None:
             audio_q.put_nowait(None)
@@ -1858,3 +1901,20 @@ async def _hold(
                     await task
                 except asyncio.CancelledError:
                     pass
+
+        # #662: leave a record that the transcript stops here.
+        #
+        # Nothing can be salvaged at this point — the socket is gone and the
+        # STT loops with it. What this buys is honesty downstream: finalisation
+        # reads these markers and the O-06 legal header can state that the
+        # transcript is partial instead of implying it is whole.
+        if was_transcribing and session is not None:
+            await session.record_marker(
+                "transcript.interrupted",
+                # Wall clock, not the monotonic `_time.monotonic()` used for
+                # the slow-check loop above: these markers are compared against
+                # the segments' absolute t_start/t_end and the recording's
+                # started_at/stopped_at, which are all epoch seconds.
+                at=_time.time(),
+                reason="socket_closed",
+            )

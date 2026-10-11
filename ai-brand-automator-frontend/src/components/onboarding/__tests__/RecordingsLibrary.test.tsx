@@ -18,6 +18,10 @@ function recording(overrides: Partial<RecordingItem> = {}): RecordingItem {
     duration_s: 95,
     audio_asset: 'asset-1',
     has_transcript: false,
+    // #662 · the API always sends these; a fixture without
+    // them would not match the response it stands in for.
+    transcript_complete: null,
+    transcript_missing_s: null,
     has_summary: false,
     started_at: '2026-08-15T10:00:00Z',
     stopped_at: '2026-08-15T10:01:35Z',

@@ -22,7 +22,7 @@ import json
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Awaitable, cast
 
 from app.api.schemas import Resync, ServerFrame
 from app.cache.redis_manager import TTL_LIVE
@@ -263,6 +263,67 @@ class LiveSessionManager:
         pipe.expire(key, TTL_LIVE)
         await pipe.execute()
         return payload
+
+    async def record_marker(self, kind: str, at: float, **fields: Any) -> None:
+        """Record that transcription stopped or restarted (#662).
+
+        Written to ``live_markers``, not to the replay buffer — see that key's
+        docstring for why putting a seq-less entry in ``live_frames`` would
+        corrupt a reconnect's replay window.
+
+        Still must not raise: this runs on the socket teardown path, where the
+        connection is already lost, and turning "the transcript is incomplete"
+        into "cleanup crashed" helps nobody.
+
+        But it must not fail *silently* either. A swallowed write once meant a
+        dropped transcript was indistinguishable from an untroubled one,
+        because finalisation read "no markers" as complete. It no longer does:
+        completeness is asserted only on a ``transcript.stopped`` marker, so a
+        write that fails here degrades the recording to "never assessed"
+        rather than to a false claim of completeness. One retry first, because
+        the common failure is a blip rather than an outage, and an ERROR log
+        because an operator who sees "not assessed" deserves to find out why.
+        """
+        keys = self._keys()
+        key = keys.live_markers(self.session_id)
+        payload = {"type": kind, "at": at, **fields}
+
+        for attempt in (1, 2):
+            try:
+                pipe = self.redis.client.pipeline(transaction=False)
+                pipe.rpush(key, json.dumps(payload))
+                pipe.ltrim(key, -BUFFER_FRAMES, -1)
+                pipe.expire(key, TTL_LIVE)
+                await pipe.execute()
+                return
+            except Exception:  # noqa: BLE001 - teardown must not raise
+                if attempt == 1:
+                    continue
+                logger.error(
+                    "live_marker_write_failed",
+                    session_id=self.session_id,
+                    kind=kind,
+                    detail=(
+                        "transcript coverage for this session will report "
+                        "'not assessed' rather than complete"
+                    ),
+                )
+
+    async def read_markers(self) -> list[dict[str, Any]]:
+        """Every marker for this session, oldest first (#662)."""
+        keys = self._keys()
+        key = keys.live_markers(self.session_id)
+        raw = await cast("Awaitable[list[Any]]", self.redis.client.lrange(key, 0, -1))
+        markers: list[dict[str, Any]] = []
+        for item in raw or []:
+            try:
+                parsed = json.loads(item)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if isinstance(parsed, dict) and isinstance(parsed.get("at"), (int, float)):
+                markers.append(parsed)
+        markers.sort(key=lambda m: m["at"])
+        return markers
 
     async def replay_after(
         self, last_seq: int
