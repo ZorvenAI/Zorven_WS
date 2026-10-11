@@ -1320,19 +1320,14 @@ async def _handle_control(
             if session is not None:
                 await session.record_marker("transcript.resumed", at=_time.time())
 
-            if session is not None:
-                try:
-                    await session.set_stream_map(
-                        {
-                            str(k): {
-                                "speaker_name": v.speaker_name,
-                                "speaker_role": v.speaker_role,
-                            }
-                            for k, v in stream_map.items()
-                        }
-                    )
-                except Exception:  # noqa: BLE001
-                    logger.warning("set_stream_map_failed")
+            # The stream map is no longer mirrored into Redis (#662, item C).
+            # Nothing ever read it back: `get_stream_map` had no callers, so
+            # this write stored every participant's name in Redis for no
+            # reader. The local `stream_map` above is what attributes
+            # transcript frames, and a reconnect re-establishes STT by
+            # replaying its own `start` frame, which carries the stream
+            # descriptors again. If a server-side resume is ever built, it
+            # should add the write back together with the read that needs it.
 
             logger.info(
                 "stt_started_multi",

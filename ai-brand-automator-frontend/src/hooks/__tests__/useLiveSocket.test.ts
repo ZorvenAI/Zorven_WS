@@ -202,3 +202,100 @@ describe('#662 · a dropped socket is distinguishable from a first connect', () 
     expect(FakeWebSocket.instances.length).toBe(0);
   });
 });
+
+describe('#662 item B · recovering after the socket gives up', () => {
+  /** Exhaust the retry budget and land on 'closed'. */
+  async function exhaust(result: { current: { status: string } }) {
+    for (let i = 0; i < 5; i += 1) {
+      act(() => latest().drop());
+      await waitOutReconnect();
+      act(() => latest().open());
+    }
+    act(() => latest().drop());
+    expect(result.current.status).toBe('closed');
+  }
+
+  it('opens a fresh socket when asked to retry from closed', async () => {
+    const { result } = await mountOpenLive();
+    await exhaust(result);
+    const before = FakeWebSocket.instances.length;
+
+    await act(async () => {
+      result.current.reconnect();
+    });
+    await flush();
+
+    // A new socket, not a resurrected one: the old instance is gone and only
+    // a fresh connect can re-establish STT server-side.
+    expect(FakeWebSocket.instances.length).toBe(before + 1);
+  });
+
+  it('keeps warning while the retry is in flight', async () => {
+    // Not 'connecting'. The banner renders for 'reconnecting'/'closed' only,
+    // so reporting a manual retry as a first connect would make the warning
+    // disappear the moment the operator clicked it — leaving them with no
+    // idea whether transcription came back.
+    const { result } = await mountOpenLive();
+    await exhaust(result);
+
+    await act(async () => {
+      result.current.reconnect();
+    });
+
+    expect(result.current.status).toBe('reconnecting');
+  });
+
+  it('restores the retry budget, so a later drop reconnects automatically', async () => {
+    // Without resetting the budget the socket would reach 'closed' again on
+    // the very next drop, and the operator would be clicking Retry per drop
+    // for the rest of the meeting.
+    const { result } = await mountOpenLive();
+    await exhaust(result);
+
+    await act(async () => {
+      result.current.reconnect();
+    });
+    await flush();
+    act(() => latest().open());
+    expect(result.current.status).toBe('live');
+
+    act(() => latest().drop());
+
+    expect(result.current.status).toBe('reconnecting');
+  });
+
+  it('replays the start frame on a manual retry too', async () => {
+    // The whole point of recovering: a socket that returns without a `start`
+    // frame reports 'live' and transcribes nothing. On the server this is also
+    // what writes `transcript.resumed`, which closes the coverage gap instead
+    // of letting it run to the end of the recording.
+    const { result } = await mountOpenLive();
+    act(() => {
+      result.current.sendControl({
+        type: 'start',
+        recording_id: 'rec-1',
+        codec: 'audio/webm;codecs=opus',
+        sample_rate: 48000,
+      });
+    });
+    await exhaust(result);
+    const before = FakeWebSocket.instances.length;
+
+    await act(async () => {
+      result.current.reconnect();
+    });
+    await flush();
+
+    // The socket the *retry* opened, not `latest()`. With `latest()` this
+    // test passed even with the retry neutralised, because the last socket
+    // from the automatic loop had already had a start frame replayed onto it
+    // — a pass that proved nothing about the manual path.
+    expect(FakeWebSocket.instances.length).toBe(before + 1);
+    const retried = FakeWebSocket.instances[before];
+    act(() => retried.open());
+
+    const replayed = retried.sent.map((raw) => JSON.parse(String(raw)));
+    expect(replayed.some((f) => f.type === 'start')).toBe(true);
+  });
+});
+

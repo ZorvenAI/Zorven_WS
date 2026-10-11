@@ -284,8 +284,24 @@ export default function MeetingView({
           <span>
             {socket.status === 'reconnecting'
               ? 'Live transcription interrupted — reconnecting. Any recording in progress is unaffected and still being saved.'
-              : 'Live transcription is not running and will not resume on its own. Any recording in progress is still being saved but will not be transcribed — reload the page to restore transcription.'}
+              : 'Live transcription is not running and will not resume on its own. Any recording in progress is still being saved but will not be transcribed.'}
           </span>
+          {/* #662 item B. The message used to end "reload the page to restore
+              transcription", which was the only route back and costs the
+              operator the live question-coverage state the meeting is being
+              run from. This retries in place; the socket replays its `start`
+              frame, so the server records a resume and the coverage gap
+              closes instead of running to the end of the recording. */}
+          {socket.status === 'closed' && (
+            <button
+              type="button"
+              onClick={socket.reconnect}
+              data-testid="retry-transcription"
+              className="ml-auto shrink-0 rounded border border-rose-400/50 px-2 py-1 text-xs font-medium text-rose-100 hover:bg-rose-500/20"
+            >
+              Retry transcription
+            </button>
+          )}
         </div>
       )}
 
