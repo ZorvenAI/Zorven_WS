@@ -259,6 +259,15 @@ def compute_transcript_coverage(
 
     An ``interrupted`` marker with no matching ``resumed`` ran to the end of
     the recording: the socket never came back.
+
+    ``complete`` is **tri-state**, and the ``None`` case is the point. An empty
+    marker list used to answer ``True``, which made a failed marker write
+    indistinguishable from an untroubled session — a transient Redis error on
+    the teardown path would hand back exactly the false completeness claim this
+    whole mechanism exists to prevent. Completeness is now only asserted on
+    *positive* evidence that transcription ran and ended cleanly: a
+    ``transcript.stopped`` marker. No markers at all means nobody can say, so
+    nobody says, and the recording stays "never assessed".
     """
     span = max(0.0, stopped_at - started_at)
     gaps: list[dict[str, Any]] = []
@@ -296,8 +305,19 @@ def compute_transcript_coverage(
         missing += hi - lo
 
     missing = min(missing, span)
+
+    # Tri-state. A gap is proof of truncation; a clean stop is proof of
+    # completeness; the absence of both is not proof of anything.
+    complete: bool | None
+    if clamped:
+        complete = False
+    elif any(m.get("type") == "transcript.stopped" for m in markers):
+        complete = True
+    else:
+        complete = None
+
     return {
-        "complete": not clamped,
+        "complete": complete,
         "gaps": clamped,
         "missing_s": round(missing, 3),
         "recording_s": round(span, 3),

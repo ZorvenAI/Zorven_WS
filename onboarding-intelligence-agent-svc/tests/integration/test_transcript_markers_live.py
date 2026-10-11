@@ -82,13 +82,17 @@ async def test_markers_drive_coverage_end_to_end(session):
     assert coverage["gaps"] == [{"from": 100.0, "to": 160.0, "reason": "socket_closed"}]
 
 
-async def test_an_untouched_session_reads_as_complete(session):
-    """No markers at all — the key never even exists. This has to come back
-    complete rather than erroring on a missing key, because it is the shape of
-    every meeting that went fine."""
+async def test_an_untouched_session_reads_as_unknown_not_partial(session):
+    """No markers at all — the key never even exists.
+
+    This must not error on the missing key, and must not report partial. It
+    reports `None`: after the #673 review an unmarked session is "never
+    assessed", because a failed marker write is indistinguishable from a quiet
+    one and neither earns a completeness claim.
+    """
     coverage = compute_transcript_coverage(await session.read_markers(), 0.0, 300.0)
 
-    assert coverage["complete"] is True
+    assert coverage["complete"] is None
     assert coverage["missing_s"] == 0.0
 
 

@@ -161,6 +161,15 @@ export interface RecordingItem {
   duration_s: number | null;
   audio_asset: string | null;
   has_transcript: boolean;
+  /**
+   * #662 · whether the transcript covers the whole recording.
+   *
+   * `has_transcript` stays a presence flag and is `true` even for a truncated
+   * transcript, so this is the qualifier. `null` means coverage was never
+   * assessed — every row finalised before the agent started reporting it.
+   */
+  transcript_complete: boolean | null;
+  transcript_missing_s: number | null;
   has_summary: boolean;
   started_at: string;
   stopped_at: string | null;

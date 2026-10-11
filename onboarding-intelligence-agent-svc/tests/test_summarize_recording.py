@@ -401,13 +401,50 @@ class TestTranscriptCoverage:
     """`compute_transcript_coverage` decides whether a legal header may imply
     the transcript is whole."""
 
-    def test_no_markers_means_complete(self):
+    def test_no_markers_means_unknown_not_complete(self):
+        """Review of #673: an empty marker list used to answer `True`.
+
+        That made a failed marker write indistinguishable from an untroubled
+        session — a transient Redis error on the teardown path produced exactly
+        the false completeness claim this mechanism exists to prevent.
+        Completeness now needs positive evidence.
+        """
         assert compute_transcript_coverage([], 100.0, 400.0) == {
-            "complete": True,
+            "complete": None,
             "gaps": [],
             "missing_s": 0.0,
             "recording_s": 300.0,
         }
+
+    def test_a_clean_stop_is_what_proves_completeness(self):
+        coverage = compute_transcript_coverage(
+            [
+                {"type": "transcript.resumed", "at": 100.0},
+                {"type": "transcript.stopped", "at": 400.0},
+            ],
+            100.0,
+            400.0,
+        )
+
+        assert coverage["complete"] is True
+        assert coverage["missing_s"] == 0.0
+
+    def test_a_gap_outranks_a_clean_stop(self):
+        """The socket dropped, came back, and the operator then stopped
+        normally. The stop is real and so is the hole."""
+        coverage = compute_transcript_coverage(
+            [
+                {"type": "transcript.resumed", "at": 0.0},
+                {"type": "transcript.interrupted", "at": 100.0},
+                {"type": "transcript.resumed", "at": 160.0},
+                {"type": "transcript.stopped", "at": 300.0},
+            ],
+            0.0,
+            300.0,
+        )
+
+        assert coverage["complete"] is False
+        assert coverage["missing_s"] == 60.0
 
     def test_a_silent_tail_is_not_truncation(self):
         """AC-4, and the whole reason coverage is marker-driven.
@@ -421,7 +458,10 @@ class TestTranscriptCoverage:
         """
         coverage = compute_transcript_coverage([], 0.0, 300.0)
 
-        assert coverage["complete"] is True
+        # Not partial, which is the claim that would be wrong. (It is
+        # "unknown" rather than "complete" only because no marker proves the
+        # clean ending — see the test above.)
+        assert coverage["complete"] is not False
         assert coverage["missing_s"] == 0.0
 
     def test_an_unclosed_interruption_runs_to_the_end(self):
@@ -504,7 +544,9 @@ class TestTranscriptCoverage:
         )
 
         assert coverage["missing_s"] <= coverage["recording_s"]
-        assert coverage["complete"] is True, "a gap entirely after the stop is no gap"
+        assert (
+            coverage["complete"] is not False
+        ), "a gap entirely after the stop is no gap"
 
     def test_markers_arriving_out_of_order_are_sorted(self):
         coverage = compute_transcript_coverage(
@@ -523,4 +565,4 @@ class TestTranscriptCoverage:
             [{"type": "transcript.resumed", "at": 130.0}], 0.0, 300.0
         )
 
-        assert coverage["complete"] is True
+        assert coverage["complete"] is not False

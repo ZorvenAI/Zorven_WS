@@ -70,26 +70,32 @@ def test_complete_is_exactly_the_absence_of_gaps(markers, window):
     started_at, stopped_at = window
     coverage = compute_transcript_coverage(markers, started_at, stopped_at)
 
-    assert coverage["complete"] is (coverage["gaps"] == [])
-    # And the two readings of "nothing missing" agree.
-    if coverage["complete"]:
+    # Tri-state after the #673 review: False means proven truncated, True
+    # means proven clean, None means nobody can say.
+    assert (coverage["complete"] is False) is (coverage["gaps"] != [])
+    if coverage["complete"] is not False:
         assert coverage["missing_s"] == 0.0
 
 
 @settings(max_examples=300)
 @given(window=windows)
-def test_no_markers_is_always_complete(window):
+def test_no_markers_is_never_partial(window):
     """The invariant this design exists for.
 
-    Whatever the recording's shape, a session nobody interrupted is complete.
-    No silence, no pause, no length of tail can make it partial, because none
-    of those is evidence that transcription stopped.
+    Whatever the recording's shape, a session nobody interrupted is never
+    reported partial. No silence, no pause, no length of tail can make it so,
+    because none of those is evidence that transcription stopped — and the
+    function cannot be tempted by them, since it never sees the segments.
+
+    Stated as "never partial" rather than "complete": after the #673 review an
+    unmarked session is `None`, because a failed marker write looks identical
+    to a quiet one and neither earns a completeness claim.
     """
     started_at, stopped_at = window
 
     coverage = compute_transcript_coverage([], started_at, stopped_at)
 
-    assert coverage["complete"] is True
+    assert coverage["complete"] is not False
     assert coverage["missing_s"] == 0.0
 
 
@@ -114,4 +120,4 @@ def test_resumes_alone_never_create_a_gap(resumes, window):
 
     coverage = compute_transcript_coverage(resumes, started_at, stopped_at)
 
-    assert coverage["complete"] is True
+    assert coverage["complete"] is not False

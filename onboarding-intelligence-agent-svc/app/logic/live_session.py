@@ -271,27 +271,43 @@ class LiveSessionManager:
         docstring for why putting a seq-less entry in ``live_frames`` would
         corrupt a reconnect's replay window.
 
-        Best effort by design. This is called from the socket teardown path,
-        where the connection is already lost; raising here would turn "the
-        transcript is incomplete" into "cleanup crashed", and the marker exists
-        precisely so an incomplete transcript can be labelled rather than
-        salvaged.
+        Still must not raise: this runs on the socket teardown path, where the
+        connection is already lost, and turning "the transcript is incomplete"
+        into "cleanup crashed" helps nobody.
+
+        But it must not fail *silently* either. A swallowed write once meant a
+        dropped transcript was indistinguishable from an untroubled one,
+        because finalisation read "no markers" as complete. It no longer does:
+        completeness is asserted only on a ``transcript.stopped`` marker, so a
+        write that fails here degrades the recording to "never assessed"
+        rather than to a false claim of completeness. One retry first, because
+        the common failure is a blip rather than an outage, and an ERROR log
+        because an operator who sees "not assessed" deserves to find out why.
         """
         keys = self._keys()
         key = keys.live_markers(self.session_id)
         payload = {"type": kind, "at": at, **fields}
-        try:
-            pipe = self.redis.client.pipeline(transaction=False)
-            pipe.rpush(key, json.dumps(payload))
-            pipe.ltrim(key, -BUFFER_FRAMES, -1)
-            pipe.expire(key, TTL_LIVE)
-            await pipe.execute()
-        except Exception:  # pragma: no cover - teardown must not raise
-            logger.warning(
-                "live_marker_write_failed",
-                session_id=self.session_id,
-                kind=kind,
-            )
+
+        for attempt in (1, 2):
+            try:
+                pipe = self.redis.client.pipeline(transaction=False)
+                pipe.rpush(key, json.dumps(payload))
+                pipe.ltrim(key, -BUFFER_FRAMES, -1)
+                pipe.expire(key, TTL_LIVE)
+                await pipe.execute()
+                return
+            except Exception:  # noqa: BLE001 - teardown must not raise
+                if attempt == 1:
+                    continue
+                logger.error(
+                    "live_marker_write_failed",
+                    session_id=self.session_id,
+                    kind=kind,
+                    detail=(
+                        "transcript coverage for this session will report "
+                        "'not assessed' rather than complete"
+                    ),
+                )
 
     async def read_markers(self) -> list[dict[str, Any]]:
         """Every marker for this session, oldest first (#662)."""
