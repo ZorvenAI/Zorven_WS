@@ -349,8 +349,15 @@ energy feeds STT at any moment, eliminating acoustic bleed.
 
 **Background**: A multi-channel USB audio interface (Focusrite Scarlett 2i2,
 Zoom H6, etc.) exposes N input channels as a single device to the OS. The
-channels are electrically isolated at the preamp — no acoustic bleed between
-channels. The Web Audio API captures all channels via a single `getUserMedia`
+channels are electrically isolated at the preamp, so there is no **electrical
+crosstalk** between them — but that is a different problem from **acoustic
+bleed**, and an earlier version of this paragraph conflated the two. Two mics
+in one room both hear whoever is speaking, whatever the interface does: every
+channel still carries every voice, at differing levels. Isolation removes the
+hum and the signal leakage; it does nothing about the second person's voice
+arriving through the air. The energy gate is what addresses acoustic bleed,
+which is why this card is a mitigation and not a hardware swap. The Web Audio
+API captures all channels via a single `getUserMedia`
 call with `channelCount: N`, then a `ChannelSplitterNode` routes each channel
 to its own processing path. An energy gate ensures only one channel's audio
 reaches STT at any moment, preventing the same utterance from being
@@ -378,9 +385,16 @@ transcribed on multiple streams.
   separate-device model. The energy gate still applies across separate
   devices.
 
-**Backend changes**: None — the WebSocket multi-stream protocol (O-03) and
-STT routing are unchanged. The energy gate and channel splitting happen
-entirely in the browser before audio reaches the WebSocket.
+**Backend changes**: **To be determined by spike #665.** This said "None — the
+protocol and STT routing are unchanged", and #665 records why that cannot
+hold: rollover in `GoogleSTTAdapter` is driven by *arriving chunks*, so a
+per-mic stream that the gate has silenced sails past Google's ~300 s cap
+without rolling over and is dead when its speaker next talks. Gating in the
+browser therefore changes what the backend must do, even though the gate
+itself is client-side. The spike decides between a cumulative-`offset_s` fix
+with a chunk-counter clock, carrying the speaker index in-band so no clock
+comparison is needed, and keeping one stream per mic while solving starvation
+another way.
 
 **Acceptance criteria**:
 - AC-1: Multi-channel audio interfaces are detected and offered in mic setup.
@@ -400,8 +414,11 @@ entirely in the browser before audio reaches the WebSocket.
   active (highlight or indicator on the speaker's name).
 
 **Technical notes**:
-1. Frontend only — the WebSocket protocol, OIA service STT routing, and
-   Django models are unchanged.
+1. **Backend scope: to be determined by spike #665**, not "frontend only" as
+   this note first claimed. The Django models are unchanged, but the gate's
+   effect on per-mic STT streams — a silenced stream never rolls over and
+   dies at Google's cap — is exactly what the spike has to settle before any
+   of this is implementable. See the Backend changes section above.
 2. `ChannelSplitterNode` API:
    `audioContext.createChannelSplitter(channelCount)` → connect each output to
    its own `AnalyserNode` and `MediaStreamDestination`.
