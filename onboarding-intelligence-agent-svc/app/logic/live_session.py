@@ -789,34 +789,21 @@ return 1
         except (ValueError, TypeError):
             return None
 
-    # ── Multi-stream map (O-03) ──────────────────────────────────────
-
-    async def set_stream_map(self, stream_map: dict[str, dict[str, str]]) -> None:
-        """Store the stream-index → speaker mapping for multi-mic sessions."""
-        import json as _json
-
-        keys = self._keys()
-        key = keys.session(self.session_id)
-        pipe = self.redis.client.pipeline(transaction=False)
-        pipe.hset(key, "stream_map", _json.dumps(stream_map))
-        pipe.expire(key, TTL_LIVE)
-        await pipe.execute()
-
-    async def get_stream_map(self) -> dict[str, dict[str, str]] | None:
-        """Read the stream map. None means single-stream legacy mode."""
-        import json as _json
-
-        keys = self._keys()
-        key = keys.session(self.session_id)
-        raw = await self.redis.client.hget(key, "stream_map")
-        if raw is None:
-            return None
-        val = raw if isinstance(raw, str) else raw.decode()
-        try:
-            parsed: dict[str, dict[str, str]] = _json.loads(val)
-            return parsed
-        except (ValueError, TypeError):
-            return None
+    # ── Multi-stream map (O-03) — removed, see #662 item C ───────────
+    #
+    # `set_stream_map` / `get_stream_map` lived here. The reader had no
+    # callers anywhere in `app/` or `tests/`, which is how #662 came to be
+    # written up as "this path was designed and not finished": a resume
+    # mechanism that looks present and is not invites the next reader to
+    # assume it works.
+    #
+    # The resume it was meant to serve is client-side — `useLiveSocket`
+    # replays its `start` frame, which carries the stream descriptors again
+    # (#666) — so the stored copy had no reader and never would have. Deleting
+    # the writer too, because a write-only record of every participant's
+    # *name* is PII at rest bought for nothing.
+    #
+    # If a server-side resume is built later, add both halves together.
 
     # ── Coverage state (G-06) ────────────────────────────────────────
 

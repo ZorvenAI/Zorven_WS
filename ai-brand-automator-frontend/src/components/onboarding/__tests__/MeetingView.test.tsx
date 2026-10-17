@@ -31,12 +31,15 @@ import type { LiveSocketStatus, LiveSocketError } from '@/hooks/useLiveSocket';
 let mockSocketStatus: LiveSocketStatus = 'idle';
 let mockSocketError: LiveSocketError | null = null;
 
+const mockReconnect = jest.fn();
+
 jest.mock('@/hooks/useLiveSocket', () => ({
   useLiveSocket: () => ({
     status: mockSocketStatus,
     error: mockSocketError,
     sendBinary: jest.fn(),
     sendControl: jest.fn(),
+    reconnect: mockReconnect,
   }),
 }));
 
@@ -701,18 +704,35 @@ describe('#662 · the operator is told when transcription stops', () => {
     expect(banner).toHaveTextContent(/still being saved/i);
   });
 
-  it('tells the operator how to recover once it has given up', () => {
+  it('offers a retry once it has given up', () => {
     mockSocketStatus = 'closed';
     mockSocketError = null;
+    mockReconnect.mockClear();
 
     render(<MeetingView questions={QUESTIONS} consent={GRANTED} />);
 
     const banner = screen.getByTestId('transcription-stopped-banner');
     expect(banner).toHaveTextContent(/will not resume/i);
-    // Reload, not "stop and start the recording". The socket effect keys on
-    // [sessionId, enabled] and `enabled` is consent, so neither changes when
-    // recording stops — that advice could not be followed.
-    expect(banner).toHaveTextContent(/reload the page/i);
+
+    // #662 item B. This used to read "reload the page", which was the only
+    // route back and throws away the live question-coverage state the meeting
+    // is being run from. The retry recovers in place.
+    const retry = screen.getByTestId('retry-transcription');
+    fireEvent.click(retry);
+
+    expect(mockReconnect).toHaveBeenCalledTimes(1);
+    expect(banner).not.toHaveTextContent(/reload the page/i);
+  });
+
+  it('does not offer a retry while the automatic loop is still trying', () => {
+    // A button during 'reconnecting' invites the operator to fight the retry
+    // loop, and resetting the budget mid-loop would extend the outage.
+    mockSocketStatus = 'reconnecting';
+    mockSocketError = null;
+
+    render(<MeetingView questions={QUESTIONS} consent={GRANTED} />);
+
+    expect(screen.queryByTestId('retry-transcription')).not.toBeInTheDocument();
   });
 
   it('uses alert, not status, so it is announced', () => {

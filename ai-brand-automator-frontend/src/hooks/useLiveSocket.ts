@@ -58,6 +58,13 @@ interface UseLiveSocketReturn {
   error: LiveSocketError | null;
   sendBinary: (data: ArrayBuffer | Uint8Array) => void;
   sendControl: (frame: Record<string, unknown>) => void;
+  /**
+   * Retry the live socket after it has given up (#662 item B).
+   *
+   * Only meaningful from 'closed': the automatic loop handles everything
+   * before that.
+   */
+  reconnect: () => void;
 }
 
 // ── Constants ──
@@ -100,6 +107,22 @@ export function useLiveSocket({
   const retriesRef = useRef(0);
   const startFrameRef = useRef<Record<string, unknown> | null>(null);
   const deferredCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Bumped by `reconnect()` to re-run the connect effect (#662 item B).
+   *
+   * The retry loop lives inside that effect, so a manual retry has to go
+   * through its dependencies rather than call `connect` from outside it.
+   */
+  const [retryNonce, setRetryNonce] = useState(0);
+  /**
+   * True while a *manual* retry is in flight.
+   *
+   * Without it the retry would read as a first connect — `connect()` sets
+   * 'connecting' when the budget is fresh, and the banner only renders for
+   * 'reconnecting'/'closed'. The operator would click "Retry", the warning
+   * would vanish, and nothing would tell them whether it worked.
+   */
+  const manualRetryRef = useRef(false);
 
   const sendBinary = useCallback((data: ArrayBuffer | Uint8Array) => {
     const ws = wsRef.current;
@@ -198,7 +221,7 @@ export function useLiveSocket({
       // or the warning would vanish 3 s in and stay hidden for the rest of a
       // slow attempt — the ticket POST has no timeout and the handshake can
       // hang for tens of seconds, which is exactly when it matters.
-      if (retriesRef.current === 0) {
+      if (retriesRef.current === 0 && !manualRetryRef.current) {
         setStatus('connecting');
       }
 
@@ -252,6 +275,8 @@ export function useLiveSocket({
         // otherwise reset the budget on every open and never reach 'closed'.
         stableTimer = setTimeout(() => {
           retriesRef.current = 0;
+          // The retry worked and held; a later first connect is routine again.
+          manualRetryRef.current = false;
         }, STABLE_AFTER_MS);
       };
 
@@ -295,7 +320,32 @@ export function useLiveSocket({
         setStatus('idle');
       }, DEFERRED_CLOSE_MS);
     };
-  }, [sessionId, enabled]);
+  }, [sessionId, enabled, retryNonce]);
 
-  return { status, error, sendBinary, sendControl };
+  /**
+   * Try the live socket again after it has given up (#662 item B).
+   *
+   * After MAX_RECONNECT_ATTEMPTS the status is 'closed' and nothing retries,
+   * so transcription stayed dead for the rest of the meeting while the
+   * recording carried on uploading. Reloading the page was the only way back:
+   * this effect keys on [sessionId, enabled], and `enabled` is consent, so
+   * stopping and starting the recording changes neither and nothing
+   * reconnects. #666 removed exactly that advice from the banner after review
+   * found it could not be followed, and an earlier draft of this comment put
+   * it back — which would have sent the next maintainer to a fallback that
+   * does nothing.
+   *
+   * Restores the retry budget and re-runs the connect effect. The `start`
+   * frame is replayed on open as it is for an automatic reconnect, so STT is
+   * re-established and the server records `transcript.resumed` — which closes
+   * the coverage gap rather than letting it run to the end of the recording.
+   */
+  const reconnect = useCallback(() => {
+    retriesRef.current = 0;
+    manualRetryRef.current = true;
+    setStatus('reconnecting');
+    setRetryNonce((n) => n + 1);
+  }, []);
+
+  return { status, error, sendBinary, sendControl, reconnect };
 }
