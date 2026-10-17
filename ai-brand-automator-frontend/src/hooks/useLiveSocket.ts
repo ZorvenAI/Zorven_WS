@@ -327,8 +327,13 @@ export function useLiveSocket({
    *
    * After MAX_RECONNECT_ATTEMPTS the status is 'closed' and nothing retries,
    * so transcription stayed dead for the rest of the meeting while the
-   * recording carried on uploading. The operator could only recover by
-   * stopping and restarting the recording, which splits the artefact.
+   * recording carried on uploading. Reloading the page was the only way back:
+   * this effect keys on [sessionId, enabled], and `enabled` is consent, so
+   * stopping and starting the recording changes neither and nothing
+   * reconnects. #666 removed exactly that advice from the banner after review
+   * found it could not be followed, and an earlier draft of this comment put
+   * it back — which would have sent the next maintainer to a fallback that
+   * does nothing.
    *
    * Restores the retry budget and re-runs the connect effect. The `start`
    * frame is replayed on open as it is for an automatic reconnect, so STT is
