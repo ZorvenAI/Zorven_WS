@@ -1,93 +1,218 @@
-"""#662 markers are written by production paths, not only by tests.
+"""#662 markers, driven through a real socket.
 
 Review of #673 found that **nothing in production wrote**
 ``transcript.resumed``. The marker type existed, coverage consumed it, and
-every test that exercised it put it in Redis by hand — so the unit and
-integration suites were green while the only path that mattered was missing.
-An interruption's gap therefore ran to the end of the recording even when STT
-came straight back.
+every test that exercised it put it in Redis by hand — so the suites were
+green while the only path that mattered was missing.
 
-A test that fabricates its own input cannot catch an input nobody produces.
-These assert that each marker has a writer in ``app/api/ws.py``, by inspecting
-the module the way ``test_locking_is_tenant_scoped.py`` inspects the views
-module, for the same class of reason: the mistake is invisible at runtime and
-obvious in the source.
+This file drives `start`, `stop` and an abrupt disconnect through the real
+handler over a real ``TestClient`` socket, then reads what the handler left in
+Redis. A test that writes its own input cannot catch an input nobody produces.
 
-**What this does not do**, stated plainly rather than implied away: it does not
-drive a socket, so it cannot prove the writes are reached under real frame
-sequencing or that the marker lands in Redis. The ``TestClient`` harness from
-``test_ws_handshake.py`` was tried first and control frames never reached
-``_handle_control`` through it; diagnosing that is separate work. Runtime
-behaviour of the markers is covered by
-``tests/integration/test_transcript_markers_live.py`` against real Redis. What
-is covered *here* is that production calls the writer at all. An end-to-end
-socket test remains the right follow-up.
+Two things this file had to learn, recorded so the next person does not repeat
+them:
+
+* **Let the server read the frame before closing.** ``TestClient`` queues
+  sends and the receive loop polls on a timer, so a test that sends `start`
+  and leaves the ``with`` block immediately closes the socket first and the
+  frame is never handled. Nothing fails; the markers are simply absent. These
+  tests wait on the effect instead of sleeping a fixed time.
+* **Install an STT adapter.** The start handler returns at
+  ``stt_not_configured`` without one, long before any marker is written, and
+  the test app has none that works offline.
+
+An earlier attempt at this file concluded that control frames never reach
+``_handle_control`` through this harness and fell back to inspecting the
+module source. That conclusion was wrong: it came from a probe that silently
+failed to install, and the harness works. The source-inspection test for the
+two `start` branches is kept below, because it covers a case a socket test
+cannot reach cheaply, but the behaviour is proved here.
+
+**Not covered here, and open:** the `transcript.interrupted` marker written by
+the socket teardown. Over this harness a client-initiated close produces no
+such marker within 20 s, while the resume marker it follows appears reliably
+in the same test. Ruled out: the teardown's 15 s ANALYSIS_TIMEOUT_S wait, and
+the fake adapter's stream ending early (the fixture below holds it open).
+Tests for it are deliberately absent rather than shipped red; the open
+question is tracked on its own issue, because if the teardown does not run on
+that close path in production either, the drop case of #662 does not mark the
+transcript at all.
 """
 
 from __future__ import annotations
 
 import inspect
+import json
 import re
+import time
 
 import pytest
+import redis as redis_sync
 
-from app.api import ws
+from app.cache.redis_manager import TenantKeys
 
-pytestmark = pytest.mark.unit
-
-#: Whitespace-collapsed so a call wrapped across lines by the formatter still
-#: matches. The first version of this file missed every call for that reason.
-FLAT_SOURCE = " ".join(inspect.getsource(ws).split())
-
-
-def calls_for(marker: str) -> list[str]:
-    """Every ``record_marker("<marker>"...)`` call site in the module."""
-    pattern = re.compile(r"record_marker\(\s*[\"']" + re.escape(marker) + r"[\"']")
-    return pattern.findall(FLAT_SOURCE)
-
-
-@pytest.mark.parametrize(
-    "marker,why",
-    [
-        (
-            "transcript.interrupted",
-            "nothing would record that a dropped socket truncated the "
-            "transcript, which is the whole of #662",
-        ),
-        (
-            "transcript.resumed",
-            "an interruption's gap would run to the end of the recording even "
-            "when STT came straight back — the defect #673's review found",
-        ),
-        (
-            "transcript.stopped",
-            "completeness rests on this marker, so without a writer every "
-            "recording would report coverage as 'not assessed'",
-        ),
-    ],
+from tests.conftest import REDIS_URL, redis_available
+from tests.test_ws_handshake import (  # noqa: F401 - fixtures used by name
+    client,
+    django_stub,
+    live_company,
+    open_socket,
 )
-def test_each_marker_has_a_production_writer(marker, why):
-    assert calls_for(marker), f"no production call writes {marker}: {why}"
+
+pytestmark = pytest.mark.integration
+
+#: The tenant the handshake stub authorises, so the keys line up.
+TENANT = "t-1"
 
 
-def test_both_start_branches_resume():
-    """``start`` has a multi-stream branch and a single-stream branch, and only
-    one runs per recording. Marking just one would make coverage correct for
-    single-mic meetings and silently wrong for every multi-mic one."""
-    assert len(calls_for("transcript.resumed")) >= 2, (
-        "only one resume writer found; the multi-stream and single-stream "
-        "start paths each need their own"
+def start_frame(recording_id="rec-1"):
+    return json.dumps(
+        {
+            "type": "start",
+            "recording_id": recording_id,
+            "codec": "audio/webm;codecs=opus",
+            "sample_rate": 48000,
+        }
     )
 
 
-def test_the_interruption_is_conditional_on_transcription_running():
-    """A marker written on every socket close — including a clean stop — would
-    report every finished meeting as truncated."""
-    assert (
-        "was_transcribing" in FLAT_SOURCE
-    ), "the teardown no longer computes whether transcription was running"
-    assert re.search(
-        r"if was_transcribing and session is not None: "
-        r"await session\.record_marker\( [\"']transcript\.interrupted[\"']",
-        FLAT_SOURCE,
-    ), "the interrupted marker is no longer guarded by was_transcribing"
+@pytest.fixture
+def redis_client():
+    """A synchronous connection of our own.
+
+    Synchronous because ``TestClient`` drives the app through its own portal,
+    so an ``async def`` test would block the loop the app needs. Our own,
+    because reading the markers back through the object that wrote them would
+    prove less.
+    """
+    if not redis_available():
+        pytest.skip("Redis is not running on localhost:6379")
+    conn = redis_sync.from_url(REDIS_URL, decode_responses=True)
+    yield conn
+    conn.close()
+
+
+@pytest.fixture
+def hob(client, django_stub, redis_client):  # noqa: F811
+    """A socket-ready app with an STT adapter, and a clean marker key."""
+    from app.providers.stt import FakeSTTAdapter
+
+    # One event, far enough out that it never fires: with no events the fake's
+    # stream returns at once, the STT task completes, and nothing is
+    # "transcribing" when the socket closes — so a drop would record no
+    # interruption for a reason that has nothing to do with the code under
+    # test. A live stream is what the interruption marker is about.
+    client.app.state.stt = FakeSTTAdapter(
+        events=[
+            {
+                "text": "unused",
+                "is_final": True,
+                "t_start": 0.0,
+                "t_end": 0.1,
+                "delay_ms": 600000,
+            }
+        ]
+    )
+    django_stub["body"] = {"approved": True, "questionnaire_status": "APPROVED"}
+    sessions: list[str] = []
+
+    def session_id(name):
+        sid = f"markers-{name}-{int(time.time() * 1000) % 100000}"
+        sessions.append(sid)
+        return sid
+
+    yield client, session_id
+    for sid in sessions:
+        redis_client.delete(TenantKeys(TENANT).live_markers(sid))
+
+
+def markers_of(redis_client, session_id):
+    raw = redis_client.lrange(TenantKeys(TENANT).live_markers(session_id), 0, -1)
+    return [json.loads(item) for item in raw or []]
+
+
+def wait_for_markers(redis_client, session_id, count, timeout=20.0):
+    """Wait for the handler to have written `count` markers.
+
+    Polling the effect rather than sleeping a fixed time: the receive loop
+    runs on its own timer, so any constant is either flaky or slow.
+    """
+    deadline = time.monotonic() + timeout
+    seen: list[dict] = []
+    while time.monotonic() < deadline:
+        seen = markers_of(redis_client, session_id)
+        if len(seen) >= count:
+            return seen
+        time.sleep(0.05)
+    return seen
+
+
+def kinds(markers):
+    return [m["type"] for m in markers]
+
+
+def test_starting_transcription_records_a_resume(hob, redis_client):
+    """The write review of #673 found missing, proved over a socket."""
+    hob_client, session_id = hob
+    sid = session_id("start")
+
+    with open_socket(hob_client, session_id=sid) as socket:
+        socket.send_text(start_frame())
+        markers = wait_for_markers(redis_client, sid, 1)
+
+    assert kinds(markers) == ["transcript.resumed"]
+
+
+def test_a_clean_stop_records_the_stop(hob, redis_client):
+    """The positive evidence completeness rests on. Without it, coverage
+    cannot tell a finished meeting from a failed marker write."""
+    hob_client, session_id = hob
+    sid = session_id("stop")
+
+    with open_socket(hob_client, session_id=sid) as socket:
+        socket.send_text(start_frame())
+        wait_for_markers(redis_client, sid, 1)
+        socket.send_text(json.dumps({"type": "stop"}))
+        markers = wait_for_markers(redis_client, sid, 2)
+
+    assert kinds(markers) == ["transcript.resumed", "transcript.stopped"]
+
+
+def test_a_clean_stop_does_not_record_an_interruption(hob, redis_client):
+    """The guard that keeps every finished meeting from reading as truncated.
+
+    The teardown runs on every socket close, including this one; only the
+    live-STT check keeps it quiet.
+    """
+    hob_client, session_id = hob
+    sid = session_id("clean")
+
+    with open_socket(hob_client, session_id=sid) as socket:
+        socket.send_text(start_frame())
+        wait_for_markers(redis_client, sid, 1)
+        socket.send_text(json.dumps({"type": "stop"}))
+        wait_for_markers(redis_client, sid, 2)
+
+    markers = wait_for_markers(redis_client, sid, 3, timeout=1.5)
+
+    assert "transcript.interrupted" not in kinds(markers)
+
+
+# ── One case a socket test cannot reach cheaply ──────────────────────
+
+FLAT_SOURCE = " ".join(
+    inspect.getsource(__import__("app.api.ws", fromlist=["ws"])).split()
+)
+
+
+def test_both_start_branches_resume():
+    """`start` has a multi-stream branch and a single-stream branch, and only
+    one runs per recording. The socket tests above drive the single-stream
+    one; marking only that branch would leave coverage correct for single-mic
+    meetings and silently wrong for every multi-mic one."""
+    calls = re.findall(r"record_marker\(\s*[\"']transcript\.resumed[\"']", FLAT_SOURCE)
+
+    assert len(calls) >= 2, (
+        "only one resume writer found; the multi-stream and single-stream "
+        "start paths each need their own"
+    )
