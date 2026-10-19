@@ -243,6 +243,68 @@ class TestRetentionPatch:
         assert resp.data["impact"]["sessions"] >= 1
         assert "enforced_at" in resp.data["impact"]
 
+    def test_preview_reports_the_impact_without_persisting(
+        self, admin_client, tenant, company
+    ):
+        """M-03 AC-3's actual guarantee, which nothing exercised before.
+
+        The UI shows its confirmation dialog on the strength of a preview
+        PATCH, so if `?preview=true` persisted, the operator would be asked to
+        confirm a change already made — "not retroactively destructive without
+        warning" would be false while every other test here stayed green.
+        """
+        RetentionConfig.objects.create(tenant=tenant, retention_days=365)
+        _create_subject(tenant, company, "Old Subject", days_ago=100)
+
+        resp = admin_client.patch(
+            "/api/v1/onboarding/retention/?preview=true",
+            {"retention_days": 30},
+            format="json",
+        )
+
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.data["impact"]["subjects"] >= 1
+        # The point: the stored window is untouched.
+        config = RetentionConfig.objects.get(tenant=tenant)
+        assert config.retention_days == 365
+
+    def test_preview_deletes_nothing(self, admin_client, tenant, company):
+        """A preview that erased the subjects it was counting would be the
+        exact accident this story exists to prevent.
+
+        Honest about its strength: enforcement lives in the Celery beat job,
+        never in this request path, so as the view stands today this cannot
+        fail. It is a guard against someone wiring enforcement into the PATCH
+        for immediacy, not evidence that the current code is safe — the test
+        above is that. Checked: making preview persist fails that one and
+        leaves this one green.
+        """
+        RetentionConfig.objects.create(tenant=tenant, retention_days=365)
+        _create_subject(tenant, company, "Old Subject", days_ago=100)
+        before = OnboardingSession.objects.filter(tenant=tenant).count()
+
+        admin_client.patch(
+            "/api/v1/onboarding/retention/?preview=true",
+            {"retention_days": 1},
+            format="json",
+        )
+
+        assert OnboardingSession.objects.filter(tenant=tenant).count() == before
+        assert not ErasureLog.objects.filter(tenant=tenant).exists()
+
+    def test_a_patch_without_preview_does_persist(self, admin_client, tenant):
+        """The control. Without it, a view that never saved would pass the two
+        tests above and look correct."""
+        RetentionConfig.objects.create(tenant=tenant, retention_days=365)
+
+        admin_client.patch(
+            "/api/v1/onboarding/retention/",
+            {"retention_days": 30},
+            format="json",
+        )
+
+        assert RetentionConfig.objects.get(tenant=tenant).retention_days == 30
+
     def test_lengthening_no_impact(self, admin_client, tenant, company):
         RetentionConfig.objects.create(tenant=tenant, retention_days=30)
         _create_subject(tenant, company, "Some Subject", days_ago=100)
