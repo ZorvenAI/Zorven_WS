@@ -386,6 +386,75 @@ Before declaring production-ready, the following should be verified:
 | Black formatting | `black --check apps/ && black --check ../onboarding-intelligence-agent-svc/app/` | No diffs |
 | Flake8 | `flake8 apps/ && flake8 ../onboarding-intelligence-agent-svc/app/` | No errors |
 
+**Run 2026-10-20. Eight of the ten pass. Two do not, and a third passes only
+on a reading of "green" that hides something.**
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Django unit (`apps/onboarding/tests/`) | ⚠️ **3 failed, 759 passed** — all three in `test_migrations.py`, pre-existing and already documented as red on `development_main` |
+| 2 | Django integrations (`apps/integrations/tests/`) | ✅ **86 passed** (4m56s) |
+| 3 | Agent unit (`-m unit`) | ⚠️ **7 failed, 801 passed, 4 skipped** — all seven in `test_redact_pii.py`, `presidio_analyzer` is not installed locally; green in CI |
+| 4 | Agent integration (`-m integration`) | ❌ **7 failed, 295 passed, 22 skipped** — see breakdown |
+| 5 | Agent e2e (`-m e2e`) | ⚠️ **13 passed, 13 skipped** — and CI never runs this suite at all |
+| 6 | Agent load (`--collect-only`) | ✅ 4 collected |
+| 7 | Frontend tests | ✅ **41 suites, 542 passed, 1 skipped** |
+| 8 | Frontend build | ✅ exit 0, no type errors |
+| 9 | Black | ✅ `apps/` clean under CI's pinned 23.12.1; service clean under 26.5.1 (its requirement is `>=24.0.0`, so that is CI-equivalent) |
+| 10 | Flake8 | ✅ clean on both trees |
+
+**Check 4's seven failures, classified:**
+
+| Failures | Cause |
+|---|---|
+| 4 × `test_watchdog.py` | **Leftover data in the shared dev Redis, not a code fault.** `tests/e2e/test_gdpr_erasure.py:44` seeds every key with `r.set(k, "test-data")`, including `keys.session(sid)` — where production writes a *hash*. The watchdog scans `oia:v1:*:session:*` and calls `hget` on each match, so that one string raises `WRONGTYPE` and takes down the whole scan pass. `_parse_session_key` filters key *shape* (`:summary`, five parts) but never type. |
+| 1 × `test_watchdog.py::test_stuck_session_watchdog_finalises` | A different cause in the same file: the test deletes its own `watchdog:sess-stuck` claim key *after* its assertion, and claims carry a 120 s TTL, so any earlier failed run of this test makes the next one fail with `closed == 0` for two minutes. Self-inflicted once anything upstream goes red. |
+| 1 × `test_outbox.py::test_drain_replays_entries_fifo` | Same class: `assert 142 == 2`, where 142 was the depth of an outbox left by earlier runs. The backend is unreachable in tests, so nothing drains and each run adds to it. |
+| 1 × `test_ws_transcript_markers.py` | The known #680 residue. |
+
+**Both causes were proved by remedy, not inferred.** Deleting exactly the
+three non-hash keys took `test_watchdog.py` from 5 failed to 1 failed / 4
+passed; clearing the one stale claim key then gave **26 passed** across
+`test_watchdog.py` and `test_outbox.py` together, with no code change.
+
+Checked against the commit before #681 (`40e55313`) with that PR's two files
+reverted: the watchdog and outbox tests fail there too, so none of this is a
+regression from the live-lock work.
+
+**A latent robustness issue worth its own decision, not fixed here.** The
+watchdog's failure mode in production is a `WRONGTYPE` in a background task
+that halts the *entire* scan pass for *every* tenant — so stuck sessions
+silently stop being finalised. No production writer puts a non-hash at that
+path today (the only one found is the e2e fixture above), so this is latent
+rather than live, but DB 2 is shared with ten other services and the guard
+checks shape, not type. A type check, or an `hget` wrapped per key, would
+contain it to one bad key instead of the whole pass.
+
+**Check 5 needs its expectation rewritten.** The table says "All green (needs
+Docker)", which made Docker look like the binding constraint. Docker was
+running (29.6.2) and is not the issue: **10 of the 13 skips are "no Gemini key
+is configured — nothing would be generated"** and one is "OIA_TEST_E2E not
+set". Neither is set in CI either, and CI's OIA job runs
+`-m "not integration and not e2e"` and `-m integration` — **so `-m e2e` runs
+nowhere, in CI or locally**. The PREP end-to-end path is unverified
+everywhere. That is a gap in the verification strategy rather than a test
+failure, and no amount of running this check locally will close it.
+
+**Runtime, which the table does not mention.** Measured: check 1 **25m06s**,
+check 2 4m56s, check 5 4m26s, check 4 3m41s, check 3 1m01s, the rest under a
+minute. **Roughly 40 minutes of wall-clock for the full pass**, three
+quarters of it in the two Django suites. Anyone treating §3.3 as a quick
+pre-release gate should plan for that, or split the Django suites out to run
+in parallel with the rest.
+
+**What to do about the environmental failures.** Checks 3 and 4 cannot go
+green on this machine without (a) installing `presidio_analyzer`, and (b)
+clearing the shared dev Redis of keys that earlier runs left at paths
+production uses for different types. The second is the more interesting one:
+the suite is not self-isolating, so "green" currently depends on run history.
+Both are test-environment work, deliberately not bundled into this
+verification pass.
+
+
 ---
 
 ## 4. Doc-vs-Reality Conflicts
