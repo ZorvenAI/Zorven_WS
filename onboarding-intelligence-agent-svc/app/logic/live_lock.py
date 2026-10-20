@@ -32,6 +32,16 @@ logger = logging.getLogger(__name__)
 #: again. Two hours is a meeting; ninety seconds is an apology.
 LOCK_TTL_S = 90
 
+#: Compare-and-delete: drop the key only while the value is still our token.
+#: Redis runs a script atomically, so nothing can expire or be re-acquired
+#: between the comparison and the delete.
+_RELEASE_LUA = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+end
+return 0
+"""
+
 #: How often a live socket extends its own claim. Comfortably inside the TTL,
 #: so a slow tick does not drop a lock out from under a healthy meeting.
 REFRESH_S = 30
@@ -67,13 +77,30 @@ class LiveLock:
         A socket that stalled past its TTL may find another has taken over;
         deleting the key then would evict a live meeting to tidy up after a
         dead one.
+
+        One round trip, and atomic, for two reasons found in #680.
+
+        Correctness: a GET followed by a DELETE is the check-then-act race
+        this docstring claims to avoid, not a defence against it. Let the key
+        expire between the two calls and another socket acquire it, and the
+        DELETE evicts *their* live meeting -- exactly the outcome described
+        above, reached by the code meant to prevent it.
+
+        Liveness: the caller releases from a `finally` on a path where the
+        task is already being cancelled, so every extra `await` is another
+        chance to be cut short before the key is gone. Two awaits meant a
+        dropped socket left the lock standing for the full ninety seconds and
+        the operator could not restart their own meeting (#680).
         """
         client = self._client
         if client is None:
             return
-        current = await client.get(self.key)  # type: ignore[attr-defined]
-        if _as_text(current) == self.token:
-            await client.delete(self.key)  # type: ignore[attr-defined]
+        await client.eval(  # type: ignore[attr-defined]
+            _RELEASE_LUA,
+            1,
+            self.key,
+            self.token,
+        )
 
 
 def _as_text(value: object) -> str:
