@@ -1814,6 +1814,42 @@ async def _hold(
     finally:
         WS_SESSIONS_ACTIVE.dec()
 
+        # #662: record the interruption FIRST, before anything else awaits.
+        #
+        # A client-initiated close cancels this task, so every `await` in this
+        # teardown after the first one raises CancelledError immediately. The
+        # marker used to be written at the end of the block and never ran:
+        # proved with Redis sentinels, where the first await in the teardown
+        # succeeds and none of the later ones do. `record_marker` catches
+        # Exception, and CancelledError is a BaseException, so it could not
+        # defend itself either.
+        #
+        # Two things make it land now. It goes first, where the one surviving
+        # await is; and it is shielded, so the write completes even when the
+        # awaiting task is torn down under it. `was_transcribing` is still read
+        # before the queues below are nulled, which is what it depends on: the
+        # `stop` handler clears each of these, so any still set here means the
+        # operator never stopped and the transcript ends early.
+        was_transcribing = any(
+            stt_state.get(key) is not None
+            for key in ("audio_q", "stream_queues", "stt_task", "stream_tasks")
+        )
+        if was_transcribing and session is not None:
+            try:
+                await asyncio.shield(
+                    session.record_marker(
+                        "transcript.interrupted",
+                        # Wall clock: these are compared against the segments'
+                        # absolute t_start/t_end and the recording's window.
+                        at=_time.time(),
+                        reason="socket_closed",
+                    )
+                )
+            except asyncio.CancelledError:
+                # The shielded write carries on without us; losing the wait is
+                # not losing the marker.
+                pass
+
         if _breaker_ref is not None and _breaker_cb is not None:
             _breaker_ref.remove_on_state_change(_breaker_cb)
 
@@ -1860,19 +1896,6 @@ async def _hold(
             except Exception:  # noqa: BLE001
                 logger.warning("live_prompt_versions_persist_failed")
 
-        # #662: was transcription still running when this socket went away?
-        #
-        # Read before the teardown below nulls everything. The signal is the
-        # STT state itself rather than `recording_id`, which is set on `start`
-        # and never cleared and so cannot tell a clean stop from a dropped
-        # socket. The `stop` handler nulls each of these, so any of them still
-        # being set here means the operator never stopped — the socket died
-        # mid-recording and the transcript ends early.
-        was_transcribing = any(
-            stt_state.get(key) is not None
-            for key in ("audio_q", "stream_queues", "stt_task", "stream_tasks")
-        )
-
         audio_q = stt_state.get("audio_q")
         if audio_q is not None:
             audio_q.put_nowait(None)
@@ -1896,20 +1919,3 @@ async def _hold(
                     await task
                 except asyncio.CancelledError:
                     pass
-
-        # #662: leave a record that the transcript stops here.
-        #
-        # Nothing can be salvaged at this point — the socket is gone and the
-        # STT loops with it. What this buys is honesty downstream: finalisation
-        # reads these markers and the O-06 legal header can state that the
-        # transcript is partial instead of implying it is whole.
-        if was_transcribing and session is not None:
-            await session.record_marker(
-                "transcript.interrupted",
-                # Wall clock, not the monotonic `_time.monotonic()` used for
-                # the slow-check loop above: these markers are compared against
-                # the segments' absolute t_start/t_end and the recording's
-                # started_at/stopped_at, which are all epoch seconds.
-                at=_time.time(),
-                reason="socket_closed",
-            )
