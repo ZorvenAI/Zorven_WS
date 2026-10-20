@@ -217,37 +217,43 @@ All skills (SKL-OIA-04 through 07, 16) implemented in agent service.
 
 ## 3. Remaining Work
 
-### 3.1 Code Gap: RetentionSettings Frontend Component (M-03 AC-3)
+### 3.1 ~~Code Gap~~ CLOSED: RetentionSettings Frontend Component (M-03 AC-3)
 
-**Story**: M-03 · Configurable retention and enforcement
-**AC-3**: "Shortening retention is not retroactively destructive without warning"
-**What's missing**: A frontend component that:
-1. Calls `GET /api/v1/onboarding/retention/` to fetch current config
-2. Provides a form to update `retention_days` via `PATCH`
-3. When the new value is shorter than the current value, calls a preview
-   endpoint to show how many sessions/recordings would be affected
-4. Renders a confirmation dialog with the affected count before saving
-5. Only available to Owner/Admin roles
+**Verified 2026-10-19 against all five sub-requirements, not against the
+component's existence.** The component ships and all five are implemented
+front and back:
 
-**Backend support already exists**:
-- `RetentionConfig` model with per-tenant default of 365 days
-- CRUD endpoints at `/api/v1/onboarding/retention/`
-- RBAC enforced (Owner/Admin only)
-- The `enforce_retention_windows` Beat task handles actual enforcement
+| Sub-requirement | Where |
+|---|---|
+| 1. `GET /api/v1/onboarding/retention/` on load | `getRetentionConfig()` in `lib/onboarding-sessions.ts` |
+| 2. Form, updating `retention_days` via `PATCH` | `updateRetentionConfig()` |
+| 3. Preview when the new value is shorter | `previewRetentionConfig()` → `PATCH …?preview=true`, called only when `days < currentDays` |
+| 4. Confirmation dialog with the affected count | `role="alert"` block in `RetentionSettings.tsx`, with Confirm and Revert |
+| 5. Owner/Admin only | `useTenantRole().isAdmin` in the component **and** `IsTenantAdmin` on `RetentionConfigView` |
 
-**Estimate**: 1 story point. The component is small (a settings form with a
-confirmation dialog), and the backend is already complete.
+Eleven frontend tests cover the five, including "shortening calls preview
+(not update)" and "reverting after preview restores the original value
+without saving".
 
-**Files to create**:
-- `src/components/onboarding/RetentionSettings.tsx` — the form + warning
-- `src/__tests__/RetentionSettings.test.tsx` — per backlog naming
-- Update to `src/lib/onboarding-sessions.ts` — add `getRetentionConfig()`
-  and `updateRetentionConfig()` API helpers
+**What this verification found.** The server-side guarantee the whole story
+rests on was **untested**: `test_shortening_warns_with_counts` PATCHes
+*without* `?preview=true`, so no test exercised the preview path at all.
+Moving `config.save()` above the early return in `RetentionConfigView.patch`
+left every existing test green while making the UI's confirmation dialog a
+formality — the operator would be asked to approve a change already made.
+That is precisely the accident the backlog quotes ("we lost eight months of
+onboarding data by changing a dropdown").
 
-**Does not deliver**: A dedicated settings route/page. This component should
-be mountable wherever the OIA admin settings live. If no settings page
-exists yet, the component can be placed behind a route created for this
-purpose or embedded in an existing admin area.
+Closed by three tests in `apps/onboarding/tests/test_retention.py`:
+`test_preview_reports_the_impact_without_persisting` (fails against the
+simulated regression), `test_preview_deletes_nothing` (a guard against
+enforcement being wired into the request path; it cannot fail as the view
+stands, and says so), and `test_a_patch_without_preview_does_persist` as the
+control, without which a view that never saved would look correct.
+
+**Remaining for M-03 AC-3: nothing.** The component is mountable wherever the
+OIA admin settings live; no dedicated settings route was ever part of this
+AC.
 
 ### 3.2 Operational Gap: Grafana Dashboard Provisioning
 
