@@ -191,7 +191,7 @@ All skills (SKL-OIA-04 through 07, 16) implemented in agent service.
   **MISSING**: `RetentionSettings` frontend component (M-03 AC-3 —
   "they are told how much existing evidence that will delete and when").
   The backlog names `frontend/__tests__/RetentionSettings.test.tsx`.
-- M-04 ✅: Grafana dashboard (`deployment/grafana/dashboards/oia.json`),
+- M-04 ⚠️ (file written, not provisioned — see §3.2): Grafana dashboard (`deployment/grafana/dashboards/oia.json`),
   runbook (`docs/runbook.md`), Prometheus metrics (`app/metrics.py`),
   stuck-session watchdog (`app/logic/watchdog.py`), health/readiness
   probes. Django side: `finalize_stuck_session` endpoint.
@@ -255,13 +255,71 @@ control, without which a view that never saved would look correct.
 OIA admin settings live; no dedicated settings route was ever part of this
 AC.
 
-### 3.2 Operational Gap: Grafana Dashboard Provisioning
+### 3.2 Operational Gap: Grafana Dashboard Provisioning — CHECKED 2026-10-20
 
 The `oia.json` dashboard exists in `onboarding-intelligence-agent-svc/deployment/grafana/dashboards/` but the top-level `deployment/` directory has no Grafana provisioning configuration. The POI service has the same pattern (`prompt-optimization-svc/deployment/grafana/dashboards/`).
 
 **Action**: Verify that the GCP Cloud Run deployment picks up the dashboard
 from the service's own directory, or copy it to a central provisioning
 location. This is an operational check, not a code change.
+
+**Result: neither option in that action exists. The gap is wider than a
+missing provisioning file — there is no Grafana anywhere, and nothing that
+could serve this dashboard's queries.**
+
+What was checked, and what each showed:
+
+| Check | Finding |
+|---|---|
+| `grep -rln grafana deployment/ .github/` | **no matches at all** — not compose, not a GCP script, not CI |
+| Grafana/Prometheus service in `deployment/docker-compose.yml` | none; the only "monitoring" hit is a comment on the trend agent |
+| `deployment/gcp/*.sh` | no provisioning step; `01-setup-project.sh` grants only `roles/monitoring.metricWriter` |
+| Cloud Run services matching `grafana|prom` | none |
+| `oia.json` itself | 10 panels, **13 PromQL targets, datasource type `prometheus`** |
+
+So the dashboard cannot render even if it were loaded: it asks 13 PromQL
+questions and the deployed stack has no Prometheus to ask. `roles/monitoring.metricWriter`
+points at Cloud Monitoring, which does not answer PromQL unless Managed
+Service for Prometheus is enabled and scraping these services.
+
+`prompt-optimization-svc/deployment/grafana/dashboards/prompt_optimization.json`
+is in exactly the same position, so this is a fleet-wide gap rather than an
+OIA one.
+
+**M-04 is marked ✅ above on the strength of the file existing.** The file does
+exist and its queries match the metric names the service exports, which is
+why that tick was not unreasonable — but nothing renders it, so no operator
+can currently see any of it. Worth separating "the dashboard is written" from
+"the dashboard is live" when reading that row.
+
+**Still unverified, blocked on credentials**: whether Managed Service for
+Prometheus is enabled on `zorven-503517` and scraping these services, and
+whether any Cloud Monitoring dashboard was created by hand outside the repo.
+`gcloud monitoring dashboards list` and `gcloud services list` both failed
+with "Reauthentication failed. cannot prompt during non-interactive
+execution", which needs an interactive `gcloud auth login`. Both commands are
+read-only; run them before choosing between the options below, because option
+B is already half-done if Managed Prometheus turns out to be on.
+
+**Options, neither started — this needs a decision, not more checking:**
+
+- **A. Self-hosted, local-dev only.** Add Prometheus + Grafana to
+  `deployment/docker-compose.yml` behind a `with-monitoring` profile, with
+  provisioning that mounts both services' `deployment/grafana/dashboards/`
+  directories and a Prometheus datasource scraping each service's `/metrics`.
+  Self-contained and verifiable on a laptop; does nothing for production.
+  Roughly half a day including a scrape config for the 27 services.
+- **B. GCP-native.** Enable Managed Service for Prometheus, add scrape
+  configuration for the Cloud Run services, and point a Grafana instance (or
+  Cloud Monitoring itself) at it. This is the only path that gives a
+  production operator the dashboard, and it is the one that carries real
+  monthly cost — Managed Prometheus bills per sample ingested, so it needs
+  the §7 cost treatment before it is committed to.
+
+Converting `oia.json` to Cloud Monitoring's own dashboard format is a third
+path, but it is a rewrite rather than a copy: the formats are not
+interchangeable, and the 13 PromQL expressions would each need an MQL or
+PromQL-on-Cloud-Monitoring equivalent.
 
 ### 3.3 Verification Pass
 
