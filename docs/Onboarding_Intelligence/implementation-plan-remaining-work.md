@@ -12,7 +12,9 @@
 
 ## 0. Executive Summary
 
-**The OIA implementation is ~99% complete.** A story-by-story codebase
+**The OIA implementation is ~99% complete by story count, which overstates
+how much is operationally live** — see §3.2, where M-04's dashboard and seven
+alert rules exist as files that nothing loads. A story-by-story codebase
 verification against all 66 active stories in the backlog v2.1 reveals that
 every epic (A through N) has been implemented across all three layers: the
 agent service, the Django backend, and the Next.js frontend.
@@ -24,7 +26,12 @@ built at the time of the audit — approximately 23,000 lines of production code
 and 10,000 lines of tests on the Django side, and 7,000 lines of components
 plus 5,600 lines of tests on the frontend side.
 
-**Remaining work**: one frontend component (M-03 AC-3), one operational
+**Remaining work** (updated 2026-10-20): the frontend component is done
+(§3.1, M-03 AC-3) and the Grafana item turned out not to be a registration
+gap at all but an undecided infrastructure build needing §7 cost treatment
+(§3.2). What is left is that decision, the §3.3 verification pass, and the
+hardware-blocked O-09 spike. The original wording of this line, kept below
+for the record, read: one frontend component (M-03 AC-3), one operational
 registration gap (Grafana dashboard provisioning), and a verification pass to
 confirm all acceptance criteria are met end-to-end.
 
@@ -185,12 +192,13 @@ All skills (SKL-OIA-04 through 07, 16) implemented in agent service.
   model, registry-driven cascade, consent revocation enters same path.
   Tests: `test_erasure_cascade.py`, `test_erasure_registry.py`,
   `test_erasure_api.py`.
-- M-03 ⚠️ **PARTIAL**: Backend complete — `RetentionConfig` model, CRUD
+- M-03 ✅ (closed, see §3.1): Backend — `RetentionConfig` model, CRUD
   endpoints (`/api/v1/onboarding/retention/`), `enforce_retention_windows`
-  Beat task (03:00 UTC daily), RBAC on Owner/Admin only.
-  **MISSING**: `RetentionSettings` frontend component (M-03 AC-3 —
-  "they are told how much existing evidence that will delete and when").
-  The backlog names `frontend/__tests__/RetentionSettings.test.tsx`.
+  Beat task (03:00 UTC daily), RBAC on Owner/Admin only. The
+  `RetentionSettings` frontend component and its tests shipped, and AC-3 was
+  verified sub-requirement by sub-requirement rather than by the component's
+  existence — which is what turned up the untested preview guarantee the
+  story rests on.
 - M-04 ⚠️ (file written, not provisioned — see §3.2): Grafana dashboard (`deployment/grafana/dashboards/oia.json`),
   runbook (`docs/runbook.md`), Prometheus metrics (`app/metrics.py`),
   stuck-session watchdog (`app/logic/watchdog.py`), health/readiness
@@ -274,7 +282,7 @@ What was checked, and what each showed:
 | `grep -rln grafana deployment/ .github/` | **no matches at all** — not compose, not a GCP script, not CI |
 | Grafana/Prometheus service in `deployment/docker-compose.yml` | none; the only "monitoring" hit is a comment on the trend agent |
 | `deployment/gcp/*.sh` | no provisioning step; `01-setup-project.sh` grants only `roles/monitoring.metricWriter` |
-| Cloud Run services matching `grafana|prom` | none |
+| Cloud Run services matching `grafana\|prom` | **not verified** — see below |
 | `oia.json` itself | 10 panels, **13 PromQL targets, datasource type `prometheus`** |
 
 So the dashboard cannot render even if it were loaded: it asks 13 PromQL
@@ -286,35 +294,75 @@ Service for Prometheus is enabled and scraping these services.
 is in exactly the same position, so this is a fleet-wide gap rather than an
 OIA one.
 
-**M-04 is marked ✅ above on the strength of the file existing.** The file does
-exist and its queries match the metric names the service exports, which is
-why that tick was not unreasonable — but nothing renders it, so no operator
-can currently see any of it. Worth separating "the dashboard is written" from
-"the dashboard is live" when reading that row.
+**The dashboards are not the only orphans.** Both services also ship
+Prometheus **alert rules** that the first version of this inventory missed:
 
-**Still unverified, blocked on credentials**: whether Managed Service for
-Prometheus is enabled on `zorven-503517` and scraping these services, and
-whether any Cloud Monitoring dashboard was created by hand outside the repo.
-`gcloud monitoring dashboards list` and `gcloud services list` both failed
-with "Reauthentication failed. cannot prompt during non-interactive
-execution", which needs an interactive `gcloud auth login`. Both commands are
-read-only; run them before choosing between the options below, because option
-B is already half-done if Managed Prometheus turns out to be on.
+| File | Contents |
+|---|---|
+| `onboarding-intelligence-agent-svc/deployment/prometheus/alerts/oia.yml` | 7 alerts — `OIA_STT_HighLatency`, `OIA_SufficiencyHighLatency`, `OIA_DLQ_Active`, `OIA_CircuitBreakerOpen`, `OIA_DroppedUngroundedSpike`, `OIA_EventsDropped`, `OIA_SufficiencyDropsActive`, wired to the `ALERT_*` thresholds in `app/metrics.py` |
+| `prompt-optimization-svc/deployment/prometheus/alerts/prompt_optimization.yml` | same pattern |
+
+These matter more than the dashboard: a dashboard nobody opens is a missed
+insight, but an alert that never fires is a missed outage. Any option below
+has to mount `rule_files` as well as the dashboard directories, or it leaves
+M-04's alerting exactly as dead as it is today, one directory over.
+
+**M-04 was marked ✅ until this check; it now reads ⚠️ at line 194.** The file
+does exist and its queries match the metric names the service exports, which
+is why that tick was not unreasonable — but nothing renders it, so no
+operator can currently see any of it. "The dashboard is written" and "the
+dashboard is live" are separate claims, and only the first was true.
+
+**Nothing on the GCP side was verified. Every finding above is repo-only.**
+`gcloud run services list`, `gcloud monitoring dashboards list` and
+`gcloud services list` all fail with "Reauthentication failed. cannot prompt
+during non-interactive execution" and need an interactive `gcloud auth login`.
+
+An earlier draft of this section reported "Cloud Run services matching
+grafana|prom: none" as a checked finding. **That was wrong, and worth
+recording as a method error rather than quietly fixing**: the command exited
+1 and printed nothing, and the check was a `grep` over its combined output,
+so the error text matched nothing and read as a clean negative. A probe whose
+failure mode looks identical to its pass mode proves nothing. Re-run with the
+exit status checked, not the output pattern.
+
+Still to establish, once credentials are live (all read-only):
+
+- whether Managed Service for Prometheus is enabled on `zorven-503517`
+- whether anything is actually scraping these two services
+- whether a Cloud Monitoring dashboard was created by hand outside the repo
 
 **Options, neither started — this needs a decision, not more checking:**
 
 - **A. Self-hosted, local-dev only.** Add Prometheus + Grafana to
-  `deployment/docker-compose.yml` behind a `with-monitoring` profile, with
-  provisioning that mounts both services' `deployment/grafana/dashboards/`
-  directories and a Prometheus datasource scraping each service's `/metrics`.
-  Self-contained and verifiable on a laptop; does nothing for production.
-  Roughly half a day including a scrape config for the 27 services.
-- **B. GCP-native.** Enable Managed Service for Prometheus, add scrape
-  configuration for the Cloud Run services, and point a Grafana instance (or
-  Cloud Monitoring itself) at it. This is the only path that gives a
-  production operator the dashboard, and it is the one that carries real
-  monthly cost — Managed Prometheus bills per sample ingested, so it needs
-  the §7 cost treatment before it is committed to.
+  `deployment/docker-compose.yml` behind a `with-monitoring` profile,
+  mounting both services' `deployment/grafana/dashboards/` **and**
+  `deployment/prometheus/alerts/` directories, with a datasource scraping
+  `/metrics`. Self-contained and verifiable on a laptop; does nothing for
+  production.
+
+  **The scrape config is two targets, not 27.** Only
+  `onboarding-intelligence-agent-svc` and `prompt-optimization-svc` expose
+  `/metrics` or even depend on `prometheus_client`; Django has no metrics
+  route either. A scrape config for the other 25 would poll 404s. An earlier
+  draft of this section said "27 services" and estimated half a day from it —
+  the real surface is small enough that the work is mostly compose plumbing
+  and provisioning YAML, not per-service instrumentation. Instrumenting the
+  other services is a separate, much larger question nobody has asked yet.
+- **B. GCP-native.** Enable Managed Service for Prometheus and get these two
+  services scraped, then point Grafana (or Cloud Monitoring) at it. The only
+  path that reaches a production operator, and the one with real monthly cost
+  — Managed Prometheus bills per sample ingested, so it needs the §7 cost
+  treatment before being committed to.
+
+  **Correction to an earlier draft, which claimed B would be "half-done" if
+  Managed Prometheus turned out to be enabled.** That is not how it reaches
+  Cloud Run. GMP's managed collection targets GKE workloads; Cloud Run needs
+  a per-service **sidecar collector** (or push through the Prometheus-compatible
+  write API). So there is no central scrape config that can pick these up,
+  and GMP merely being on changes nothing on its own — each of the two
+  services still needs a redeploy with a sidecar. Confirm the current
+  sidecar/collection story before this framing drives the A-vs-B choice.
 
 Converting `oia.json` to Cloud Monitoring's own dashboard format is a third
 path, but it is a rewrite rather than a copy: the formats are not
