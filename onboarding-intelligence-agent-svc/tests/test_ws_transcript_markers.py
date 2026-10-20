@@ -30,10 +30,17 @@ cannot reach cheaply, but the behaviour is proved here.
 
 The drop case was absent here when this file first landed, tracked as #677.
 The cause turned out to be real and in production code, not in the harness: a
-client-initiated close cancels the handler task, so every `await` in the
-teardown after the first one raises CancelledError, and the marker write sat
-at the end of that teardown. It is written first and shielded now, and the
-test below covers it.
+client-initiated close cancels the handler task, and the cancellation escapes
+the teardown through a block whose `except Exception` cannot catch it, so
+anything after that point is skipped -- which is where the marker write sat.
+It runs first now. Which await the cancellation lands on is timing-dependent,
+so the rule is that work which must happen goes early, not that one call
+needed guarding.
+
+**This file is not stable.** It fails intermittently both with and without
+that fix, in a way that leaves no markers at all -- the `start` frame is never
+processed. Tracked separately; do not read a green run here as proof, and
+repeat the suite before claiming anything about it.
 """
 
 from __future__ import annotations
