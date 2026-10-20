@@ -1814,6 +1814,118 @@ async def _hold(
     finally:
         WS_SESSIONS_ACTIVE.dec()
 
+        # #662: record the interruption FIRST, before anything else awaits.
+        #
+        # A client-initiated close cancels this task, and the cancellation
+        # escapes the `finally` through a block whose `except Exception`
+        # cannot catch it -- CancelledError is a BaseException. Everything
+        # after that point was simply skipped, which is why the marker, once
+        # written at the end, never landed.
+        #
+        # Deliberately not more precise than the evidence: *which* await the
+        # cancellation lands on is timing-dependent. Two traces of this same
+        # teardown stopped at different points, and an earlier version of this
+        # comment asserted one of them as the mechanism. What holds either way
+        # is that work placed late in this block is not guaranteed to run, so
+        # anything that must happen goes first.
+        #
+        # `was_transcribing` is still read before the queues below are nulled,
+        # which is what it depends on.
+        def _still_live(value: Any) -> bool:
+            """Is this piece of STT state actually in flight?
+
+            Presence is not liveness, and the difference showed up in review.
+            `_stt_loop`'s done-callback nulls `audio_q` but leaves the finished
+            Task in `stt_state`, and the `stop` handler only nulls `stt_task`
+            inside `if pending_q is not None`, so a stream that ended before
+            the operator pressed stop left a completed Task behind. Reading
+            that as "transcribing" put a `transcript.interrupted` on a cleanly
+            stopped meeting -- the cries-wolf failure `compute_transcript_
+            coverage` exists to avoid. The multi-stream path does the same with
+            a dict the per-task callback empties: `{} is not None` is True.
+            """
+            if value is None:
+                return False
+            if isinstance(value, asyncio.Task):
+                return not value.done()
+            if isinstance(value, dict):
+                return any(
+                    not t.done() for t in value.values() if isinstance(t, asyncio.Task)
+                ) or bool(
+                    [v for v in value.values() if not isinstance(v, asyncio.Task)]
+                )
+            return True
+
+        was_transcribing = any(
+            _still_live(stt_state.get(key))
+            for key in ("audio_q", "stream_queues", "stt_task", "stream_tasks")
+        )
+        if was_transcribing and session is not None:
+            # Hold a reference: a bare `shield` leaves the write with nothing
+            # awaiting it, so on an instance shutdown (Cloud Run scale-down,
+            # SIGTERM -- a common cause of this very event) the loop stops
+            # before it lands and the marker is lost with no log at all,
+            # because `record_marker`'s own ERROR never runs either.
+            marker_write = asyncio.ensure_future(
+                session.record_marker(
+                    "transcript.interrupted",
+                    # Wall clock: these are compared against the segments'
+                    # absolute t_start/t_end and the recording's window.
+                    at=_time.time(),
+                    reason="socket_closed",
+                )
+            )
+            try:
+                await asyncio.wait_for(asyncio.shield(marker_write), timeout=2.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                if not marker_write.done():
+                    logger.error(
+                        "live_interruption_marker_unconfirmed",
+                        session_id=getattr(session, "session_id", ""),
+                        detail=(
+                            "the socket teardown was cut short before the "
+                            "marker write could be confirmed; coverage for "
+                            "this recording may report 'not assessed'"
+                        ),
+                    )
+
+        # The STT teardown runs HERE, before anything that can be cut short.
+        #
+        # Review of #679 found it stranded: it sat after the L-03 block, whose
+        # `except Exception` cannot catch CancelledError, so on a dropped
+        # socket the cancellation escaped the `finally` and none of this ran.
+        # Every dropped socket then leaked an asyncio task and a live, billed
+        # STT stream for the life of the process, with `_stt_loop` parked for
+        # ever on `audio_q.get()` and `recovery_task` still probing.
+        #
+        # Which await the cancellation lands on is timing-dependent -- two
+        # traces of the same teardown stopped at different points -- so the fix
+        # is not to guard one call but to do the work that must happen where
+        # nothing has had a chance to raise yet.
+        audio_q = stt_state.get("audio_q")
+        if audio_q is not None:
+            audio_q.put_nowait(None)
+        cleanup_stream_queues = stt_state.get("stream_queues")
+        if cleanup_stream_queues:
+            for sq in cleanup_stream_queues.values():
+                sq.put_nowait(None)
+        cleanup_stream_tasks = stt_state.get("stream_tasks") or {}
+        for st in cleanup_stream_tasks.values():
+            if st is not None and not st.done():
+                st.cancel()
+                try:
+                    await st
+                except asyncio.CancelledError:
+                    pass
+        for key in ("stt_task", "recovery_task"):
+            task = stt_state.get(key)
+            if task is not None and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
         if _breaker_ref is not None and _breaker_cb is not None:
             _breaker_ref.remove_on_state_change(_breaker_cb)
 
@@ -1857,59 +1969,8 @@ async def _hold(
                             session_id=session_id,
                             prompt_versions=pv,
                         )
-            except Exception:  # noqa: BLE001
+            except BaseException:  # noqa: BLE001
+                # BaseException, not Exception: CancelledError is not an
+                # Exception, and letting it escape here is what stranded the
+                # STT teardown until it moved above.
                 logger.warning("live_prompt_versions_persist_failed")
-
-        # #662: was transcription still running when this socket went away?
-        #
-        # Read before the teardown below nulls everything. The signal is the
-        # STT state itself rather than `recording_id`, which is set on `start`
-        # and never cleared and so cannot tell a clean stop from a dropped
-        # socket. The `stop` handler nulls each of these, so any of them still
-        # being set here means the operator never stopped — the socket died
-        # mid-recording and the transcript ends early.
-        was_transcribing = any(
-            stt_state.get(key) is not None
-            for key in ("audio_q", "stream_queues", "stt_task", "stream_tasks")
-        )
-
-        audio_q = stt_state.get("audio_q")
-        if audio_q is not None:
-            audio_q.put_nowait(None)
-        cleanup_stream_queues = stt_state.get("stream_queues")
-        if cleanup_stream_queues:
-            for sq in cleanup_stream_queues.values():
-                sq.put_nowait(None)
-        cleanup_stream_tasks = stt_state.get("stream_tasks") or {}
-        for st in cleanup_stream_tasks.values():
-            if st is not None and not st.done():
-                st.cancel()
-                try:
-                    await st
-                except asyncio.CancelledError:
-                    pass
-        for key in ("stt_task", "recovery_task"):
-            task = stt_state.get(key)
-            if task is not None and not task.done():
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
-
-        # #662: leave a record that the transcript stops here.
-        #
-        # Nothing can be salvaged at this point — the socket is gone and the
-        # STT loops with it. What this buys is honesty downstream: finalisation
-        # reads these markers and the O-06 legal header can state that the
-        # transcript is partial instead of implying it is whole.
-        if was_transcribing and session is not None:
-            await session.record_marker(
-                "transcript.interrupted",
-                # Wall clock, not the monotonic `_time.monotonic()` used for
-                # the slow-check loop above: these markers are compared against
-                # the segments' absolute t_start/t_end and the recording's
-                # started_at/stopped_at, which are all epoch seconds.
-                at=_time.time(),
-                reason="socket_closed",
-            )

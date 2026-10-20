@@ -28,15 +28,19 @@ failed to install, and the harness works. The source-inspection test for the
 two `start` branches is kept below, because it covers a case a socket test
 cannot reach cheaply, but the behaviour is proved here.
 
-**Not covered here, and open:** the `transcript.interrupted` marker written by
-the socket teardown. Over this harness a client-initiated close produces no
-such marker within 20 s, while the resume marker it follows appears reliably
-in the same test. Ruled out: the teardown's 15 s ANALYSIS_TIMEOUT_S wait, and
-the fake adapter's stream ending early (the fixture below holds it open).
-Tests for it are deliberately absent rather than shipped red; the open
-question is tracked on its own issue, because if the teardown does not run on
-that close path in production either, the drop case of #662 does not mark the
-transcript at all.
+The drop case was absent here when this file first landed, tracked as #677.
+The cause turned out to be real and in production code, not in the harness: a
+client-initiated close cancels the handler task, and the cancellation escapes
+the teardown through a block whose `except Exception` cannot catch it, so
+anything after that point is skipped -- which is where the marker write sat.
+It runs first now. Which await the cancellation lands on is timing-dependent,
+so the rule is that work which must happen goes early, not that one call
+needed guarding.
+
+**This file is not stable.** It fails intermittently both with and without
+that fix, in a way that leaves no markers at all -- the `start` frame is never
+processed. Tracked separately; do not read a green run here as proof, and
+repeat the suite before claiming anything about it.
 """
 
 from __future__ import annotations
@@ -176,6 +180,27 @@ def test_a_clean_stop_records_the_stop(hob, redis_client):
         markers = wait_for_markers(redis_client, sid, 2)
 
     assert kinds(markers) == ["transcript.resumed", "transcript.stopped"]
+
+
+def test_a_drop_while_recording_records_an_interruption(hob, redis_client):
+    """#662's own scenario: no `stop` frame, the socket just goes away.
+
+    This is the case #677 was filed for. It failed because the marker write
+    was the last thing in a teardown whose awaits stop working the moment the
+    task is cancelled, which is exactly what a client-initiated close does.
+    """
+    hob_client, session_id = hob
+    sid = session_id("drop")
+
+    with open_socket(hob_client, session_id=sid) as socket:
+        socket.send_text(start_frame())
+        wait_for_markers(redis_client, sid, 1)
+        # Leaving the block without stopping is the drop.
+
+    markers = wait_for_markers(redis_client, sid, 2)
+
+    assert kinds(markers) == ["transcript.resumed", "transcript.interrupted"]
+    assert markers[-1]["reason"] == "socket_closed"
 
 
 def test_a_clean_stop_does_not_record_an_interruption(hob, redis_client):
