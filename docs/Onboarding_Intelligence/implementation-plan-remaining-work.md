@@ -12,7 +12,9 @@
 
 ## 0. Executive Summary
 
-**The OIA implementation is ~99% complete.** A story-by-story codebase
+**The OIA implementation is ~99% complete by story count, which overstates
+how much is operationally live** — see §3.2, where M-04's dashboard and seven
+alert rules exist as files that nothing loads. A story-by-story codebase
 verification against all 66 active stories in the backlog v2.1 reveals that
 every epic (A through N) has been implemented across all three layers: the
 agent service, the Django backend, and the Next.js frontend.
@@ -24,7 +26,12 @@ built at the time of the audit — approximately 23,000 lines of production code
 and 10,000 lines of tests on the Django side, and 7,000 lines of components
 plus 5,600 lines of tests on the frontend side.
 
-**Remaining work**: one frontend component (M-03 AC-3), one operational
+**Remaining work** (updated 2026-10-20): the frontend component is done
+(§3.1, M-03 AC-3) and the Grafana item turned out not to be a registration
+gap at all but an undecided infrastructure build needing §7 cost treatment
+(§3.2). What is left is that decision, the §3.3 verification pass, and the
+hardware-blocked O-09 spike. The original wording of this line, kept below
+for the record, read: one frontend component (M-03 AC-3), one operational
 registration gap (Grafana dashboard provisioning), and a verification pass to
 confirm all acceptance criteria are met end-to-end.
 
@@ -185,13 +192,14 @@ All skills (SKL-OIA-04 through 07, 16) implemented in agent service.
   model, registry-driven cascade, consent revocation enters same path.
   Tests: `test_erasure_cascade.py`, `test_erasure_registry.py`,
   `test_erasure_api.py`.
-- M-03 ⚠️ **PARTIAL**: Backend complete — `RetentionConfig` model, CRUD
+- M-03 ✅ (closed, see §3.1): Backend — `RetentionConfig` model, CRUD
   endpoints (`/api/v1/onboarding/retention/`), `enforce_retention_windows`
-  Beat task (03:00 UTC daily), RBAC on Owner/Admin only.
-  **MISSING**: `RetentionSettings` frontend component (M-03 AC-3 —
-  "they are told how much existing evidence that will delete and when").
-  The backlog names `frontend/__tests__/RetentionSettings.test.tsx`.
-- M-04 ✅: Grafana dashboard (`deployment/grafana/dashboards/oia.json`),
+  Beat task (03:00 UTC daily), RBAC on Owner/Admin only. The
+  `RetentionSettings` frontend component and its tests shipped, and AC-3 was
+  verified sub-requirement by sub-requirement rather than by the component's
+  existence — which is what turned up the untested preview guarantee the
+  story rests on.
+- M-04 ⚠️ (file written, not provisioned — see §3.2): Grafana dashboard (`deployment/grafana/dashboards/oia.json`),
   runbook (`docs/runbook.md`), Prometheus metrics (`app/metrics.py`),
   stuck-session watchdog (`app/logic/watchdog.py`), health/readiness
   probes. Django side: `finalize_stuck_session` endpoint.
@@ -255,13 +263,111 @@ control, without which a view that never saved would look correct.
 OIA admin settings live; no dedicated settings route was ever part of this
 AC.
 
-### 3.2 Operational Gap: Grafana Dashboard Provisioning
+### 3.2 Operational Gap: Grafana Dashboard Provisioning — CHECKED 2026-10-20
 
 The `oia.json` dashboard exists in `onboarding-intelligence-agent-svc/deployment/grafana/dashboards/` but the top-level `deployment/` directory has no Grafana provisioning configuration. The POI service has the same pattern (`prompt-optimization-svc/deployment/grafana/dashboards/`).
 
 **Action**: Verify that the GCP Cloud Run deployment picks up the dashboard
 from the service's own directory, or copy it to a central provisioning
 location. This is an operational check, not a code change.
+
+**Result: neither option in that action exists. The gap is wider than a
+missing provisioning file — there is no Grafana anywhere, and nothing that
+could serve this dashboard's queries.**
+
+What was checked, and what each showed:
+
+| Check | Finding |
+|---|---|
+| `grep -rln grafana deployment/ .github/` | **no matches at all** — not compose, not a GCP script, not CI |
+| Grafana/Prometheus service in `deployment/docker-compose.yml` | none; the only "monitoring" hit is a comment on the trend agent |
+| `deployment/gcp/*.sh` | no provisioning step; `01-setup-project.sh` grants only `roles/monitoring.metricWriter` |
+| Cloud Run services matching `grafana\|prom` | **not verified** — see below |
+| `oia.json` itself | 10 panels, **13 PromQL targets, datasource type `prometheus`** |
+
+So the dashboard cannot render even if it were loaded: it asks 13 PromQL
+questions and the deployed stack has no Prometheus to ask. `roles/monitoring.metricWriter`
+points at Cloud Monitoring, which does not answer PromQL unless Managed
+Service for Prometheus is enabled and scraping these services.
+
+`prompt-optimization-svc/deployment/grafana/dashboards/prompt_optimization.json`
+is in exactly the same position, so this is a fleet-wide gap rather than an
+OIA one.
+
+**The dashboards are not the only orphans.** Both services also ship
+Prometheus **alert rules** that the first version of this inventory missed:
+
+| File | Contents |
+|---|---|
+| `onboarding-intelligence-agent-svc/deployment/prometheus/alerts/oia.yml` | 7 alerts — `OIA_STT_HighLatency`, `OIA_SufficiencyHighLatency`, `OIA_DLQ_Active`, `OIA_CircuitBreakerOpen`, `OIA_DroppedUngroundedSpike`, `OIA_EventsDropped`, `OIA_SufficiencyDropsActive`, wired to the `ALERT_*` thresholds in `app/metrics.py` |
+| `prompt-optimization-svc/deployment/prometheus/alerts/prompt_optimization.yml` | same pattern |
+
+These matter more than the dashboard: a dashboard nobody opens is a missed
+insight, but an alert that never fires is a missed outage. Any option below
+has to mount `rule_files` as well as the dashboard directories, or it leaves
+M-04's alerting exactly as dead as it is today, one directory over.
+
+**M-04 was marked ✅ until this check; it now reads ⚠️ at line 194.** The file
+does exist and its queries match the metric names the service exports, which
+is why that tick was not unreasonable — but nothing renders it, so no
+operator can currently see any of it. "The dashboard is written" and "the
+dashboard is live" are separate claims, and only the first was true.
+
+**Nothing on the GCP side was verified. Every finding above is repo-only.**
+`gcloud run services list`, `gcloud monitoring dashboards list` and
+`gcloud services list` all fail with "Reauthentication failed. cannot prompt
+during non-interactive execution" and need an interactive `gcloud auth login`.
+
+An earlier draft of this section reported "Cloud Run services matching
+grafana|prom: none" as a checked finding. **That was wrong, and worth
+recording as a method error rather than quietly fixing**: the command exited
+1 and printed nothing, and the check was a `grep` over its combined output,
+so the error text matched nothing and read as a clean negative. A probe whose
+failure mode looks identical to its pass mode proves nothing. Re-run with the
+exit status checked, not the output pattern.
+
+Still to establish, once credentials are live (all read-only):
+
+- whether Managed Service for Prometheus is enabled on `zorven-503517`
+- whether anything is actually scraping these two services
+- whether a Cloud Monitoring dashboard was created by hand outside the repo
+
+**Options, neither started — this needs a decision, not more checking:**
+
+- **A. Self-hosted, local-dev only.** Add Prometheus + Grafana to
+  `deployment/docker-compose.yml` behind a `with-monitoring` profile,
+  mounting both services' `deployment/grafana/dashboards/` **and**
+  `deployment/prometheus/alerts/` directories, with a datasource scraping
+  `/metrics`. Self-contained and verifiable on a laptop; does nothing for
+  production.
+
+  **The scrape config is two targets, not 27.** Only
+  `onboarding-intelligence-agent-svc` and `prompt-optimization-svc` expose
+  `/metrics` or even depend on `prometheus_client`; Django has no metrics
+  route either. A scrape config for the other 25 would poll 404s. An earlier
+  draft of this section said "27 services" and estimated half a day from it —
+  the real surface is small enough that the work is mostly compose plumbing
+  and provisioning YAML, not per-service instrumentation. Instrumenting the
+  other services is a separate, much larger question nobody has asked yet.
+- **B. GCP-native.** Enable Managed Service for Prometheus and get these two
+  services scraped, then point Grafana (or Cloud Monitoring) at it. The only
+  path that reaches a production operator, and the one with real monthly cost
+  — Managed Prometheus bills per sample ingested, so it needs the §7 cost
+  treatment before being committed to.
+
+  **Correction to an earlier draft, which claimed B would be "half-done" if
+  Managed Prometheus turned out to be enabled.** That is not how it reaches
+  Cloud Run. GMP's managed collection targets GKE workloads; Cloud Run needs
+  a per-service **sidecar collector** (or push through the Prometheus-compatible
+  write API). So there is no central scrape config that can pick these up,
+  and GMP merely being on changes nothing on its own — each of the two
+  services still needs a redeploy with a sidecar. Confirm the current
+  sidecar/collection story before this framing drives the A-vs-B choice.
+
+Converting `oia.json` to Cloud Monitoring's own dashboard format is a third
+path, but it is a rewrite rather than a copy: the formats are not
+interchangeable, and the 13 PromQL expressions would each need an MQL or
+PromQL-on-Cloud-Monitoring equivalent.
 
 ### 3.3 Verification Pass
 
@@ -279,6 +385,75 @@ Before declaring production-ready, the following should be verified:
 | Frontend build | `npm run build` | No type errors |
 | Black formatting | `black --check apps/ && black --check ../onboarding-intelligence-agent-svc/app/` | No diffs |
 | Flake8 | `flake8 apps/ && flake8 ../onboarding-intelligence-agent-svc/app/` | No errors |
+
+**Run 2026-10-20. Eight of the ten pass. Two do not, and a third passes only
+on a reading of "green" that hides something.**
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Django unit (`apps/onboarding/tests/`) | ⚠️ **3 failed, 759 passed** — all three in `test_migrations.py`, pre-existing and already documented as red on `development_main` |
+| 2 | Django integrations (`apps/integrations/tests/`) | ✅ **86 passed** (4m56s) |
+| 3 | Agent unit (`-m unit`) | ⚠️ **7 failed, 801 passed, 4 skipped** — all seven in `test_redact_pii.py`, `presidio_analyzer` is not installed locally; green in CI |
+| 4 | Agent integration (`-m integration`) | ❌ **7 failed, 295 passed, 22 skipped** — see breakdown |
+| 5 | Agent e2e (`-m e2e`) | ⚠️ **13 passed, 13 skipped** — and CI never runs this suite at all |
+| 6 | Agent load (`--collect-only`) | ✅ 4 collected |
+| 7 | Frontend tests | ✅ **41 suites, 542 passed, 1 skipped** |
+| 8 | Frontend build | ✅ exit 0, no type errors |
+| 9 | Black | ✅ `apps/` clean under CI's pinned 23.12.1; service clean under 26.5.1 (its requirement is `>=24.0.0`, so that is CI-equivalent) |
+| 10 | Flake8 | ✅ clean on both trees |
+
+**Check 4's seven failures, classified:**
+
+| Failures | Cause |
+|---|---|
+| 4 × `test_watchdog.py` | **Leftover data in the shared dev Redis, not a code fault.** `tests/e2e/test_gdpr_erasure.py:44` seeds every key with `r.set(k, "test-data")`, including `keys.session(sid)` — where production writes a *hash*. The watchdog scans `oia:v1:*:session:*` and calls `hget` on each match, so that one string raises `WRONGTYPE` and takes down the whole scan pass. `_parse_session_key` filters key *shape* (`:summary`, five parts) but never type. |
+| 1 × `test_watchdog.py::test_stuck_session_watchdog_finalises` | A different cause in the same file: the test deletes its own `watchdog:sess-stuck` claim key *after* its assertion, and claims carry a 120 s TTL, so any earlier failed run of this test makes the next one fail with `closed == 0` for two minutes. Self-inflicted once anything upstream goes red. |
+| 1 × `test_outbox.py::test_drain_replays_entries_fifo` | Same class: `assert 142 == 2`, where 142 was the depth of an outbox left by earlier runs. The backend is unreachable in tests, so nothing drains and each run adds to it. |
+| 1 × `test_ws_transcript_markers.py` | The known #680 residue. |
+
+**Both causes were proved by remedy, not inferred.** Deleting exactly the
+three non-hash keys took `test_watchdog.py` from 5 failed to 1 failed / 4
+passed; clearing the one stale claim key then gave **26 passed** across
+`test_watchdog.py` and `test_outbox.py` together, with no code change.
+
+Checked against the commit before #681 (`40e55313`) with that PR's two files
+reverted: the watchdog and outbox tests fail there too, so none of this is a
+regression from the live-lock work.
+
+**A latent robustness issue worth its own decision, not fixed here.** The
+watchdog's failure mode in production is a `WRONGTYPE` in a background task
+that halts the *entire* scan pass for *every* tenant — so stuck sessions
+silently stop being finalised. No production writer puts a non-hash at that
+path today (the only one found is the e2e fixture above), so this is latent
+rather than live, but DB 2 is shared with ten other services and the guard
+checks shape, not type. A type check, or an `hget` wrapped per key, would
+contain it to one bad key instead of the whole pass.
+
+**Check 5 needs its expectation rewritten.** The table says "All green (needs
+Docker)", which made Docker look like the binding constraint. Docker was
+running (29.6.2) and is not the issue: **10 of the 13 skips are "no Gemini key
+is configured — nothing would be generated"** and one is "OIA_TEST_E2E not
+set". Neither is set in CI either, and CI's OIA job runs
+`-m "not integration and not e2e"` and `-m integration` — **so `-m e2e` runs
+nowhere, in CI or locally**. The PREP end-to-end path is unverified
+everywhere. That is a gap in the verification strategy rather than a test
+failure, and no amount of running this check locally will close it.
+
+**Runtime, which the table does not mention.** Measured: check 1 **25m06s**,
+check 2 4m56s, check 5 4m26s, check 4 3m41s, check 3 1m01s, the rest under a
+minute. **Roughly 40 minutes of wall-clock for the full pass**, three
+quarters of it in the two Django suites. Anyone treating §3.3 as a quick
+pre-release gate should plan for that, or split the Django suites out to run
+in parallel with the rest.
+
+**What to do about the environmental failures.** Checks 3 and 4 cannot go
+green on this machine without (a) installing `presidio_analyzer`, and (b)
+clearing the shared dev Redis of keys that earlier runs left at paths
+production uses for different types. The second is the more interesting one:
+the suite is not self-isolating, so "green" currently depends on run history.
+Both are test-environment work, deliberately not bundled into this
+verification pass.
+
 
 ---
 
