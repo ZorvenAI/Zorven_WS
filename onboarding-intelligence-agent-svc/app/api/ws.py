@@ -190,7 +190,27 @@ async def live_websocket(websocket: WebSocket, session_id: str) -> None:
         await _hold(websocket, verdict, lock, backend, session_id, ticket, precheck)
     finally:
         if lock is not None:
-            await lock.release()
+            # Shielded for the same reason as the interruption marker (#679):
+            # a client-initiated close cancels this task, and an unshielded
+            # await here was cut short before the key was gone. The company's
+            # live slot then stayed claimed for the full TTL and the operator
+            # who dropped could not restart their own meeting -- they were
+            # told another socket was already live, and it was their own
+            # dead one (#680).
+            release = asyncio.ensure_future(lock.release())
+            try:
+                await asyncio.wait_for(asyncio.shield(release), timeout=2.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                if not release.done():
+                    logger.error(
+                        "live_lock_release_unconfirmed",
+                        session_id=session_id,
+                        detail=(
+                            "the socket teardown was cut short before the "
+                            "live lock was confirmed released; the company "
+                            "may wait up to the lock TTL to start again"
+                        ),
+                    )
 
 
 async def _audio_from_queue(
@@ -565,8 +585,54 @@ def _spawn_analysis(
     prev = analysis_state.get("task")
     if prev is not None and not prev.done():
         prev.cancel()
-    task = asyncio.create_task(_run_analysis(websocket, session, batch, analysis_state))
+    task = asyncio.create_task(
+        _tolerating_a_closed_socket(
+            _run_analysis(websocket, session, batch, analysis_state),
+            what="analysis",
+            session_id=session.session_id,
+        )
+    )
     analysis_state["task"] = task
+
+
+async def _tolerating_a_closed_socket(
+    coro: Any,
+    *,
+    what: str,
+    session_id: str,
+) -> None:
+    """Await a background sender, tolerating the socket closing under it.
+
+    Both of these outlive the receive loop: the STT loop emitting transcript
+    frames, and the analysis task mapping a batch onto questions. The
+    operator can close the socket while either is mid-send, and Starlette
+    raises RuntimeError for a send after close. In a bare task that becomes
+    an unretrieved task exception -- noise in production, and under
+    TestClient a failure in whichever test *next* touches the socket, since
+    it re-raises server exceptions at the client's next call.
+
+    That is what made `test_ws_transcript_markers.py` unstable (#680): the
+    failure surfaced in a different test from the one that caused it, which
+    is why it looked like harness flakiness.
+
+    Nothing is lost but the notification. Transcript segments and analysis
+    results are both persisted to Redis before any frame is sent, and the
+    client that would have received it has gone.
+
+    Only that specific RuntimeError is swallowed; any other is a real bug and
+    still propagates.
+    """
+    try:
+        await coro
+    except RuntimeError as exc:
+        if "close message has been sent" not in str(exc):
+            raise
+        logger.info(
+            "frames_dropped_socket_closed",
+            what=what,
+            session=session_id,
+            detail="work finished after the socket closed; results persisted",
+        )
 
 
 async def _run_analysis(
@@ -1804,13 +1870,28 @@ async def _hold(
                     stt_state["audio_q"].put_nowait(raw_bytes)
                     continue
 
-            await _handle_control(
-                websocket,
-                session,
-                message,
-                stt_state=stt_state,
-                rate_ctx=rate_ctx,
-            )
+            try:
+                await _handle_control(
+                    websocket,
+                    session,
+                    message,
+                    stt_state=stt_state,
+                    rate_ctx=rate_ctx,
+                )
+            except RuntimeError as exc:
+                # The peer went away mid-handling (#680).
+                #
+                # This loop already treats a closed socket as "stop looping"
+                # around `receive()`, but not around the handling, and
+                # `_handle_control` replies to several frames -- a `start`
+                # sends a resync. A close landing between the receive and the
+                # reply made Starlette raise, which escaped `_hold` and the
+                # endpoint entirely. Under TestClient that surfaced in
+                # whichever test next touched a socket, so it read as
+                # unrelated flakiness rather than as this race.
+                if "close message has been sent" not in str(exc):
+                    raise
+                return
     finally:
         WS_SESSIONS_ACTIVE.dec()
 
@@ -1888,6 +1969,22 @@ async def _hold(
                             "this recording may report 'not assessed'"
                         ),
                     )
+
+        # Give the live slot back now, not at the end.
+        #
+        # The outer `finally` releases it too, and that is still the backstop,
+        # but it only runs once this teardown has finished -- which includes
+        # waiting out the analysis flush. A socket that has gone is not a live
+        # meeting, so holding the company's only slot while we tidy up means
+        # the operator who dropped is refused when they reconnect, told that
+        # another socket is already live (#680). Release is a single atomic
+        # compare-and-delete, so doing it here and again below is harmless.
+        if lock is not None:
+            lock_release = asyncio.ensure_future(lock.release())
+            try:
+                await asyncio.wait_for(asyncio.shield(lock_release), timeout=2.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
 
         # The STT teardown runs HERE, before anything that can be cut short.
         #
