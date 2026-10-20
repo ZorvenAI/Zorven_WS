@@ -34,8 +34,17 @@ from tests.test_ws_handshake import (  # noqa: F401
 pytestmark = pytest.mark.integration
 
 
-def _lock_keys(conn) -> list[str]:
-    return list(conn.scan_iter(match="oia:v1:t-1:lock:live:*"))
+def _lock_held(conn, company: str) -> bool:
+    """Is *this test's* slot claimed?
+
+    Scoped to the company under test, not the tenant. Watching every
+    `lock:live:*` key in the tenant made these tests fail whenever another
+    test's socket was still unwinding and holding its own, legitimate lock --
+    which is why they passed alone and failed in a combined run. `live_company`
+    is unique per test precisely so these do not collide; the first version of
+    this helper threw that away.
+    """
+    return conn.exists(TenantKeys("t-1").live_lock(company)) == 1
 
 
 def _start(socket, recording_id: str = "r1") -> None:
@@ -51,7 +60,9 @@ def _start(socket, recording_id: str = "r1") -> None:
     )
 
 
-def test_a_dropped_socket_gives_the_slot_back(client, django_stub):  # noqa: F811
+def test_a_dropped_socket_gives_the_slot_back(
+    client, django_stub, live_company  # noqa: F811
+):
     """The regression: the lock must not outlive the socket that held it."""
     from app.providers.stt import FakeSTTAdapter
 
@@ -68,8 +79,7 @@ def test_a_dropped_socket_gives_the_slot_back(client, django_stub):  # noqa: F81
     )
     django_stub["body"] = {"approved": True, "questionnaire_status": "APPROVED"}
     conn = redis_sync.from_url(REDIS_URL, decode_responses=True)
-    for key in _lock_keys(conn):
-        conn.delete(key)
+    conn.delete(TenantKeys("t-1").live_lock(live_company))
 
     sid = f"lock-drop-{int(time.time() * 1000) % 100000}"
     mkey = TenantKeys("t-1").live_markers(sid)
@@ -82,24 +92,26 @@ def test_a_dropped_socket_gives_the_slot_back(client, django_stub):  # noqa: F81
         # Assert the positive first: on a run where the frame was never
         # processed, an empty lock list proves nothing about the release.
         assert conn.lrange(mkey, 0, -1), "the start frame was never processed"
-        assert _lock_keys(conn), "the lock should be held while the socket is open"
+        assert _lock_held(
+            conn, live_company
+        ), "the lock should be held while the socket is open"
 
     for _ in range(40):
-        if not _lock_keys(conn):
+        if not _lock_held(conn, live_company):
             break
         time.sleep(0.05)
 
-    left = _lock_keys(conn)
+    still_claimed = _lock_held(conn, live_company)
     conn.delete(mkey)
     conn.close()
-    assert left == [], (
-        f"the live slot is still claimed after the drop: {left}. The operator "
-        f"who dropped cannot restart for up to {live_lock.LOCK_TTL_S}s."
+    assert not still_claimed, (
+        "the live slot is still claimed after the drop. The operator who "
+        f"dropped cannot restart for up to {live_lock.LOCK_TTL_S}s."
     )
 
 
 def test_the_operator_can_start_again_right_after_a_drop(
-    client, django_stub  # noqa: F811
+    client, django_stub, live_company  # noqa: F811
 ):
     """What the leaked lock actually cost: the reconnect, not the key."""
     from app.providers.stt import FakeSTTAdapter
@@ -117,8 +129,7 @@ def test_the_operator_can_start_again_right_after_a_drop(
     )
     django_stub["body"] = {"approved": True, "questionnaire_status": "APPROVED"}
     conn = redis_sync.from_url(REDIS_URL, decode_responses=True)
-    for key in _lock_keys(conn):
-        conn.delete(key)
+    conn.delete(TenantKeys("t-1").live_lock(live_company))
 
     first = f"lock-again-a-{int(time.time() * 1000) % 100000}"
     mkey_first = TenantKeys("t-1").live_markers(first)
@@ -136,7 +147,7 @@ def test_the_operator_can_start_again_right_after_a_drop(
     # is that the operator is not locked out for the full ninety seconds.
     budget_s = 5.0
     waited = 0.0
-    while _lock_keys(conn) and waited < budget_s:
+    while _lock_held(conn, live_company) and waited < budget_s:
         time.sleep(0.05)
         waited += 0.05
     assert waited < budget_s, (
@@ -154,9 +165,7 @@ def test_the_operator_can_start_again_right_after_a_drop(
             time.sleep(0.05)
         reconnected = [json.loads(m)["type"] for m in conn.lrange(mkey_second, 0, -1)]
 
-    conn.delete(mkey_first, mkey_second)
-    for key in _lock_keys(conn):
-        conn.delete(key)
+    conn.delete(mkey_first, mkey_second, TenantKeys("t-1").live_lock(live_company))
     conn.close()
     # Before the fix this socket was refused 4409 and wrote nothing at all.
     assert (
