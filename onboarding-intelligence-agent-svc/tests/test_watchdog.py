@@ -140,3 +140,48 @@ async def test_watchdog_skips_summary_keys(redis_client, mock_backend, mock_even
     assert closed == 0
 
     await redis_client.delete(key)
+
+
+async def test_a_wrong_type_key_does_not_end_the_sweep(
+    redis_client, mock_backend, mock_events
+):
+    """§3.3: one key of the wrong type used to abort the whole pass.
+
+    The assertion that matters is not "no exception" but that the stuck
+    session **after** the bad key is still finalised. A guard that swallowed
+    the error and stopped scanning would pass an exception-only test while
+    leaving the defect exactly as it was: sessions later in scan order never
+    examined, silently, on every sweep.
+
+    `tests/e2e/test_gdpr_erasure.py` is how this arises in practice -- it
+    seeds every key with `set(k, "test-data")`, including the session path
+    where production writes a hash. DB 2 is shared with ten other services,
+    so a foreign key at this path is not something this service controls.
+    """
+    tenant = "wrongtype-t1"
+    bad_key = f"oia:v1:{tenant}:session:aaa-not-a-hash"
+    await redis_client.set(bad_key, "test-data", ex=3600)
+
+    stale = time.time() - (TIMEOUT_S + 60)
+    good_key = await _write_session_with_heartbeat(
+        redis_client, tenant, "zzz-stuck-after-the-bad-key", stale
+    )
+    claim = f"oia:v1:{tenant}:watchdog:zzz-stuck-after-the-bad-key"
+    await redis_client.delete(claim)
+
+    try:
+        closed = await _scan_and_close(
+            redis_client, mock_backend, mock_events, TIMEOUT_S
+        )
+
+        assert closed >= 1, (
+            "the stuck session was not finalised, so the wrong-type key is "
+            "still cutting the sweep short"
+        )
+        finalised = [
+            c.kwargs.get("session_id")
+            for c in mock_backend.finalize_stuck_session.await_args_list
+        ]
+        assert "zzz-stuck-after-the-bad-key" in finalised, finalised
+    finally:
+        await redis_client.delete(bad_key, good_key, claim)

@@ -16,6 +16,8 @@ import asyncio
 import time
 from typing import Any, TYPE_CHECKING
 
+from redis.exceptions import ResponseError
+
 from app.core.logging import get_logger
 from app.events.catalog import EventType
 
@@ -61,7 +63,28 @@ async def _scan_and_close(
                 continue
             tenant_id, session_id = parsed
 
-            hb_raw = await redis.hget(key, "last_heartbeat")
+            try:
+                hb_raw = await redis.hget(key, "last_heartbeat")
+            except ResponseError:
+                # Not a hash. One key of the wrong type used to end the whole
+                # sweep (§3.3): the exception unwound past this loop to
+                # `watchdog_loop`, which logs and waits for the next
+                # interval -- so the same key aborted every sweep at the same
+                # point, and any session later in scan order was never
+                # examined again. Silent, permanent, partial blindness.
+                #
+                # `_parse_session_key` cannot prevent this: it checks the
+                # key's *shape*, and the offending keys are correctly shaped
+                # session paths that happen to hold a string. DB 2 is shared
+                # with ten other services (ERRATA-01), so a key arriving at
+                # this path with another type is not a situation we control.
+                logger.warning(
+                    "watchdog_key_wrong_type",
+                    session_id=session_id,
+                    tenant_id=tenant_id,
+                    detail="not a hash; skipped so the sweep can continue",
+                )
+                continue
             if hb_raw is None:
                 continue
 
