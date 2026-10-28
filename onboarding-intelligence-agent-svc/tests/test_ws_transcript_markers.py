@@ -140,6 +140,10 @@ def wait_for_markers(redis_client, session_id, count, timeout=20.0):
 
     Polling the effect rather than sleeping a fixed time: the receive loop
     runs on its own timer, so any constant is either flaky or slow.
+
+    Returns what it saw even if that is fewer than `count` -- one caller
+    deliberately waits for a marker it expects never to arrive. Use
+    `require_markers` wherever the markers are the point.
     """
     deadline = time.monotonic() + timeout
     seen: list[dict] = []
@@ -148,6 +152,85 @@ def wait_for_markers(redis_client, session_id, count, timeout=20.0):
         if len(seen) >= count:
             return seen
         time.sleep(0.05)
+    return seen
+
+
+#: How much longer to watch past the deadline before calling a marker
+#: missing. Writes were measured at 1-4 ms (#680), so anything that turns up
+#: in this window is late by orders of magnitude and worth saying so.
+GRACE_S = 5.0
+
+
+def explain_missing_markers(redis_client, session_id, count, waited_s):
+    """Say *why* the markers are absent, not merely that they are.
+
+    This suite has been intermittently red since #676, and every attempt at
+    a diagnosis has had to re-derive the same state by hand: refusal, lock
+    contention, watchdog interference, write latency and session-id
+    collision were each proposed and then eliminated that way (#680). The
+    tests had the evidence in front of them and discarded it, reporting
+    `assert [] == ['transcript.resumed']`.
+
+    The question that cost the most was whether a marker was *late* or
+    *never written*, so this keeps watching past the deadline and settles
+    that before reporting anything else.
+    """
+    keys = TenantKeys(TENANT)
+    late_deadline = time.monotonic() + GRACE_S
+    arrived_late_after = None
+    while time.monotonic() < late_deadline:
+        if len(markers_of(redis_client, session_id)) >= count:
+            elapsed = GRACE_S - (late_deadline - time.monotonic())
+            arrived_late_after = round(waited_s + elapsed, 2)
+            break
+        time.sleep(0.1)
+
+    session_key = keys.session(session_id)
+    session_fields = redis_client.hgetall(session_key) or {}
+    final = markers_of(redis_client, session_id)
+    locks = sorted(redis_client.scan_iter(match=f"oia:v1:{TENANT}:lock:live:*"))
+
+    lines = [
+        f"expected {count} marker(s) for {session_id}, saw {len(final)} "
+        f"after {waited_s}s",
+        f"  markers present: {kinds(final)}",
+    ]
+    if arrived_late_after is not None:
+        lines.append(
+            f"  *** they DID arrive, {arrived_late_after}s in -- a timing "
+            f"problem, not a missing write (writes measured at 1-4ms)"
+        )
+    else:
+        lines.append(
+            f"  *** still absent {GRACE_S}s past the deadline -- the write "
+            f"never happened, so look at the handshake and control path "
+            f"rather than at timing"
+        )
+    lines += [
+        f"  session hash exists: {redis_client.exists(session_key) == 1}",
+        f"  session fields: {dict(session_fields)}",
+        f"  frames={redis_client.llen(keys.live_frames(session_id))} "
+        f"seq={redis_client.get(keys.live_seq(session_id))}",
+        f"  live locks held in {TENANT}: {locks or 'none'}",
+        "  (an absent session hash means the socket was almost certainly "
+        "refused at the handshake -- check the close code)",
+    ]
+    return "\n".join(lines)
+
+
+def require_markers(redis_client, session_id, count, timeout=20.0):
+    """`wait_for_markers`, but a shortfall fails with the reason attached."""
+    started = time.monotonic()
+    seen = wait_for_markers(redis_client, session_id, count, timeout=timeout)
+    if len(seen) < count:
+        raise AssertionError(
+            explain_missing_markers(
+                redis_client,
+                session_id,
+                count,
+                round(time.monotonic() - started, 2),
+            )
+        )
     return seen
 
 
@@ -162,7 +245,7 @@ def test_starting_transcription_records_a_resume(hob, redis_client):
 
     with open_socket(hob_client, session_id=sid) as socket:
         socket.send_text(start_frame())
-        markers = wait_for_markers(redis_client, sid, 1)
+        markers = require_markers(redis_client, sid, 1)
 
     assert kinds(markers) == ["transcript.resumed"]
 
@@ -175,9 +258,9 @@ def test_a_clean_stop_records_the_stop(hob, redis_client):
 
     with open_socket(hob_client, session_id=sid) as socket:
         socket.send_text(start_frame())
-        wait_for_markers(redis_client, sid, 1)
+        require_markers(redis_client, sid, 1)
         socket.send_text(json.dumps({"type": "stop"}))
-        markers = wait_for_markers(redis_client, sid, 2)
+        markers = require_markers(redis_client, sid, 2)
 
     assert kinds(markers) == ["transcript.resumed", "transcript.stopped"]
 
@@ -194,10 +277,10 @@ def test_a_drop_while_recording_records_an_interruption(hob, redis_client):
 
     with open_socket(hob_client, session_id=sid) as socket:
         socket.send_text(start_frame())
-        wait_for_markers(redis_client, sid, 1)
+        require_markers(redis_client, sid, 1)
         # Leaving the block without stopping is the drop.
 
-    markers = wait_for_markers(redis_client, sid, 2)
+    markers = require_markers(redis_client, sid, 2)
 
     assert kinds(markers) == ["transcript.resumed", "transcript.interrupted"]
     assert markers[-1]["reason"] == "socket_closed"
@@ -214,9 +297,9 @@ def test_a_clean_stop_does_not_record_an_interruption(hob, redis_client):
 
     with open_socket(hob_client, session_id=sid) as socket:
         socket.send_text(start_frame())
-        wait_for_markers(redis_client, sid, 1)
+        require_markers(redis_client, sid, 1)
         socket.send_text(json.dumps({"type": "stop"}))
-        wait_for_markers(redis_client, sid, 2)
+        require_markers(redis_client, sid, 2)
 
     markers = wait_for_markers(redis_client, sid, 3, timeout=1.5)
 
