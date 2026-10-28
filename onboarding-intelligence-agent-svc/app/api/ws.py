@@ -197,20 +197,105 @@ async def live_websocket(websocket: WebSocket, session_id: str) -> None:
             # who dropped could not restart their own meeting -- they were
             # told another socket was already live, and it was their own
             # dead one (#680).
-            release = asyncio.ensure_future(lock.release())
-            try:
-                await asyncio.wait_for(asyncio.shield(release), timeout=2.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
-                if not release.done():
-                    logger.error(
-                        "live_lock_release_unconfirmed",
-                        session_id=session_id,
-                        detail=(
-                            "the socket teardown was cut short before the "
-                            "live lock was confirmed released; the company "
-                            "may wait up to the lock TTL to start again"
-                        ),
-                    )
+            await _await_shielded_teardown_write(
+                asyncio.ensure_future(lock.release()),
+                what="lock_release",
+                session_id=session_id,
+                detail="the live lock was not released; the company waits up "
+                "to the lock TTL before it can start again",
+            )
+
+
+def _report_only_if_the_write_was_lost(what: str, session_id: str, detail: str) -> Any:
+    """Report a shielded write that genuinely did not land -- and only then.
+
+    The obvious thing is to log at the moment the `await` gives up, and that
+    is what #679 and #681 did. It is wrong, and measuring it is what showed
+    why (#680): on a client-initiated close the cancellation arrives in under
+    a millisecond while the shielded write completes 1-4 ms later, every
+    time. Across a four-file suite run: 22 awaits abandoned, 22 writes
+    completed, slowest 22 ms, none anywhere near the 2 s budget.
+
+    So both ERROR lines fired on *every* dropped socket, each claiming
+    operator-visible harm -- "coverage may report not assessed", "the company
+    may wait up to the lock TTL" -- that had not happened. Two false alarms
+    per drop is how a log loses its reader, and these particular ones would
+    send someone hunting a data-loss bug that does not exist.
+
+    A done-callback instead reports the outcome the shield actually produced,
+    whenever it lands and regardless of our own cancellation. Success is
+    silent; only a cancelled or failed write speaks.
+    """
+
+    def _callback(task: "asyncio.Task[Any]") -> None:
+        if task.cancelled():
+            logger.error(f"live_{what}_lost", session_id=session_id, detail=detail)
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error(
+                f"live_{what}_lost",
+                session_id=session_id,
+                detail=detail,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+
+    return _callback
+
+
+async def _await_shielded_teardown_write(
+    task: "asyncio.Task[Any]",
+    *,
+    what: str,
+    session_id: str,
+    detail: str,
+    budget_s: float = 2.0,
+) -> None:
+    """Await a shielded teardown write without ever letting it escape.
+
+    All three of these run inside a `finally` whose remaining work must
+    happen: the STT drain, the breaker flush, the lock release. Review of
+    #685 found the guard too narrow -- `except (CancelledError,
+    TimeoutError)` does not catch a Redis error, and `LiveLock.release`
+    calls `client.eval` unguarded against a client whose `socket_timeout`
+    is 2 s. Verified on the installed redis 5.2.1:
+
+        redis.exceptions.ConnectionError -> RedisError -> Exception
+        redis.exceptions.TimeoutError    -> RedisError -> Exception
+
+    Neither is an `asyncio.TimeoutError`. `wait_for` re-raises the inner
+    exception through `shield`, so a slow or down Redis during teardown
+    escaped the `finally` and skipped everything after it -- re-opening
+    exactly the leaked `_stt_loop` and live, billed STT stream that #679
+    closed.
+
+    The three outcomes are now distinguished, because they mean different
+    things:
+
+    * cancelled -- the normal client-initiated close. Silent: the
+      done-callback reports what the write actually did, and measurement
+      (#680) says it lands 1-4 ms later.
+    * budget exceeded -- nothing observed in practice, so worth a WARNING
+      rather than silence; a hard kill here is the one case where the
+      callback never runs and the loss would otherwise be invisible.
+    * any other failure -- swallowed here and reported by the callback,
+      which has the exception and the context.
+    """
+    task.add_done_callback(_report_only_if_the_write_was_lost(what, session_id, detail))
+    try:
+        await asyncio.wait_for(asyncio.shield(task), timeout=budget_s)
+    except asyncio.CancelledError:
+        pass
+    except asyncio.TimeoutError:
+        logger.warning(
+            f"live_{what}_slow",
+            session_id=session_id,
+            budget_s=budget_s,
+            detail="the write had not confirmed within its budget; the "
+            "done-callback will report its outcome unless this instance dies",
+        )
+    except Exception:  # noqa: BLE001 - the callback reports it with context
+        pass
 
 
 async def _audio_from_queue(
@@ -1956,19 +2041,19 @@ async def _hold(
                     reason="socket_closed",
                 )
             )
-            try:
-                await asyncio.wait_for(asyncio.shield(marker_write), timeout=2.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
-                if not marker_write.done():
-                    logger.error(
-                        "live_interruption_marker_unconfirmed",
-                        session_id=getattr(session, "session_id", ""),
-                        detail=(
-                            "the socket teardown was cut short before the "
-                            "marker write could be confirmed; coverage for "
-                            "this recording may report 'not assessed'"
-                        ),
-                    )
+            await _await_shielded_teardown_write(
+                marker_write,
+                what="interruption_marker",
+                session_id=getattr(session, "session_id", ""),
+                # Accurate about the worse case, per #685 review.
+                # `compute_transcript_coverage` only reports "not assessed"
+                # when there are no markers at all; if an earlier stop wrote
+                # `transcript.stopped` and this interruption is lost, it
+                # reports complete=True -- a false claim of completeness
+                # about a truncated transcript, which is worse.
+                detail="the interruption marker was not recorded; coverage "
+                "for this recording may claim completeness it cannot support",
+            )
 
         # Give the live slot back now, not at the end.
         #
@@ -1980,11 +2065,13 @@ async def _hold(
         # another socket is already live (#680). Release is a single atomic
         # compare-and-delete, so doing it here and again below is harmless.
         if lock is not None:
-            lock_release = asyncio.ensure_future(lock.release())
-            try:
-                await asyncio.wait_for(asyncio.shield(lock_release), timeout=2.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
-                pass
+            await _await_shielded_teardown_write(
+                asyncio.ensure_future(lock.release()),
+                what="lock_release_early",
+                session_id=session_id,
+                detail="the early live-lock release was not recorded; the "
+                "outer release in the endpoint is the backstop",
+            )
 
         # The STT teardown runs HERE, before anything that can be cut short.
         #
