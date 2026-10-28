@@ -379,7 +379,7 @@ Before declaring production-ready, the following should be verified:
 | Django integrations tests | `cd ai-brand-automator && pytest apps/integrations/tests/ -v` | All green |
 | Agent unit tests | `cd onboarding-intelligence-agent-svc && pytest -m unit -q` | All green |
 | Agent integration tests | `pytest -m integration -q` | All green (needs Redis on :6379) |
-| Agent e2e tests | `pytest -m e2e -q` | All green (needs Docker) |
+| Agent e2e tests | `pytest -m e2e -q` | 13 pass, 13 skip. **Docker is not the gate** — 10 skips need a Gemini key and 1 needs `OIA_TEST_E2E`. CI sets neither and never runs `-m e2e`, so the PREP path is unverified everywhere (§3.3) |
 | Agent load tests | `pytest -m load --collect-only` | Collects; full run needs `OIA_LOAD_TARGET` |
 | Frontend tests | `cd ai-brand-automator-frontend && npm test` | All green |
 | Frontend build | `npm run build` | No type errors |
