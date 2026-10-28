@@ -197,19 +197,13 @@ async def live_websocket(websocket: WebSocket, session_id: str) -> None:
             # who dropped could not restart their own meeting -- they were
             # told another socket was already live, and it was their own
             # dead one (#680).
-            release = asyncio.ensure_future(lock.release())
-            release.add_done_callback(
-                _report_only_if_the_write_was_lost(
-                    "lock_release",
-                    session_id,
-                    "the live lock was not released; the company waits up to "
-                    "the lock TTL before it can start again",
-                )
+            await _await_shielded_teardown_write(
+                asyncio.ensure_future(lock.release()),
+                what="lock_release",
+                session_id=session_id,
+                detail="the live lock was not released; the company waits up "
+                "to the lock TTL before it can start again",
             )
-            try:
-                await asyncio.wait_for(asyncio.shield(release), timeout=2.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
-                pass
 
 
 def _report_only_if_the_write_was_lost(what: str, session_id: str, detail: str) -> Any:
@@ -247,6 +241,61 @@ def _report_only_if_the_write_was_lost(what: str, session_id: str, detail: str) 
             )
 
     return _callback
+
+
+async def _await_shielded_teardown_write(
+    task: "asyncio.Task[Any]",
+    *,
+    what: str,
+    session_id: str,
+    detail: str,
+    budget_s: float = 2.0,
+) -> None:
+    """Await a shielded teardown write without ever letting it escape.
+
+    All three of these run inside a `finally` whose remaining work must
+    happen: the STT drain, the breaker flush, the lock release. Review of
+    #685 found the guard too narrow -- `except (CancelledError,
+    TimeoutError)` does not catch a Redis error, and `LiveLock.release`
+    calls `client.eval` unguarded against a client whose `socket_timeout`
+    is 2 s. Verified on the installed redis 5.2.1:
+
+        redis.exceptions.ConnectionError -> RedisError -> Exception
+        redis.exceptions.TimeoutError    -> RedisError -> Exception
+
+    Neither is an `asyncio.TimeoutError`. `wait_for` re-raises the inner
+    exception through `shield`, so a slow or down Redis during teardown
+    escaped the `finally` and skipped everything after it -- re-opening
+    exactly the leaked `_stt_loop` and live, billed STT stream that #679
+    closed.
+
+    The three outcomes are now distinguished, because they mean different
+    things:
+
+    * cancelled -- the normal client-initiated close. Silent: the
+      done-callback reports what the write actually did, and measurement
+      (#680) says it lands 1-4 ms later.
+    * budget exceeded -- nothing observed in practice, so worth a WARNING
+      rather than silence; a hard kill here is the one case where the
+      callback never runs and the loss would otherwise be invisible.
+    * any other failure -- swallowed here and reported by the callback,
+      which has the exception and the context.
+    """
+    task.add_done_callback(_report_only_if_the_write_was_lost(what, session_id, detail))
+    try:
+        await asyncio.wait_for(asyncio.shield(task), timeout=budget_s)
+    except asyncio.CancelledError:
+        pass
+    except asyncio.TimeoutError:
+        logger.warning(
+            f"live_{what}_slow",
+            session_id=session_id,
+            budget_s=budget_s,
+            detail="the write had not confirmed within its budget; the "
+            "done-callback will report its outcome unless this instance dies",
+        )
+    except Exception:  # noqa: BLE001 - the callback reports it with context
+        pass
 
 
 async def _audio_from_queue(
@@ -1992,20 +2041,19 @@ async def _hold(
                     reason="socket_closed",
                 )
             )
-            marker_write.add_done_callback(
-                _report_only_if_the_write_was_lost(
-                    "interruption_marker",
-                    getattr(session, "session_id", ""),
-                    "the interruption marker was not recorded; coverage for "
-                    "this recording will report 'not assessed'",
-                )
+            await _await_shielded_teardown_write(
+                marker_write,
+                what="interruption_marker",
+                session_id=getattr(session, "session_id", ""),
+                # Accurate about the worse case, per #685 review.
+                # `compute_transcript_coverage` only reports "not assessed"
+                # when there are no markers at all; if an earlier stop wrote
+                # `transcript.stopped` and this interruption is lost, it
+                # reports complete=True -- a false claim of completeness
+                # about a truncated transcript, which is worse.
+                detail="the interruption marker was not recorded; coverage "
+                "for this recording may claim completeness it cannot support",
             )
-            try:
-                await asyncio.wait_for(asyncio.shield(marker_write), timeout=2.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
-                # Expected on a client-initiated close, and not a problem:
-                # the callback above reports the write's real outcome.
-                pass
 
         # Give the live slot back now, not at the end.
         #
@@ -2017,11 +2065,13 @@ async def _hold(
         # another socket is already live (#680). Release is a single atomic
         # compare-and-delete, so doing it here and again below is harmless.
         if lock is not None:
-            lock_release = asyncio.ensure_future(lock.release())
-            try:
-                await asyncio.wait_for(asyncio.shield(lock_release), timeout=2.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
-                pass
+            await _await_shielded_teardown_write(
+                asyncio.ensure_future(lock.release()),
+                what="lock_release_early",
+                session_id=session_id,
+                detail="the early live-lock release was not recorded; the "
+                "outer release in the endpoint is the backstop",
+            )
 
         # The STT teardown runs HERE, before anything that can be cut short.
         #
