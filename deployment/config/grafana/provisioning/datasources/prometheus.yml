@@ -1,0 +1,12 @@
+# The dashboards declare `datasource.type: prometheus`, so the UID has to be
+# one they resolve to. `isDefault` covers panels that inherit rather than name
+# it; both shipped dashboards rely on that.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

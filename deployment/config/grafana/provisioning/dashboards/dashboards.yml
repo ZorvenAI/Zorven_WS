@@ -1,0 +1,14 @@
+# Each service keeps its dashboard in its own tree; this mounts them rather
+# than copying, so the file under review is the file that renders and the two
+# cannot drift (§3.2).
+apiVersion: 1
+providers:
+  - name: zorven-services
+    orgId: 1
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: true

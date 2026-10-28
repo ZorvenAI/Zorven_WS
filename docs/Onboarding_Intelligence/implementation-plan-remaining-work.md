@@ -364,6 +364,47 @@ Still to establish, once credentials are live (all read-only):
   services still needs a redeploy with a sidecar. Confirm the current
   sidecar/collection story before this framing drives the A-vs-B choice.
 
+**Decision: option A, chosen 2026-10-20. Implemented behind the
+`with-monitoring` compose profile.**
+
+```bash
+cd deployment && docker compose --profile with-monitoring up -d
+# Grafana  http://localhost:3001   (anonymous admin, local only)
+# Prometheus http://localhost:9090
+```
+
+What it wires, and the reasoning that is easy to lose:
+
+| Piece | Note |
+|---|---|
+| `config/prometheus/prometheus.yml` | **Two scrape targets, not 27.** Only OIA (8120) and POI (8110) expose `/metrics`; a config for the rest would poll 404s. |
+| `rule_files` | Both services' `deployment/prometheus/alerts/` are mounted. Without this the dashboards render while **alerting stays as dead as before** — the #685 review finding. 12 rules load (7 OIA + 5 POI). |
+| Dashboard provisioning | Mounts each service's own `deployment/grafana/dashboards/`, rather than copying, so the reviewed file is the file that renders and the two cannot drift. |
+| Datasource | `uid: prometheus`, `isDefault: true`. Both dashboards reference `${DS_PROMETHEUS}` via a `templating` variable with `query: "prometheus"` and `current: null`, so they resolve against the default prometheus source. Worth knowing before anyone renames it. |
+| Port 3001 | 3000 is the frontend. |
+
+**Verified by `promtool check config` against the real mounts:**
+
+```
+SUCCESS: 2 rule files found
+SUCCESS: /etc/prometheus/prometheus.yml is valid prometheus config file syntax
+Checking /etc/prometheus/alerts/oia/oia.yml            SUCCESS: 7 rules found
+Checking /etc/prometheus/alerts/poi/prompt_optimization.yml  SUCCESS: 5 rules found
+```
+
+**Not yet verified end to end, and this is the honest gap:** both containers
+start and then restart-loop on this machine because **Docker's VM disk is
+100% full** (`58.4G size, 56.2G used, 0 available` — 35.5 GB images, 14.7 GB
+build cache). Prometheus panics creating `/prometheus/data/queries.active`
+and Grafana's SQLite migration fails with "database or disk is full". Neither
+is a configuration fault; a throwaway container cannot write 20 MB either.
+Reclaiming Docker space is the prerequisite for confirming that panels
+actually render and alerts actually evaluate.
+
+Option B remains open and undecided. It is the only path that reaches a
+production operator, and it still needs the §7 cost treatment before anyone
+commits to per-sample billing.
+
 Converting `oia.json` to Cloud Monitoring's own dashboard format is a third
 path, but it is a rewrite rather than a copy: the formats are not
 interchangeable, and the 13 PromQL expressions would each need an MQL or
