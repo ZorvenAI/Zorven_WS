@@ -86,9 +86,29 @@ recorder, not the server.
 
 ```bash
 cd deployment
-docker compose up -d redis postgres backend frontend
+
+# Postgres only if you are not pointing DATABASE_URL at Neon. The service is
+# named `db` and sits behind a profile -- there is no `postgres` service, and
+# `docker compose config --services` will not list `db` unless the profile is
+# named, which is an easy way to convince yourself it does not exist.
+docker compose --profile with-db up -d db
+
+docker compose up -d redis backend frontend
 docker compose --profile with-monitoring up -d
 docker compose up -d onboarding-intelligence-agent-svc
+```
+
+`DATABASE_URL` defaults to `postgresql://postgres:postgres@db:5432/ai_brand_automator`,
+so either run the `with-db` profile or set `DATABASE_URL` to your Neon
+instance in `deployment/.env` (Neon needs `sslmode=require` and
+`channel_binding=require`).
+
+Migrations, if this is a fresh database — note `migrate_schemas`, never a
+plain `migrate`, because the project is multi-tenant:
+
+```bash
+docker compose exec backend python manage.py migrate_schemas --shared --noinput
+docker compose exec backend python manage.py seed_manifests
 ```
 
 | Surface | URL |
