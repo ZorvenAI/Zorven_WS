@@ -1,0 +1,32 @@
+# Local-only Prometheus for the `with-monitoring` profile.
+#
+# Two scrape targets, not twenty-seven. Only these services expose /metrics or
+# depend on prometheus_client; Django has no metrics route. A scrape config for
+# the rest of the fleet would poll 404s (§3.2).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# The alert rules both services already ship. Without these the dashboards
+# render while the alerting stays exactly as dead as it was before this
+# profile existed, which was the point of the #685 review finding.
+rule_files:
+  - /etc/prometheus/alerts/oia/*.yml
+  - /etc/prometheus/alerts/poi/*.yml
+
+scrape_configs:
+  - job_name: onboarding-intelligence-agent
+    static_configs:
+      - targets: ["onboarding-intelligence-agent-svc:8120"]
+        labels:
+          service: onboarding-intelligence-agent-svc
+
+  - job_name: prompt-optimization
+    static_configs:
+      - targets: ["prompt-optimization-svc:8110"]
+        labels:
+          service: prompt-optimization-svc
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

@@ -1934,10 +1934,72 @@ services:
     networks:
       - app-network
 
+  # ── Local metrics stack (§3.2, option A) ──────────────────────────────
+  #
+  # Behind a profile because it is a local-development aid, not part of the
+  # deployed stack: `docker compose --profile with-monitoring up`.
+  #
+  # Both services already ship a Grafana dashboard and Prometheus alert rules
+  # in their own trees, and until now nothing loaded either -- no Grafana, no
+  # Prometheus and no provisioning existed anywhere in the repo, so M-04 was
+  # ticked on the dashboard file merely existing. This makes those files
+  # render and those alerts evaluate on a laptop. It does nothing for
+  # production; that is the separate GCP decision in §3.2, which carries
+  # per-sample billing.
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: ai-brand-automator-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=24h"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # Mounted from each service's own tree, so the reviewed file is the
+      # file that runs and the two cannot drift.
+      - ../onboarding-intelligence-agent-svc/deployment/prometheus/alerts:/etc/prometheus/alerts/oia:ro
+      - ../prompt-optimization-svc/deployment/prometheus/alerts:/etc/prometheus/alerts/poi:ro
+      - prometheus_volume:/prometheus
+    ports:
+      - "9090:9090"
+    profiles:
+      - with-monitoring
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: ai-brand-automator-grafana
+    environment:
+      # Local only. Anonymous admin keeps a dev aid out of the business of
+      # holding a credential; this profile is not meant for a shared host.
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_USERS_DEFAULT_THEME=dark
+    volumes:
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../onboarding-intelligence-agent-svc/deployment/grafana/dashboards:/etc/grafana/dashboards/oia:ro
+      - ../prompt-optimization-svc/deployment/grafana/dashboards:/etc/grafana/dashboards/poi:ro
+      - grafana_volume:/var/lib/grafana
+    # 3001 because 3000 is the frontend.
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+    profiles:
+      - with-monitoring
+    restart: unless-stopped
+    networks:
+      - app-network
+
 # ==========================================================================
 # Volumes
 # ==========================================================================
 volumes:
+  prometheus_volume:
+  grafana_volume:
   static_volume:
   media_volume:
   redis_volume:
