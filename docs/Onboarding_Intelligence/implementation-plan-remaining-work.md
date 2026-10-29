@@ -392,14 +392,21 @@ Checking /etc/prometheus/alerts/oia/oia.yml            SUCCESS: 7 rules found
 Checking /etc/prometheus/alerts/poi/prompt_optimization.yml  SUCCESS: 5 rules found
 ```
 
-**Not yet verified end to end, and this is the honest gap:** both containers
-start and then restart-loop on this machine because **Docker's VM disk is
-100% full** (`58.4G size, 56.2G used, 0 available` — 35.5 GB images, 14.7 GB
-build cache). Prometheus panics creating `/prometheus/data/queries.active`
-and Grafana's SQLite migration fails with "database or disk is full". Neither
-is a configuration fault; a throwaway container cannot write 20 MB either.
-Reclaiming Docker space is the prerequisite for confirming that panels
-actually render and alerts actually evaluate.
+**Verified end to end, 2026-10-28.** Docker space was reclaimed and the
+profile was brought up against a real OIA container:
+
+| Proof | Result |
+|---|---|
+| Both containers stay up | `prometheus Up`, `grafana Up` |
+| Alert rules evaluating | **2 groups, 12 rules** (`oia-alerts` 7, `prompt_optimization` 5), all `inactive` — loaded and evaluating, nothing firing |
+| Dashboards provisioned | `Onboarding Intelligence Agent` (uid `oia-onboarding-intelligence`), `Prompt Optimization Service` (uid `poi-prompt-optimization`) |
+| Datasource | `Prometheus prometheus uid=prometheus http://prometheus:9090` |
+| OIA container | healthy, `/metrics` HTTP 200, **45 `oia_` metric lines** |
+| Scrape target | `onboarding-intelligence-agent: up` |
+| A real panel query | first panel of `oia.json` run through Prometheus: `status=success series=1` |
+
+So M-04's dashboard and its seven alerts are live locally for the first time.
+The earlier failure was Docker's VM disk at 100%, not configuration.
 
 Option B remains open and undecided. It is the only path that reaches a
 production operator, and it still needs the §7 cost treatment before anyone
@@ -436,7 +443,7 @@ on a reading of "green" that hides something.**
 | 2 | Django integrations (`apps/integrations/tests/`) | ✅ **86 passed** (4m56s) |
 | 3 | Agent unit (`-m unit`) | ⚠️ **7 failed, 801 passed, 4 skipped** — all seven in `test_redact_pii.py`, `presidio_analyzer` is not installed locally; green in CI |
 | 4 | Agent integration (`-m integration`) | ❌ **7 failed, 295 passed, 22 skipped** — see breakdown |
-| 5 | Agent e2e (`-m e2e`) | ⚠️ **13 passed, 13 skipped** locally — CI *does* run this suite, excluding one file (see correction below) |
+| 5 | Agent e2e (`-m e2e`) | ✅ **resolved 2026-10-28** — the 13 skips were a missing Gemini key, not Docker. With the real key: PREP is **11 passed, 1 skipped**. CI runs this suite but still excludes that one file (see below) |
 | 6 | Agent load (`--collect-only`) | ✅ 4 collected |
 | 7 | Frontend tests | ✅ **41 suites, 542 passed, 1 skipped** |
 | 8 | Frontend build | ✅ exit 0, no type errors |
@@ -491,12 +498,27 @@ CI runs the e2e suite and excludes **one file**. So the gap is narrower and
 far more specific than I claimed: `tests/e2e/test_prep_to_questionnaire.py`
 (11 tests) is excluded in CI and skips locally without a Gemini key, so **the
 PREP end-to-end path is the part that is unverified** — not the e2e layer.
-
-Closing it needs a `GOOGLE_API_KEY` available to the run, either locally or
-as a CI secret with the `--ignore` removed. There is nothing to build.
-
 I had read only the first two pytest steps of that job before asserting the
 third did not exist.
+
+**Closed locally, 2026-10-28:** run with the real key from Secret Manager
+(`GOOGLE_API_KEY`, fetched into the test process rather than into a shell),
+`OIA_TEST_E2E=1`, and Docker space reclaimed:
+
+```
+tests/e2e/test_prep_to_questionnaire.py -m e2e
+11 passed, 1 skipped in 196.83s
+```
+
+That is the **PREP end-to-end path verified for the first time** — real Gemini
+calls against a freshly built container, no mocks.
+
+**Still open in CI**, and it is a one-line change plus a secret: the job
+carries `--ignore=tests/e2e/test_prep_to_questionnaire.py`, and no
+Google/Gemini secret exists in the repo's GitHub secrets (checked by name).
+Add `GOOGLE_API_KEY` as a repository secret, pass it to that step, and drop
+the `--ignore`.
+
 
 **Runtime, which the table does not mention.** Measured: check 1 **25m06s**,
 check 2 4m56s, check 5 4m26s, check 4 3m41s, check 3 1m01s, the rest under a
