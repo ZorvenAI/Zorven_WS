@@ -436,7 +436,7 @@ on a reading of "green" that hides something.**
 | 2 | Django integrations (`apps/integrations/tests/`) | ✅ **86 passed** (4m56s) |
 | 3 | Agent unit (`-m unit`) | ⚠️ **7 failed, 801 passed, 4 skipped** — all seven in `test_redact_pii.py`, `presidio_analyzer` is not installed locally; green in CI |
 | 4 | Agent integration (`-m integration`) | ❌ **7 failed, 295 passed, 22 skipped** — see breakdown |
-| 5 | Agent e2e (`-m e2e`) | ⚠️ **13 passed, 13 skipped** — and CI never runs this suite at all |
+| 5 | Agent e2e (`-m e2e`) | ⚠️ **13 passed, 13 skipped** locally — CI *does* run this suite, excluding one file (see correction below) |
 | 6 | Agent load (`--collect-only`) | ✅ 4 collected |
 | 7 | Frontend tests | ✅ **41 suites, 542 passed, 1 skipped** |
 | 8 | Frontend build | ✅ exit 0, no type errors |
@@ -470,15 +470,33 @@ rather than live, but DB 2 is shared with ten other services and the guard
 checks shape, not type. A type check, or an `hget` wrapped per key, would
 contain it to one bad key instead of the whole pass.
 
-**Check 5 needs its expectation rewritten.** The table says "All green (needs
-Docker)", which made Docker look like the binding constraint. Docker was
-running (29.6.2) and is not the issue: **10 of the 13 skips are "no Gemini key
-is configured — nothing would be generated"** and one is "OIA_TEST_E2E not
-set". Neither is set in CI either, and CI's OIA job runs
-`-m "not integration and not e2e"` and `-m integration` — **so `-m e2e` runs
-nowhere, in CI or locally**. The PREP end-to-end path is unverified
-everywhere. That is a gap in the verification strategy rather than a test
-failure, and no amount of running this check locally will close it.
+**Check 5 needs its expectation rewritten**, and my first attempt at that
+was itself wrong.
+
+The table said "All green (needs Docker)", which made Docker look like the
+binding constraint. Docker was running (29.6.2) and is not the issue: **10 of
+the 13 local skips are "no Gemini key is configured"** and one is
+"OIA_TEST_E2E not set".
+
+**Correction, 2026-10-28.** I then wrote here, and repeated elsewhere, that
+"CI never runs `-m e2e` at all". That is false. The OIA job has a third test
+step:
+
+```yaml
+- name: Test (fast e2e)
+  run: pytest tests/e2e/ -v -m "e2e" --ignore=tests/e2e/test_prep_to_questionnaire.py
+```
+
+CI runs the e2e suite and excludes **one file**. So the gap is narrower and
+far more specific than I claimed: `tests/e2e/test_prep_to_questionnaire.py`
+(11 tests) is excluded in CI and skips locally without a Gemini key, so **the
+PREP end-to-end path is the part that is unverified** — not the e2e layer.
+
+Closing it needs a `GOOGLE_API_KEY` available to the run, either locally or
+as a CI secret with the `--ignore` removed. There is nothing to build.
+
+I had read only the first two pytest steps of that job before asserting the
+third did not exist.
 
 **Runtime, which the table does not mention.** Measured: check 1 **25m06s**,
 check 2 4m56s, check 5 4m26s, check 4 3m41s, check 3 1m01s, the rest under a
