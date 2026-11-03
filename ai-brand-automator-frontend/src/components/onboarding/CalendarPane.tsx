@@ -152,7 +152,11 @@ export default function CalendarPane({ now }: CalendarPaneProps) {
 
   async function onSchedule(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    // Held before any await: React nulls `event.currentTarget` once the
+    // handler yields, so reading it after the save threw "Cannot read
+    // properties of null (reading 'reset')" on every successful booking.
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const starts = String(form.get('starts') || '');
     const minutes = Number(form.get('minutes') || 60);
     if (!starts) return;
@@ -175,7 +179,7 @@ export default function CalendarPane({ now }: CalendarPaneProps) {
         timezone: zone,
       });
       await load();
-      event.currentTarget.reset();
+      formElement.reset();
       // reset() clears the uncontrolled fields; the controlled one needs this
       // or the date stays behind after a successful booking.
       setStartsAt('');

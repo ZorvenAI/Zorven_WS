@@ -206,6 +206,30 @@ describe('CalendarPane', () => {
     expect(draft.timezone).not.toMatch(/^[+-]\d/);
   });
 
+  it('clears the form after a successful booking, without reporting an error', async () => {
+    /**
+     * Found by hand, 2026-11-02: the booking saved, then the pane showed
+     * "Cannot read properties of null (reading 'reset')". The handler read
+     * `event.currentTarget` after awaiting the save, and React has nulled it
+     * by then. The test above stops at `createMeeting` being called, so it
+     * never reached the code that threw.
+     */
+    asRole('editor');
+    mockedCreate.mockResolvedValue(MEETING);
+    render(<CalendarPane now={NOW} />);
+    await screen.findByText(/Kickoff/);
+
+    const starts = screen.getByLabelText(/starts/i) as HTMLInputElement;
+    fireEvent.change(starts, { target: { value: '2024-06-20T14:00' } });
+    fireEvent.click(screen.getByRole('button', { name: /schedule a meeting/i }));
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalled());
+    // The pane reloads after saving; wait for that to settle.
+    await waitFor(() => expect(mockedMeetings).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(starts.value).toBe(''));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('reports a scheduling failure instead of silently doing nothing', async () => {
     asRole('editor');
     mockedCreate.mockRejectedValue(new Error('API 400: overlaps'));
