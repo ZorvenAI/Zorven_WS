@@ -742,6 +742,83 @@ def test_the_refusal_names_the_time_where_it_was_booked(
     assert f"{local:%Y-%m-%d %H:%M} America/Chicago" in detail
 
 
+def test_an_edit_racing_a_new_booking_is_refused_not_a_500(
+    transactional_db, tenant, session, editor
+):
+    """PR #693 review: a PATCH that validated the old meeting while a new
+    booking was completing it saved the stale SCHEDULED status back over
+    COMPLETED, broke `one_scheduled_meeting_per_session`, and returned 500.
+
+    The booking is held open in this thread -- old meeting COMPLETED, new one
+    inserted, not yet committed -- while a title-only PATCH of the old meeting
+    runs in another. The test waits until Postgres reports that PATCH blocked
+    on a row lock (rather than guessing with a timeout: a threaded request
+    carries seconds of middleware overhead), then commits the booking.
+
+    Unfixed, the PATCH reads the committed SCHEDULED row without a lock,
+    passes validation, blocks only at its UPDATE, and then violates the
+    constraint. Fixed, it blocks at the locked re-read, sees COMPLETED, and
+    gets a 400.
+    """
+    import threading
+    import time
+
+    from django.db import connection
+
+    past = a_meeting(session, tenant, starts=datetime.now(UTC) - timedelta(days=5))
+    user = editor
+    outcome: dict[str, object] = {}
+
+    def edit():
+        try:
+            client = APIClient()
+            client.defaults["SERVER_NAME"] = "localhost"
+            client.force_authenticate(user=user)
+            outcome["response"] = client.patch(
+                f"{EVENTS}{past.pk}/", {"title": "Renamed"}, format="json"
+            )
+        except Exception as exc:  # pragma: no cover - surfaced by the asserts
+            outcome["error"] = exc
+        finally:
+            connection.close()
+
+    def someone_waits_on_a_lock() -> bool:
+        with connection.cursor() as cursor:
+            # pg_stat_activity is snapshotted once per transaction, and this
+            # runs inside one: without clearing, every poll reads the view as
+            # it was on the first and never sees the PATCH start waiting.
+            cursor.execute("SELECT pg_stat_clear_snapshot()")
+            cursor.execute(
+                "SELECT count(*) FROM pg_stat_activity "
+                "WHERE datname = current_database() AND wait_event_type = 'Lock'"
+            )
+            return cursor.fetchone()[0] > 0
+
+    worker = threading.Thread(target=edit, daemon=True)
+    with transaction.atomic():
+        ScheduledMeeting.objects.filter(pk=past.pk).update(
+            status=MeetingStatus.COMPLETED
+        )
+        a_meeting(session, tenant, starts=_future(days=3))
+
+        worker.start()
+        deadline = time.monotonic() + 30
+        while not someone_waits_on_a_lock():
+            assert worker.is_alive(), "the PATCH finished without waiting"
+            if time.monotonic() > deadline:
+                pytest.fail("the PATCH never blocked on the meeting's row lock")
+            time.sleep(0.05)
+
+    worker.join(timeout=30)
+
+    assert "error" not in outcome, outcome.get("error")
+    response = outcome["response"]
+    assert response.status_code == 400, response.content
+    past.refresh_from_db()
+    assert past.status == MeetingStatus.COMPLETED
+    assert past.title == ""
+
+
 def test_a_completed_meeting_cannot_be_cancelled(api_client, tenant, session, editor):
     done = a_meeting(
         session,

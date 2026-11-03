@@ -2657,8 +2657,27 @@ class ScheduledMeetingViewSet(
     def get_object(self):
         instance = super().get_object()
         if self.request.method not in SAFE_METHODS:
+            # Re-read under a row lock. `update()` below holds the transaction
+            # open across lookup, validation and save, so an edit and a new
+            # booking on the same session serialise: either the edit commits
+            # first, or it waits, then sees the COMPLETED status the booking
+            # wrote and is refused by the serializer. Without the lock the
+            # edit validated a stale SCHEDULED row and saved that status back
+            # over COMPLETED, tripping `one_scheduled_meeting_per_session` as
+            # a 500 -- even for a title-only change (PR #693 review).
+            instance = (
+                self._tenant_scoped()
+                .select_for_update(of=("self",))
+                .get(pk=instance.pk)
+            )
             self._refuse_if_external(instance)
         return instance
+
+    def update(self, request, *args, **kwargs):
+        # The transaction the row lock in get_object lives in. PUT and PATCH
+        # both arrive here (partial_update delegates to update).
+        with db_transaction.atomic():
+            return super().update(request, *args, **kwargs)
 
     def _tenant_scoped(self):
         """Every meeting this tenant may see, with no window applied.
