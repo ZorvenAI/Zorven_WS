@@ -638,27 +638,220 @@ def test_a_second_meeting_on_one_session_is_refused_with_a_reason(
     constraint itself and passed throughout, which is exactly how this
     survived: the invariant was tested at the model and never through the
     API that has to explain it to somebody.
-    """
-    a_meeting(session, tenant, starts=datetime(2024, 6, 15, 12, 0, tzinfo=UTC))
 
-    response = api_client.post(
-        EVENTS,
-        {
-            "session": session.pk,
-            "starts_at": "2024-06-20T15:00:00Z",
-            "ends_at": "2024-06-20T16:00:00Z",
-            "timezone": "America/Chicago",
-        },
-        format="json",
-    )
+    The existing meeting is in the future: since 2026-11-02 only a meeting
+    that has not yet ended blocks (see the past-meeting tests below).
+    """
+    starts = _future(days=7)
+    a_meeting(session, tenant, starts=starts)
+
+    response = api_client.post(EVENTS, _booking(session, days=14), format="json")
 
     assert response.status_code == 400, response.content
     detail = response.json()["session"][0]
     # The remedy, not just the refusal: rescheduling is the supported path,
     # and the existing time is what lets the operator find that meeting.
     assert "already has a meeting scheduled" in detail
-    assert "2024-06-15 12:00" in detail
+    assert f"{starts:%Y-%m-%d %H:%M} UTC" in detail
     assert "eschedule" in detail
+
+
+# ── A past meeting does not block the session forever ───────────────
+
+
+def _future(*, days: int) -> datetime:
+    """A whole hour `days` from now, so the meeting is certainly upcoming."""
+    return (datetime.now(UTC) + timedelta(days=days)).replace(
+        minute=0, second=0, microsecond=0
+    )
+
+
+def _booking(session, *, days: int) -> dict:
+    starts = _future(days=days)
+    return {
+        "session": session.pk,
+        "starts_at": starts.isoformat(),
+        "ends_at": (starts + timedelta(hours=1)).isoformat(),
+        "timezone": "America/Chicago",
+    }
+
+
+def test_a_past_meeting_does_not_block_a_new_booking(
+    api_client, tenant, session, editor
+):
+    """Found by hand, 2026-11-02: a September meeting nobody cancelled stayed
+    SCHEDULED and refused every booking on its session two months later.
+
+    The new booking succeeds, and the old meeting is recorded as having
+    happened rather than deleted or cancelled -- it did take place.
+    """
+    past = a_meeting(session, tenant, starts=datetime.now(UTC) - timedelta(days=55))
+
+    response = api_client.post(EVENTS, _booking(session, days=3), format="json")
+
+    assert response.status_code == 201, response.content
+    past.refresh_from_db()
+    assert past.status == MeetingStatus.COMPLETED
+    assert ScheduledMeeting.objects.get(pk=response.json()["id"]).status == (
+        MeetingStatus.SCHEDULED
+    )
+
+
+def test_completing_a_past_meeting_does_not_mark_it_edited(
+    api_client, tenant, session, editor
+):
+    """`updated_at` drives the D-03 push sweep. Bumping it would make the sweep
+    re-patch the Google event of a meeting that already happened."""
+    past = a_meeting(session, tenant, starts=datetime.now(UTC) - timedelta(days=30))
+    before = past.updated_at
+
+    api_client.post(EVENTS, _booking(session, days=3), format="json")
+
+    past.refresh_from_db()
+    assert past.status == MeetingStatus.COMPLETED
+    assert past.updated_at == before
+
+
+def test_a_meeting_in_progress_still_blocks(api_client, tenant, session, editor):
+    """Started but not ended is still the live meeting -- the boundary is the
+    end of the window, not the start."""
+    a_meeting(
+        session,
+        tenant,
+        starts=datetime.now(UTC) - timedelta(minutes=30),
+        minutes=60,
+    )
+
+    response = api_client.post(EVENTS, _booking(session, days=3), format="json")
+
+    assert response.status_code == 400, response.content
+
+
+def test_the_refusal_names_the_time_where_it_was_booked(
+    api_client, tenant, session, editor
+):
+    """UTC alone sent the operator looking on the wrong day: 00:00 UTC on the
+    9th is 19:00 on the 8th in Chicago."""
+    starts = _future(days=7)
+    a_meeting(session, tenant, starts=starts, zone="America/Chicago")
+
+    response = api_client.post(EVENTS, _booking(session, days=14), format="json")
+
+    detail = response.json()["session"][0]
+    local = starts.astimezone(ZoneInfo("America/Chicago"))
+    assert f"{local:%Y-%m-%d %H:%M} America/Chicago" in detail
+
+
+def test_an_edit_racing_a_new_booking_is_refused_not_a_500(
+    transactional_db, tenant, session, editor
+):
+    """PR #693 review: a PATCH that validated the old meeting while a new
+    booking was completing it saved the stale SCHEDULED status back over
+    COMPLETED, broke `one_scheduled_meeting_per_session`, and returned 500.
+
+    The booking is held open in this thread -- old meeting COMPLETED, new one
+    inserted, not yet committed -- while a title-only PATCH of the old meeting
+    runs in another. The test waits until Postgres reports that PATCH blocked
+    on a row lock (rather than guessing with a timeout: a threaded request
+    carries seconds of middleware overhead), then commits the booking.
+
+    Unfixed, the PATCH reads the committed SCHEDULED row without a lock,
+    passes validation, blocks only at its UPDATE, and then violates the
+    constraint. Fixed, it blocks at the locked re-read, sees COMPLETED, and
+    gets a 400.
+    """
+    import threading
+    import time
+
+    from django.db import connection
+
+    past = a_meeting(session, tenant, starts=datetime.now(UTC) - timedelta(days=5))
+    user = editor
+    outcome: dict[str, object] = {}
+
+    def edit():
+        try:
+            client = APIClient()
+            client.defaults["SERVER_NAME"] = "localhost"
+            client.force_authenticate(user=user)
+            outcome["response"] = client.patch(
+                f"{EVENTS}{past.pk}/", {"title": "Renamed"}, format="json"
+            )
+        except Exception as exc:  # pragma: no cover - surfaced by the asserts
+            outcome["error"] = exc
+        finally:
+            connection.close()
+
+    def someone_waits_on_a_lock() -> bool:
+        with connection.cursor() as cursor:
+            # pg_stat_activity is snapshotted once per transaction, and this
+            # runs inside one: without clearing, every poll reads the view as
+            # it was on the first and never sees the PATCH start waiting.
+            cursor.execute("SELECT pg_stat_clear_snapshot()")
+            cursor.execute(
+                "SELECT count(*) FROM pg_stat_activity "
+                "WHERE datname = current_database() AND wait_event_type = 'Lock'"
+            )
+            return cursor.fetchone()[0] > 0
+
+    worker = threading.Thread(target=edit, daemon=True)
+    with transaction.atomic():
+        ScheduledMeeting.objects.filter(pk=past.pk).update(
+            status=MeetingStatus.COMPLETED
+        )
+        a_meeting(session, tenant, starts=_future(days=3))
+
+        worker.start()
+        deadline = time.monotonic() + 30
+        while not someone_waits_on_a_lock():
+            assert worker.is_alive(), "the PATCH finished without waiting"
+            if time.monotonic() > deadline:
+                pytest.fail("the PATCH never blocked on the meeting's row lock")
+            time.sleep(0.05)
+
+    worker.join(timeout=30)
+
+    assert "error" not in outcome, outcome.get("error")
+    response = outcome["response"]
+    assert response.status_code == 400, response.content
+    past.refresh_from_db()
+    assert past.status == MeetingStatus.COMPLETED
+    assert past.title == ""
+
+
+def test_a_completed_meeting_cannot_be_cancelled(api_client, tenant, session, editor):
+    done = a_meeting(
+        session,
+        tenant,
+        starts=datetime.now(UTC) - timedelta(days=10),
+        status=MeetingStatus.COMPLETED,
+    )
+
+    response = api_client.post(f"{EVENTS}{done.pk}/cancel/", format="json")
+
+    assert response.status_code == 409, response.content
+    done.refresh_from_db()
+    assert done.status == MeetingStatus.COMPLETED
+
+
+def test_a_completed_meeting_cannot_be_rescheduled(api_client, tenant, session, editor):
+    done = a_meeting(
+        session,
+        tenant,
+        starts=datetime.now(UTC) - timedelta(days=10),
+        status=MeetingStatus.COMPLETED,
+    )
+    later = _booking(session, days=5)
+
+    response = api_client.patch(
+        f"{EVENTS}{done.pk}/",
+        {"starts_at": later["starts_at"], "ends_at": later["ends_at"]},
+        format="json",
+    )
+
+    assert response.status_code == 400, response.content
+    done.refresh_from_db()
+    assert done.status == MeetingStatus.COMPLETED
 
 
 def test_a_cancelled_meeting_does_not_block_the_api(

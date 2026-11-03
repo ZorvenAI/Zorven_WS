@@ -13,6 +13,7 @@ from collections import Counter
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.contrib.auth.models import User
+from django.utils import timezone as dj_timezone
 from rest_framework import serializers
 
 from apps.onboarding.models import (
@@ -524,6 +525,20 @@ class QuestionnaireSerializer(serializers.ModelSerializer):
         return {t: counts.get(t, 0) / total for t in WorkflowTarget.values}
 
 
+def _local_time(meeting: ScheduledMeeting) -> str:
+    """The meeting's start in the zone it was booked in, e.g.
+    ``2026-09-08 19:00 America/Chicago``.
+
+    The operator agreed a local time, so that is the one they can find on the
+    calendar; UTC alone sent them looking on the wrong day.
+    """
+    try:
+        local = meeting.starts_at.astimezone(ZoneInfo(meeting.timezone))
+    except (ZoneInfoNotFoundError, ValueError):
+        return f"{meeting.starts_at:%Y-%m-%d %H:%M} UTC"
+    return f"{local:%Y-%m-%d %H:%M} {meeting.timezone}"
+
+
 class ScheduledMeetingSerializer(serializers.ModelSerializer):
     """An onboarding meeting (D-01).
 
@@ -671,10 +686,28 @@ class ScheduledMeetingSerializer(serializers.ModelSerializer):
         # The message names the remedy because the model's own comment says
         # rescheduling is the supported path: a cancelled predecessor is left
         # behind deliberately so history survives.
+        #
+        # Only a meeting that has not yet ended blocks. One whose window has
+        # passed already happened; `perform_create` marks it COMPLETED in the
+        # same transaction as the new booking, which is what frees the
+        # database constraint. Without this filter a past meeting stayed
+        # SCHEDULED forever and blocked its session permanently -- found by
+        # hand, 2026-11-02, on a September meeting that was never cancelled.
+        if (
+            self.instance is not None
+            and self.instance.status == MeetingStatus.COMPLETED
+        ):
+            raise serializers.ValidationError(
+                "This meeting has already taken place and cannot be changed. "
+                "Schedule a new meeting instead."
+            )
+
         session = attrs.get("session", getattr(self.instance, "session", None))
         if session is not None:
             clash = ScheduledMeeting.objects.filter(
-                session=session, status=MeetingStatus.SCHEDULED
+                session=session,
+                status=MeetingStatus.SCHEDULED,
+                ends_at__gt=dj_timezone.now(),
             )
             if self.instance is not None:
                 clash = clash.exclude(pk=self.instance.pk)
@@ -684,7 +717,8 @@ class ScheduledMeetingSerializer(serializers.ModelSerializer):
                     {
                         "session": (
                             "This session already has a meeting scheduled for "
-                            f"{existing.starts_at:%Y-%m-%d %H:%M} UTC. "
+                            f"{_local_time(existing)} "
+                            f"({existing.starts_at:%Y-%m-%d %H:%M} UTC). "
                             "Reschedule that meeting instead, or cancel it "
                             "before booking another."
                         )

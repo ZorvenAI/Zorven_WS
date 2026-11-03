@@ -344,7 +344,14 @@ export default function CalendarPane({ now }: CalendarPaneProps) {
                         from Google Calendar
                       </p>
                     )}
-                    {canEdit && meeting.editable && (
+                    {meeting.status === 'COMPLETED' && (
+                      // It happened. The server refuses to cancel or move it,
+                      // so offering either would only produce an error.
+                      <p className="truncate text-[10px] text-brand-silver">
+                        Completed
+                      </p>
+                    )}
+                    {canEdit && meeting.editable && meeting.status === 'SCHEDULED' && (
                       <button
                         type="button"
                         onClick={(e) => {

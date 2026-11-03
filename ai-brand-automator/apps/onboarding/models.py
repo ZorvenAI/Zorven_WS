@@ -987,6 +987,12 @@ def depth_from(value: object) -> int:
 class MeetingStatus(models.TextChoices):
     SCHEDULED = "SCHEDULED", "Scheduled"
     CANCELLED = "CANCELLED", "Cancelled"
+    #: The meeting's window has passed. Set when the session is booked again
+    #: (see ``ScheduledMeetingViewSet.perform_create``), so a meeting that
+    #: already happened stops occupying the session's one live slot — before
+    #: this, a past meeting stayed SCHEDULED forever and blocked every new
+    #: booking on its session.
+    COMPLETED = "COMPLETED", "Completed"
 
 
 class MeetingOrigin(models.TextChoices):

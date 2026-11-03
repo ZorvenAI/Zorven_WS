@@ -325,6 +325,38 @@ def test_a_meeting_cancelled_before_it_was_pushed_is_left_alone(
     assert writes(calendar, "insert") == []
 
 
+def test_a_completed_meeting_that_was_never_pushed_is_not_inserted(
+    connection, tenant, session, organiser, calendar
+):
+    """PR #693 review: `needs_push` is true for a never-synced row, so without
+    an explicit exclusion the sweep would create an event for a meeting that
+    already happened."""
+    a_meeting(tenant, session, organiser, status=MeetingStatus.COMPLETED)
+
+    sync.pull_connection(connection)
+
+    assert calendar.events == {}
+    assert writes(calendar, "insert") == []
+
+
+def test_a_completed_meeting_edited_after_its_push_is_not_patched(
+    connection, tenant, session, organiser, calendar
+):
+    """And a dirty one -- edited after its last push -- is not patched: the
+    Google event stays as it was when the meeting took place."""
+    meeting = a_meeting(tenant, session, organiser)
+    sync.pull_connection(connection)
+
+    meeting.title = "Renamed after the fact"
+    meeting.status = MeetingStatus.COMPLETED
+    meeting.save()
+    sync.pull_connection(connection)
+
+    assert writes(calendar, "patch") == []
+    assert writes(calendar, "delete") == []
+    assert next(iter(calendar.events.values()))["summary"] == "Onboarding call"
+
+
 def test_an_external_meeting_is_never_pushed(connection, tenant, calendar):
     """Mirrors are not ours to write back. Pushing one would create a second
     copy of the operator's own appointment in their own calendar."""

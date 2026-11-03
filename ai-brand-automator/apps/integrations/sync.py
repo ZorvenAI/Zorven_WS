@@ -430,7 +430,10 @@ def _resurrect(meeting: ScheduledMeeting, event_id: str, counts: dict) -> None:
     the deletion is recorded rather than quietly undone, because somebody
     meant it and will want to know why it did not stick.
     """
-    if meeting.status == MeetingStatus.CANCELLED:
+    # A meeting that already took place is history: if its event is later
+    # deleted in Google, recreating it would put a past meeting back on
+    # somebody's calendar for no reason.
+    if meeting.status in (MeetingStatus.CANCELLED, MeetingStatus.COMPLETED):
         counts["skipped"] += 1
         return
 
@@ -513,9 +516,18 @@ def push_connection(connection: CalendarConnection, access_token: str) -> dict:
     """
     counts = {"inserted": 0, "patched": 0, "deleted": 0, "failed": 0}
 
-    candidates = ScheduledMeeting.objects.filter(
-        tenant=connection.tenant, origin=MeetingOrigin.APP
-    ).select_related("organiser")
+    # A meeting that already took place is never pushed, whatever its sync
+    # marker says. `needs_push` alone would still pick one up if it was edited
+    # after its last push or never pushed at all, and then insert or patch an
+    # event in the past on somebody's calendar. Its Google event, if any, is
+    # left exactly as it was when the meeting happened.
+    candidates = (
+        ScheduledMeeting.objects.filter(
+            tenant=connection.tenant, origin=MeetingOrigin.APP
+        )
+        .exclude(status=MeetingStatus.COMPLETED)
+        .select_related("organiser")
+    )
 
     for meeting in candidates:
         if not needs_push(meeting):

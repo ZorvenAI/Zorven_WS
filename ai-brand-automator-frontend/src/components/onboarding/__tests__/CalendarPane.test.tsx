@@ -298,3 +298,19 @@ describe('external calendar entries (D-03)', () => {
     expect(screen.getAllByRole('button', { name: /cancel/i })).toHaveLength(1);
   });
 });
+
+describe('completed meetings', () => {
+  it('shows a meeting that already took place, without a way to cancel it', async () => {
+    asRole('admin');
+    mockedMeetings.mockResolvedValue([{ ...MEETING, status: 'COMPLETED' }]);
+
+    render(<CalendarPane now={NOW} />);
+
+    // Still on the calendar -- it is history, not an absence.
+    expect(await screen.findByText(/Kickoff/)).toBeInTheDocument();
+    expect(screen.getByText('Completed')).toBeInTheDocument();
+    // The server refuses to cancel it (409); offering the button would only
+    // produce an error.
+    expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
+  });
+});
