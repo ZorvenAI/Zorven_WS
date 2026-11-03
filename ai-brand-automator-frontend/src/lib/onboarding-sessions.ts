@@ -94,7 +94,7 @@ export interface QuestionnaireDetail {
   coverage: Record<WorkflowTarget, number>;
 }
 
-export type MeetingStatus = 'SCHEDULED' | 'CANCELLED';
+export type MeetingStatus = 'SCHEDULED' | 'CANCELLED' | 'COMPLETED';
 
 export type MeetingOrigin = 'APP' | 'GOOGLE';
 

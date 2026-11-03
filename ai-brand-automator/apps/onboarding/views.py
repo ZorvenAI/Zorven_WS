@@ -2733,14 +2733,33 @@ class ScheduledMeetingViewSet(
             )
 
     def perform_create(self, serializer):
-        serializer.save(
-            tenant=getattr(self.request, "tenant", None),
-            organiser=self.request.user,
-            # Set here, never taken from the client. A caller that could post
-            # origin=GOOGLE would mint a meeting nobody can subsequently edit,
-            # and one the sync loop believes Google owns.
-            origin=MeetingOrigin.APP,
-        )
+        with db_transaction.atomic():
+            # A meeting on this session whose window has already passed
+            # happened; it is no longer the session's live booking. Marking
+            # it COMPLETED is what lets the new row past
+            # `one_scheduled_meeting_per_session`, and doing it in the same
+            # transaction means a failed insert leaves the old one untouched.
+            #
+            # `update()` rather than `save()`: it leaves `updated_at` alone,
+            # so the D-03 push sweep does not see the past meeting as edited
+            # and re-patch an event that already took place.
+            session = serializer.validated_data.get("session")
+            if session is not None:
+                ScheduledMeeting.objects.filter(
+                    session=session,
+                    status=MeetingStatus.SCHEDULED,
+                    ends_at__lte=timezone.now(),
+                ).update(status=MeetingStatus.COMPLETED)
+
+            serializer.save(
+                tenant=getattr(self.request, "tenant", None),
+                organiser=self.request.user,
+                # Set here, never taken from the client. A caller that could
+                # post origin=GOOGLE would mint a meeting nobody can
+                # subsequently edit, and one the sync loop believes Google
+                # owns.
+                origin=MeetingOrigin.APP,
+            )
 
     @action(detail=True, methods=["post"])
     def cancel(self, request, pk=None):
@@ -2769,6 +2788,11 @@ class ScheduledMeetingViewSet(
             if meeting.status == MeetingStatus.CANCELLED:
                 return Response(
                     {"error": "This meeting is already cancelled."},
+                    status=http.HTTP_409_CONFLICT,
+                )
+            if meeting.status == MeetingStatus.COMPLETED:
+                return Response(
+                    {"error": "This meeting has already taken place."},
                     status=http.HTTP_409_CONFLICT,
                 )
 

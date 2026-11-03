@@ -430,7 +430,10 @@ def _resurrect(meeting: ScheduledMeeting, event_id: str, counts: dict) -> None:
     the deletion is recorded rather than quietly undone, because somebody
     meant it and will want to know why it did not stick.
     """
-    if meeting.status == MeetingStatus.CANCELLED:
+    # A meeting that already took place is history: if its event is later
+    # deleted in Google, recreating it would put a past meeting back on
+    # somebody's calendar for no reason.
+    if meeting.status in (MeetingStatus.CANCELLED, MeetingStatus.COMPLETED):
         counts["skipped"] += 1
         return
 
