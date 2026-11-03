@@ -41,6 +41,8 @@ onboarding-intelligence-agent-svc/ # port 8120 (STT + OCR + Gemini)
 vendor/odoo/community/           # Git submodule — Odoo CE 19.0
 deployment/                      # Docker Compose, Kong, GCP (has its own CLAUDE.md)
 tests/integration/               # Cross-service integration tests (3 phases)
+scripts/                         # One-off tooling (skill YAML validation, e2e scripts, prompt seeding)
+spike-stt-v2/, spike-ws-gateway/ # Throwaway OIA spikes — not deployed, not in CI
 ```
 
 Each microservice has its own `CLAUDE.md` — read it before modifying that service.
@@ -62,8 +64,9 @@ pytest -m unit                               # Unit tests only
 pytest -m property                           # Hypothesis property tests
 pytest --cov=. --cov-report=term-missing     # With coverage
 
-black .                                      # Format (must pass before committing)
+black .                                      # Format (must pass before committing) — black==23.12.1, see below
 flake8 .                                     # Lint (must pass before committing)
+pytest -m "not property"                     # What CI runs (property tests run in a separate job)
 
 # Migrations (NEVER use plain `migrate`)
 python manage.py makemigrations
@@ -80,8 +83,12 @@ python manage.py cache_health                # Redis cache health check
 # Celery (6 queues: celery, high_priority, low_priority, orchestration, ingestion, curation)
 celery -A brand_automator worker -l info
 celery -A brand_automator worker -Q orchestration -l info
-celery -A brand_automator beat -l info       # 60s: publish_scheduled_posts, 5m: check_stale_jobs, 02:00 UTC: reconcile_rollups
+celery -A brand_automator beat -l info       # Schedule: CELERY_BEAT_SCHEDULE in settings.py (DatabaseScheduler)
 ```
+
+Beat jobs: `publish_scheduled_posts` (60s), `check_stale_jobs` (5m), `sync_calendars` (3m), `refresh_calendar_tokens` (1h), `reconcile_rollups_task` (02:00 UTC). Kafka consumer tasks are only registered when `KAFKA_CONSUMERS_ENABLED=true`.
+
+**Two Black versions.** The backend pins `black==23.12.1`; the microservices require `black>=24`. They format differently, so running the wrong one produces spurious diffs and fails CI's `black --check`. Use the version pinned in the requirements file of the directory you're working in.
 
 ### Frontend (Next.js)
 
@@ -92,6 +99,8 @@ npm run dev          # Dev server on :3000
 npm run build        # Production build (also type checks)
 npm run lint         # ESLint
 npm test             # Jest (60% coverage threshold)
+npm test -- path/to/file.test.tsx   # Single test file
+npm run test:e2e     # Playwright end-to-end
 npx tsc --noEmit     # TypeScript check only
 ```
 
@@ -301,7 +310,7 @@ Use `sanitize_text_input()`, `sanitize_ai_prompt()`, `validate_file_upload()` fr
 
 ### Backend
 - **Env vars**: Always `decouple.config()` with defaults — NEVER `os.environ`
-- **Middleware order**: `CorsMiddleware` MUST be FIRST (before `TenantMainMiddleware`)
+- **Middleware order**: `CorsMiddleware` MUST be FIRST (before `DefaultTenantMiddleware`, which falls back to the public schema)
 - **MIME types**: Always use explicit MIME maps — Docker containers lack `/etc/mime.types`
 - **Encrypted tokens**: OAuth tokens in `_access_token` columns, exposed via `@property` using `encrypt_token()`/`decrypt_token()`
 - **Format**: Black (88 char lines) + Flake8
