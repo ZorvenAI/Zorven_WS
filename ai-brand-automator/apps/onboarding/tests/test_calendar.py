@@ -619,3 +619,94 @@ def test_the_already_cancelled_message_reads_as_a_sentence(
 
     assert message[0].isupper()
     assert message.endswith(".")
+
+
+# ── A duplicate booking is a 400, not a 500 ──────────────────────────
+
+
+def test_a_second_meeting_on_one_session_is_refused_with_a_reason(
+    api_client, tenant, session, editor
+):
+    """Found by hand, 2026-10-31: this was an IntegrityError 500.
+
+    `one_scheduled_meeting_per_session` is a *conditional* UniqueConstraint
+    (`condition=Q(status="SCHEDULED")`), and DRF only derives uniqueness
+    validators for unconditional ones -- so nothing checked it before the
+    database did, and the operator got a Django debug page.
+
+    `test_only_one_scheduled_meeting_per_session` above covers the
+    constraint itself and passed throughout, which is exactly how this
+    survived: the invariant was tested at the model and never through the
+    API that has to explain it to somebody.
+    """
+    a_meeting(session, tenant, starts=datetime(2024, 6, 15, 12, 0, tzinfo=UTC))
+
+    response = api_client.post(
+        EVENTS,
+        {
+            "session": session.pk,
+            "starts_at": "2024-06-20T15:00:00Z",
+            "ends_at": "2024-06-20T16:00:00Z",
+            "timezone": "America/Chicago",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 400, response.content
+    detail = response.json()["session"][0]
+    # The remedy, not just the refusal: rescheduling is the supported path,
+    # and the existing time is what lets the operator find that meeting.
+    assert "already has a meeting scheduled" in detail
+    assert "2024-06-15 12:00" in detail
+    assert "eschedule" in detail
+
+
+def test_a_cancelled_meeting_does_not_block_the_api(
+    api_client, tenant, session, editor
+):
+    """The guard must follow the constraint's condition, not ignore it.
+
+    A check written as "any meeting on this session" would pass the test
+    above while breaking the documented reschedule path, which leaves a
+    cancelled predecessor behind on purpose.
+    """
+    a_meeting(
+        session,
+        tenant,
+        starts=datetime(2024, 6, 15, 12, 0, tzinfo=UTC),
+        status=MeetingStatus.CANCELLED,
+    )
+
+    response = api_client.post(
+        EVENTS,
+        {
+            "session": session.pk,
+            "starts_at": "2024-06-20T15:00:00Z",
+            "ends_at": "2024-06-20T16:00:00Z",
+            "timezone": "America/Chicago",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201, response.content
+
+
+def test_rescheduling_the_existing_meeting_is_still_allowed(
+    api_client, tenant, session, editor
+):
+    """The guard must exclude the instance being updated.
+
+    Otherwise a meeting would collide with itself and rescheduling -- the
+    remedy the error message recommends -- would be impossible.
+    """
+    meeting = a_meeting(
+        session, tenant, starts=datetime(2024, 6, 15, 12, 0, tzinfo=UTC)
+    )
+
+    response = api_client.patch(
+        f"{EVENTS}{meeting.pk}/",
+        {"starts_at": "2024-06-16T12:00:00Z", "ends_at": "2024-06-16T13:00:00Z"},
+        format="json",
+    )
+
+    assert response.status_code == 200, response.content

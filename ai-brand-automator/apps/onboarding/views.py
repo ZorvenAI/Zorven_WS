@@ -2703,6 +2703,35 @@ class ScheduledMeetingViewSet(
             queryset = queryset.filter(**{lookup: parsed})
         return queryset
 
+    def create(self, request, *args, **kwargs):
+        """Create, converting the one-per-session clash into a 409.
+
+        The serializer rejects a session that already has a scheduled
+        meeting, with a 400 naming the remedy. This closes the narrow race
+        that check cannot: two requests can both pass validation before
+        either inserts, and the loser reaches the database.
+
+        Without this the loser got an IntegrityError 500. A 409 is the
+        honest answer -- someone booked first, which is a different fact
+        from "your request was malformed" -- and it tells the client to
+        re-read rather than treat the response as a bug.
+        """
+        try:
+            return super().create(request, *args, **kwargs)
+        except IntegrityError as exc:
+            if "one_scheduled_meeting_per_session" not in str(exc):
+                raise
+            return Response(
+                {
+                    "session": [
+                        "This session was given a scheduled meeting while "
+                        "this request was in flight. Reload and reschedule "
+                        "the existing meeting instead."
+                    ]
+                },
+                status=http.HTTP_409_CONFLICT,
+            )
+
     def perform_create(self, serializer):
         serializer.save(
             tenant=getattr(self.request, "tenant", None),

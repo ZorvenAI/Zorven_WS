@@ -25,6 +25,7 @@ from apps.onboarding.models import (
     Questionnaire,
     ResearchBrief,
     MeetingOrigin,
+    MeetingStatus,
     ScheduledMeeting,
     WorkflowTarget,
     tenant_scope_q,
@@ -654,6 +655,38 @@ class ScheduledMeetingSerializer(serializers.ModelSerializer):
                         "session": (
                             "A meeting cannot be moved to another session. "
                             "Cancel it and schedule a new one."
+                        )
+                    }
+                )
+
+        # One live meeting per session, reported as a 400 rather than a 500.
+        #
+        # `one_scheduled_meeting_per_session` is a *conditional*
+        # UniqueConstraint (`condition=Q(status="SCHEDULED")`), and DRF only
+        # auto-generates uniqueness validators for unconditional ones. So
+        # nothing checked this before the database did, and scheduling a
+        # second meeting returned an IntegrityError 500 with a debug page
+        # instead of telling the operator what was wrong.
+        #
+        # The message names the remedy because the model's own comment says
+        # rescheduling is the supported path: a cancelled predecessor is left
+        # behind deliberately so history survives.
+        session = attrs.get("session", getattr(self.instance, "session", None))
+        if session is not None:
+            clash = ScheduledMeeting.objects.filter(
+                session=session, status=MeetingStatus.SCHEDULED
+            )
+            if self.instance is not None:
+                clash = clash.exclude(pk=self.instance.pk)
+            existing = clash.first()
+            if existing is not None:
+                raise serializers.ValidationError(
+                    {
+                        "session": (
+                            "This session already has a meeting scheduled for "
+                            f"{existing.starts_at:%Y-%m-%d %H:%M} UTC. "
+                            "Reschedule that meeting instead, or cancel it "
+                            "before booking another."
                         )
                     }
                 )
