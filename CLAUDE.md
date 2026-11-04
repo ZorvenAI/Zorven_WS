@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building. Django REST Framework backend + Next.js 15 frontend + 27 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini (default `gemini-3.5-flash`, set in `ai_services/services.py`) and Anthropic Claude.
+AI Brand Automator is a **multi-tenant SaaS platform** for AI-powered brand building, live at **zorven.ai** (GCP Cloud Run, project `zorven-503517` / `us-central1`). Django REST Framework backend + Next.js 15 frontend + 27 Python FastAPI microservices, connected via Kafka event streaming and HTTP callbacks. AI powered by Google Gemini (default `gemini-3.5-flash`, set in `ai_services/services.py`) and Anthropic Claude.
+
+**Social platform integrations** (all 5 complete): LinkedIn, Twitter/X, Facebook, Instagram, Google Business Profile — each with full OAuth, posting, scheduling, media upload, and analytics. Stripe subscriptions: Basic $29 / Pro $79 / Enterprise $199.
 
 ## Monorepo Layout
 
@@ -137,6 +139,8 @@ docker compose down -v                                        # Tear down
 
 See `deployment/CLAUDE.md` for profiles, port mapping, and CI/CD details.
 
+**Frontend Docker build** requires `output: "standalone"` in `next.config.ts` — without it the `COPY --from=builder /app/.next/standalone` step fails.
+
 ## Architecture
 
 ### Request Flow
@@ -264,6 +268,26 @@ def api_client():
     return client
 ```
 
+### DRF ViewSet Conventions
+
+```python
+class MyViewSet(viewsets.ModelViewSet):
+    def get_queryset(self):
+        tenant = getattr(self.request, 'tenant', None)
+        qs = Model.objects.select_related('company', 'tenant')  # Always select_related on FKs
+        if tenant:
+            return qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+        return qs.filter(tenant__isnull=True)
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return ModelListSerializer          # Action-specific serializers
+        return ModelDetailSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(tenant=getattr(self.request, 'tenant', None))  # Attach tenant on create
+```
+
 ### Orchestration Callbacks — Atomic Updates
 
 ```python
@@ -310,7 +334,16 @@ Use `sanitize_text_input()`, `sanitize_ai_prompt()`, `validate_file_upload()` fr
 
 ### Backend
 - **Env vars**: Always `decouple.config()` with defaults — NEVER `os.environ`
-- **Middleware order**: `CorsMiddleware` MUST be FIRST (before `DefaultTenantMiddleware`, which falls back to the public schema)
+- **Middleware order** (positional — do not reorder):
+  1. `CorsMiddleware` (MUST be first)
+  2. `DefaultTenantMiddleware` (falls back to public schema)
+  3. `SecurityMiddleware`
+  4. `WhiteNoiseMiddleware`
+  5. …standard Django…
+  6. `KongAuthenticationMiddleware` (after `AuthenticationMiddleware`)
+  7. `SecurityMiddleware` (custom)
+  8. `RequestValidationMiddleware`
+  9. `RateLimitMiddleware`
 - **MIME types**: Always use explicit MIME maps — Docker containers lack `/etc/mime.types`
 - **Encrypted tokens**: OAuth tokens in `_access_token` columns, exposed via `@property` using `encrypt_token()`/`decrypt_token()`
 - **Format**: Black (88 char lines) + Flake8
@@ -374,6 +407,12 @@ NEXT_PUBLIC_BRAND_EQUITY_API_URL=http://localhost:8090
 
 Production domain: `zorven.ai` → frontend, `api.zorven.ai` → backend. Domain mapping is hardcoded in `src/lib/env.ts`, not via env var.
 
+## Redis Database Allocation
+
+DB 0: Django/Celery, DB 1: Orchestrator, DB 2: Discovery + Prompt Cache + OIA (`oia:v1:` prefix), DB 3: Intelligence, DB 4: Titling, DB 5: Content, DB 6: Social, DB 7: RAG Uploader, DB 8: Brand Equity, DB 9: Odoo MCP, DB 10: Odoo Worker, DB 11–15: Market Research/Competitor/Audience/Trend/VoC, DB 16–26: WF2/WF3/WF3.5/POI services.
+
+Requires `databases 27` in redis.conf. **GCP Memorystore** is capped at 16 databases — services ≥ DB 16 map onto **DB 2** with distinct key prefixes (`bpa:`, `baa:`, `bpv:`, `nta:`, `bsa:`, `caa:`, `cga:`, `adpub:`, `coa:`, `ila:`, `poi:`/`prompt:`). Do not reintroduce indices ≥ 16 in GCP deploy scripts.
+
 ## Do Not Modify
 
 - `LICENSE`, `docs/LICENSE.md`, `credentials/`, `db.sqlite3` — proprietary, all rights reserved
@@ -388,7 +427,9 @@ Production domain: `zorven.ai` → frontend, `api.zorven.ai` → backend. Domain
 - `automation/encryption.py` — changes break existing encrypted OAuth tokens
 - `conftest.py` — only add fixtures, never remove
 
-## Commit Messages
+## Git Workflow
+
+Two-tier branching: feature branch → PR into `development_main` (dev tier) → PR/sync merge into `main` (production). CI runs on pushes/PRs to `main`, `develop`, `development_main`, and `bugfixes/**`.
 
 Conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`
 
