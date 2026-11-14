@@ -38,10 +38,17 @@ OVERLAP_S = 5.0
 class STTUnavailable(Exception):
     """Speech-to-text could not be performed. Carries the operator-facing reason."""
 
-    def __init__(self, reason: str, *, degraded_mode: str = "RECORD_ONLY") -> None:
+    def __init__(
+        self,
+        reason: str,
+        *,
+        degraded_mode: str = "RECORD_ONLY",
+        resync: bool = False,
+    ) -> None:
         super().__init__(reason)
         self.reason = reason
         self.degraded_mode = degraded_mode
+        self.resync = resync
 
 
 @dataclass
@@ -186,6 +193,12 @@ class GoogleSTTAdapter(STTAdapter):
                 "Live transcription interrupted. Recording continues."
             ) from exc
 
+    @staticmethod
+    def _is_container_codec(codec: str) -> bool:
+        """Container formats (WebM, OGG) cannot be split mid-stream."""
+        normalized = codec.lower()
+        return "webm" in normalized or "ogg" in normalized
+
     async def _stream_with_rollover(
         self,
         audio: AsyncIterator[bytes],
@@ -212,10 +225,14 @@ class GoogleSTTAdapter(STTAdapter):
             ),
         )
 
+        container = self._is_container_codec(codec)
+
         result_q: asyncio.Queue[STTResult | Exception | None] = asyncio.Queue()
         seen: set[tuple[float, str]] = set()
         current_feed: asyncio.Queue[bytes | None] = asyncio.Queue()
         stream_start = time.monotonic()
+        session_start = time.monotonic()
+        last_result_at = time.monotonic()
 
         task = asyncio.create_task(
             self._stream_worker(current_feed, result_q, config=config, offset_s=0.0)
@@ -231,37 +248,62 @@ class GoogleSTTAdapter(STTAdapter):
                 elapsed = time.monotonic() - stream_start
                 current_feed.put_nowait(chunk)
 
-                if not rolling_over and elapsed >= self._stream_limit_s:
-                    rolling_over = True
-                    overlap_started_at = time.monotonic()
-                    overlap_feed = asyncio.Queue()
-                    overlap_feed.put_nowait(chunk)
-                    overlap_task = asyncio.create_task(
-                        self._stream_worker(
-                            overlap_feed,
-                            result_q,
-                            config=config,
-                            offset_s=elapsed,
-                        )
+                if task.done():
+                    exc = task.exception() if not task.cancelled() else None
+                    if exc:
+                        raise exc
+                    raise STTUnavailable(
+                        "STT stream ended (time limit reached)",
+                        resync=container,
                     )
-                    logger.info("stt_rollover_started", elapsed_s=round(elapsed, 1))
 
-                elif rolling_over and overlap_feed is not None:
-                    overlap_feed.put_nowait(chunk)
-                    if time.monotonic() - overlap_started_at >= OVERLAP_S:
-                        current_feed.put_nowait(None)
-                        await task
-                        assert overlap_task is not None
-                        task = overlap_task
-                        current_feed = overlap_feed
-                        overlap_feed = None
-                        overlap_task = None
-                        rolling_over = False
-                        stream_start = time.monotonic()
-                        logger.info("stt_rollover_completed")
+                if not container:
+                    if not rolling_over and elapsed >= self._stream_limit_s:
+                        rolling_over = True
+                        overlap_started_at = time.monotonic()
+                        overlap_feed = asyncio.Queue()
+                        overlap_feed.put_nowait(chunk)
+                        overlap_task = asyncio.create_task(
+                            self._stream_worker(
+                                overlap_feed,
+                                result_q,
+                                config=config,
+                                offset_s=elapsed,
+                            )
+                        )
+                        logger.info(
+                            "stt_rollover_started",
+                            elapsed_s=round(elapsed, 1),
+                        )
 
+                    elif rolling_over and overlap_feed is not None:
+                        overlap_feed.put_nowait(chunk)
+                        if time.monotonic() - overlap_started_at >= OVERLAP_S:
+                            current_feed.put_nowait(None)
+                            await task
+                            assert overlap_task is not None
+                            task = overlap_task
+                            current_feed = overlap_feed
+                            overlap_feed = None
+                            overlap_task = None
+                            rolling_over = False
+                            stream_start = time.monotonic()
+                            logger.info("stt_rollover_completed")
+
+                drained = False
                 async for r in self._drain_q(result_q, seen):
+                    drained = True
+                    last_result_at = time.monotonic()
                     yield r
+
+                if not drained and time.monotonic() - last_result_at > 30.0:
+                    logger.warning(
+                        "stt_stream_stale",
+                        seconds_since_result=round(
+                            time.monotonic() - last_result_at, 1
+                        ),
+                    )
+                    raise STTUnavailable("STT stream stale — no results for 30 s")
 
             current_feed.put_nowait(None)
             if overlap_feed is not None:

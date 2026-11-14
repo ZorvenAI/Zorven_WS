@@ -14,7 +14,7 @@
  * server-side too.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { CloudOff, Mic, Square, UploadCloud } from 'lucide-react';
 
 import {
@@ -46,6 +46,8 @@ export interface RecorderControlProps {
   sendControl?: (frame: Record<string, unknown>) => void;
   /** O-01: mic assignments from MicSetup. When present, multi-mic recording is used. */
   micAssignments?: MicAssignment[];
+  /** Server requested a fresh audio container (STT stream limit). Parent stores a ref. */
+  onResyncRef?: MutableRefObject<(() => void) | null>;
   /** Injected in tests; the hook is the default. */
   recorder?: UseMeetingRecorder;
   /** Injected in tests; the hook is the default. */
@@ -67,6 +69,7 @@ export default function RecorderControl({
   sendBinary,
   sendControl,
   micAssignments = [],
+  onResyncRef,
   recorder,
   uploader: injectedUploader,
 }: RecorderControlProps) {
@@ -85,7 +88,7 @@ export default function RecorderControl({
   const multiMic = useMultiMicRecorder(multiDevices);
   const live: UseMeetingRecorder | UseMultiMicRecorder = recorder ?? (useMulti ? multiMic : singleMic);
 
-  const { state, error, elapsedSeconds, chunksRef, chunkCount, start, stop } = live;
+  const { state, error, elapsedSeconds, chunksRef, chunkCount, start, stop, restartAudio } = live as UseMeetingRecorder;
   const recording = state === 'recording';
   const busy = state === 'requesting' || state === 'stopping';
 
@@ -186,6 +189,31 @@ export default function RecorderControl({
   useEffect(() => {
     endRef.current = end;
   }, [end]);
+
+  useEffect(() => {
+    if (!onResyncRef) return;
+    onResyncRef.current = () => {
+      if (!recording || !restartAudio) return;
+      restartAudio();
+      if (sendControl && recordingId) {
+        const frame: Record<string, unknown> = {
+          type: 'start',
+          recording_id: recordingId,
+          codec: 'audio/webm;codecs=opus',
+          sample_rate: SAMPLE_RATE,
+        };
+        if (micAssignments.length > 0) {
+          frame.streams = micAssignments.map((a) => ({
+            stream_index: a.streamIndex,
+            speaker_name: a.label,
+            speaker_role: a.role,
+          }));
+        }
+        sendControl(frame);
+      }
+    };
+    return () => { onResyncRef.current = null; };
+  }, [onResyncRef, recording, restartAudio, sendControl, recordingId, micAssignments]);
 
   if (!consentGranted) {
     return (

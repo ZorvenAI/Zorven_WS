@@ -657,6 +657,12 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 status=http.HTTP_403_FORBIDDEN,
             )
 
+        MeetingRecording.objects.filter(
+            session=session,
+            status=RecordingStatus.RECORDING,
+            stopped_at__isnull=True,
+        ).update(status=RecordingStatus.FAILED)
+
         recording = MeetingRecording.objects.create(
             session=session,
             tenant=session.tenant,

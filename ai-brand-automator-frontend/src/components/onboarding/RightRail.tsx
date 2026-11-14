@@ -8,6 +8,7 @@
  * long media list cannot push the capture controls off screen (FR-LIVE-02).
  */
 
+import type { MutableRefObject } from 'react';
 import { Settings2 } from 'lucide-react';
 
 import RecorderControl from '@/components/onboarding/RecorderControl';
@@ -42,6 +43,8 @@ export interface RightRailProps {
   micAssignments?: MicAssignment[];
   /** O-01: opens the mic setup modal (lifted to MeetingView). */
   onOpenMicSetup?: () => void;
+  /** STT resync: ref populated by RecorderControl, called by MeetingView on resync frame. */
+  onResyncRef?: MutableRefObject<(() => void) | null>;
 }
 
 export default function RightRail({
@@ -57,6 +60,7 @@ export default function RightRail({
   sendControl,
   micAssignments = [],
   onOpenMicSetup,
+  onResyncRef,
 }: RightRailProps) {
   return (
     <aside
@@ -105,6 +109,7 @@ export default function RightRail({
           sendBinary={sendBinary}
           sendControl={sendControl}
           micAssignments={micAssignments}
+          onResyncRef={onResyncRef}
         />
 
         <CaptureControl

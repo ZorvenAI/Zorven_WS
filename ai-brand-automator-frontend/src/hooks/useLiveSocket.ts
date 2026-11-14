@@ -154,16 +154,15 @@ export function useLiveSocket({
   }, []);
 
   useEffect(() => {
+    console.log('[useLiveSocket] effect run', { sessionId, enabled });
     if (!sessionId || !enabled) {
       return;
     }
 
-    // Cancel any deferred close from a prior strict-mode cleanup so we can
-    // reuse the existing WebSocket instead of tearing it down and fighting
-    // the Redis live lock on reconnect.
     if (deferredCloseRef.current) {
       clearTimeout(deferredCloseRef.current);
       deferredCloseRef.current = null;
+      console.log('[useLiveSocket] cancelled deferred close');
     }
 
     let cancelled = false;
@@ -193,10 +192,6 @@ export function useLiveSocket({
 
     const handleClose = () => {
       wsRef.current = null;
-      // Cancel the stability window: this socket did not survive it, and a
-      // timer left running would forgive the retry budget on a connection that
-      // has already died — which is how a flapping socket never reaches
-      // 'closed'.
       clearTimeout(stableTimer);
       if (cancelled) {
         setStatus('closed');
@@ -204,10 +199,6 @@ export function useLiveSocket({
       }
       if (retriesRef.current < MAX_RECONNECT_ATTEMPTS) {
         retriesRef.current += 1;
-        // Not 'connecting': this socket was open and dropped, which stops
-        // transcription until a fresh `start` frame is sent. The recorder and
-        // the GCS upload are unaffected, so nothing else about the screen
-        // changes — which is exactly why this state has to be visible.
         setStatus('reconnecting');
         reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
       } else {
@@ -216,11 +207,8 @@ export function useLiveSocket({
     };
 
     const connect = async () => {
+      console.log('[useLiveSocket] connect() called', { cancelled, retry: retriesRef.current, manual: manualRetryRef.current });
       if (cancelled) return;
-      // Only the first attempt is 'connecting'. A retry keeps 'reconnecting',
-      // or the warning would vanish 3 s in and stay hidden for the rest of a
-      // slow attempt — the ticket POST has no timeout and the handshake can
-      // hang for tens of seconds, which is exactly when it matters.
       if (retriesRef.current === 0 && !manualRetryRef.current) {
         setStatus('connecting');
       }
@@ -231,24 +219,28 @@ export function useLiveSocket({
           `${BASE}/sessions/${sessionId}/live-ticket/`,
           {},
         );
+        console.log('[useLiveSocket] ticket response', { status: response.status, ok: response.ok, cancelled });
         if (!response.ok) {
           setStatus('closed');
           return;
         }
         const data = await response.json();
         ticket = data.ticket;
-      } catch {
+      } catch (err) {
+        console.error('[useLiveSocket] ticket POST failed', err);
         setStatus('closed');
         return;
       }
 
-      if (cancelled) return;
+      if (cancelled) { console.log('[useLiveSocket] cancelled after ticket POST'); return; }
 
       const url = getOiaWsUrl(sessionId, ticket);
+      console.log('[useLiveSocket] opening WebSocket', { url: url.substring(0, 80) });
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
       ws.onopen = () => {
+        console.log('[useLiveSocket] ws.onopen', { cancelled, readyState: ws.readyState });
         if (cancelled) {
           ws.close();
           return;
@@ -281,8 +273,8 @@ export function useLiveSocket({
       };
 
       ws.onmessage = handleMessage;
-      ws.onclose = handleClose;
-      ws.onerror = () => {};
+      ws.onclose = (ev) => { console.log('[useLiveSocket] ws.onclose', { code: ev.code, reason: ev.reason, wasClean: ev.wasClean }); handleClose(); };
+      ws.onerror = (ev) => { console.error('[useLiveSocket] ws.onerror', ev); };
     };
 
     // If the prior mount left a still-usable WebSocket (strict mode), reuse it.
@@ -305,12 +297,12 @@ export function useLiveSocket({
     }
 
     return () => {
+      console.log('[useLiveSocket] cleanup', { wsExists: !!wsRef.current, wsState: wsRef.current?.readyState });
       cancelled = true;
       clearTimeout(reconnectTimer);
       clearTimeout(stableTimer);
-      // Defer the close so a strict-mode remount can cancel it and reuse
-      // the connection. A real unmount lets the timer fire after 200 ms.
       deferredCloseRef.current = setTimeout(() => {
+        console.log('[useLiveSocket] deferred close fired');
         const ws = wsRef.current;
         if (ws) {
           ws.onclose = null;

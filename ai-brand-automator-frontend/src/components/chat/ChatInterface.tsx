@@ -44,7 +44,11 @@ const WELCOME_MESSAGE: Message = {
   timestamp: new Date(),
 };
 
-export function ChatInterface() {
+export interface ChatInterfaceProps {
+  defaultSidebarOpen?: boolean;
+}
+
+export function ChatInterface({ defaultSidebarOpen = true }: ChatInterfaceProps) {
   const { canEdit: canEditFlag } = useTenantRole();
   const { activeBrand, refreshBrands } = useBrandContext();
   const [hasMounted, setHasMounted] = useState(false);
@@ -60,7 +64,7 @@ export function ChatInterface() {
   // SSR/hydration issues where the server returns null and React reuses it.
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionPk, setSessionPk] = useState<number | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(defaultSidebarOpen);
   const [sidebarRefreshKey, setSidebarRefreshKey] = useState(0);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [pendingMessage, setPendingMessage] = useState('');

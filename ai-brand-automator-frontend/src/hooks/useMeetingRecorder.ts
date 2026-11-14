@@ -81,6 +81,8 @@ export interface UseMeetingRecorder {
   mimeType: string | null;
   start: () => Promise<void>;
   stop: () => Promise<void>;
+  /** Restart the MediaRecorder on the same stream (fresh container header). */
+  restartAudio: () => void;
 }
 
 /** The first opus type this browser will actually produce, or null. */
@@ -264,5 +266,32 @@ export function useMeetingRecorder(): UseMeetingRecorder {
 
   useEffect(() => teardown, [teardown]);
 
-  return { state, error, elapsedSeconds, chunksRef, chunkCount, mimeType, start, stop };
+  const restartAudio = useCallback(() => {
+    const currentStream = stream.current;
+    if (!currentStream || state !== 'recording') return;
+
+    const media = recorder.current;
+    if (media && media.state !== 'inactive') {
+      media.onstop = null;
+      media.stop();
+    }
+
+    const type = mimeType ?? supportedOpusMimeType();
+    if (!type) return;
+
+    const newMedia = new MediaRecorder(currentStream, { mimeType: type });
+    recorder.current = newMedia;
+
+    newMedia.ondataavailable = (event: BlobEvent) => {
+      if (!event.data || event.data.size === 0) return;
+      const index = nextIndex.current;
+      nextIndex.current += 1;
+      chunksRef.current.push({ blob: event.data, index });
+      setChunkCount((n) => n + 1);
+    };
+
+    newMedia.start(TIMESLICE_MS);
+  }, [state, mimeType]);
+
+  return { state, error, elapsedSeconds, chunksRef, chunkCount, mimeType, start, stop, restartAudio };
 }

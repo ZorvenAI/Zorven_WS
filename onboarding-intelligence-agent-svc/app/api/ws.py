@@ -370,20 +370,30 @@ async def _stt_loop(
 
                 record_stt_partial_latency((_time.perf_counter() - _partial_t0) * 1000)
     except STTUnavailable as exc:
-        logger.warning("stt_unavailable", reason=exc.reason, mode=exc.degraded_mode)
-        await session.set_mode(LiveSessionManager.MODE_RECORD_ONLY)
-        await _send_error_frame(websocket, session, exc.reason)
-        recovery = asyncio.create_task(
-            _stt_recovery_task(
-                websocket,
-                session,
-                stt,
-                codec=codec,
-                sample_rate=sample_rate,
-                stt_state=stt_state,
+        if exc.resync:
+            # Container codec (WebM/Opus) hit the Google STT stream limit.
+            # Ask the frontend to restart its MediaRecorder so the next
+            # `start` frame creates a fresh STT session with a valid header.
+            logger.info("stt_resync_requested", reason=exc.reason)
+            try:
+                await websocket.send_json({"type": "resync"})
+            except Exception:  # noqa: BLE001 - socket may be closing
+                pass
+        else:
+            logger.warning("stt_unavailable", reason=exc.reason, mode=exc.degraded_mode)
+            await session.set_mode(LiveSessionManager.MODE_RECORD_ONLY)
+            await _send_error_frame(websocket, session, exc.reason)
+            recovery = asyncio.create_task(
+                _stt_recovery_task(
+                    websocket,
+                    session,
+                    stt,
+                    codec=codec,
+                    sample_rate=sample_rate,
+                    stt_state=stt_state,
+                )
             )
-        )
-        stt_state["recovery_task"] = recovery
+            stt_state["recovery_task"] = recovery
     except WebSocketDisconnect:
         pass
     except Exception as exc:  # noqa: BLE001
@@ -662,8 +672,11 @@ def _spawn_analysis(
     """Fire-and-forget analysis task for a batch (G-02 AC-2).
 
     Runs in a separate asyncio task so the STT pipeline is never blocked.
-    Only one analysis runs at a time — a new batch cancels any in-flight
-    task so orphaned tasks cannot accumulate.
+    Only the SKL-OIA-04 mapping task is cancellable — the sufficiency,
+    follow-up and coverage chain spawned after it completes is NOT tracked
+    here and therefore survives the next batch arriving.  The old design
+    cancelled the entire chain every 3 s, which meant sufficiency and
+    follow-ups almost never completed.
     """
     if analysis_state is None:
         return
@@ -873,28 +886,76 @@ async def _run_analysis(
     if not has_result:
         await session.store_unmapped_batch(batch.segments)
 
-    # G-03: score sufficiency for each question that received new evidence.
+    logger.info(
+        "analysis_complete",
+        session=session.session_id,
+        attachments=len([c for c in chunks if c.get("type") == "attachment"]),
+        adhoc=len([c for c in chunks if c.get("type") == "adhoc_question"]),
+        facts=len([c for c in chunks if c.get("type") == "notable_fact"]),
+        updated_questions=len(updated_questions),
+    )
+
+    # G-03 + G-06: sufficiency, follow-ups and coverage run in a separate
+    # task so they are NOT cancelled when the next batcher window fires.
+    # The mapping task (SKL-OIA-04) above is cancellable — it works on a
+    # single batch and the next batch supersedes it.  The chain below
+    # works on evidence that is already persisted and takes 5-10 s (one LLM
+    # call per updated question), which is longer than the 3 s batcher
+    # window.  Under the old design _spawn_analysis cancelled the whole
+    # task, so sufficiency and follow-ups almost never completed.
     if updated_questions:
-        import time as _time
-
-        _suf_t0 = _time.perf_counter()
-        await _evaluate_sufficiency(
-            websocket,
-            session,
-            registry,
-            events,
-            updated_questions,
-            context.tenant_context,
+        post_task = asyncio.create_task(
+            _tolerating_a_closed_socket(
+                _run_post_analysis(
+                    websocket,
+                    session,
+                    registry,
+                    events,
+                    analysis_state,
+                    updated_questions,
+                    context.tenant_context,
+                ),
+                what="post_analysis",
+                session_id=session.session_id,
+            )
         )
-        from app.metrics import record_sufficiency_latency
+        post_tasks: list[asyncio.Task[None]] = analysis_state.get("post_tasks", [])
+        post_tasks[:] = [t for t in post_tasks if not t.done()]
+        post_tasks.append(post_task)
 
-        record_sufficiency_latency((_time.perf_counter() - _suf_t0) * 1000)
 
-    # G-06: recompute coverage after any evidence change.
-    if updated_questions:
-        await _update_coverage(
-            websocket, session, events, analysis_state, updated_questions
-        )
+async def _run_post_analysis(
+    websocket: WebSocket,
+    session: LiveSessionManager,
+    registry: SkillRegistry,
+    events: Any,
+    analysis_state: dict[str, Any],
+    updated_questions: list[str],
+    tenant_context: TenantContext,
+) -> None:
+    """Sufficiency, follow-ups and coverage — the chain after SKL-OIA-04.
+
+    Runs in its own task so it is not cancelled when the next batcher
+    window fires (the mapping task above IS cancellable).
+    """
+    import time as _time
+
+    _suf_t0 = _time.perf_counter()
+    await _evaluate_sufficiency(
+        websocket,
+        session,
+        registry,
+        events,
+        updated_questions,
+        tenant_context,
+    )
+    from app.metrics import record_sufficiency_latency
+
+    record_sufficiency_latency((_time.perf_counter() - _suf_t0) * 1000)
+
+    await _update_coverage(
+        websocket, session, events, analysis_state, updated_questions
+    )
 
 
 async def _update_coverage(
@@ -1028,7 +1089,7 @@ async def _evaluate_sufficiency(
                     )
             else:
                 await session.update_sufficiency(qid, score, missing)
-                if score > 0.0 and missing:
+                if missing:
                     await _generate_followups(
                         websocket,
                         session,
@@ -1410,8 +1471,37 @@ async def _handle_control(
             logger.info("live_start_malformed")
             return
 
-        if stt_state.get("audio_q") is not None or stt_state.get("stream_queues"):
-            return
+        # Guard: if STT streams are already running, reject the duplicate
+        # start — unless they are all dead (post-resync). In that case tear
+        # down the stale entries so a fresh start can proceed.
+        existing_sq = stt_state.get("stream_queues")
+        existing_aq = stt_state.get("audio_q")
+        if existing_sq or existing_aq is not None:
+            # Check if all stream tasks are actually done (post-resync).
+            all_done = True
+            if existing_sq:
+                existing_tasks: dict[int, asyncio.Task[None]] = stt_state.get(
+                    "stream_tasks", {}
+                )
+                all_done = (
+                    all(t.done() for t in existing_tasks.values())
+                    if existing_tasks
+                    else not existing_sq
+                )
+            elif existing_aq is not None:
+                existing_task = stt_state.get("stt_task")
+                all_done = existing_task is not None and existing_task.done()
+
+            if not all_done:
+                return
+
+            # Stale streams — clean up so the new start can proceed.
+            logger.info("stt_resync_cleanup", had_stream_queues=bool(existing_sq))
+            stt_state["stream_queues"] = None
+            stt_state["stream_tasks"] = None
+            stt_state["stream_map"] = None
+            stt_state["audio_q"] = None
+            stt_state["stt_task"] = None
 
         await _cancel_recovery(stt_state)
 
@@ -1822,6 +1912,7 @@ async def _hold(
         "events": events,
         "breakers": breaker_registry,
         "task": None,
+        "post_tasks": [],
         "degraded_sent": False,
     }
 
@@ -1886,6 +1977,10 @@ async def _hold(
         getattr(websocket.app.state, "live_slow_check_s", 10.0)
     )
     _last_slow_check = 0.0
+    _consent_unreachable_streak = 0
+    _MAX_UNREACHABLE_BEFORE_CLOSE = int(
+        getattr(websocket.app.state, "live_consent_grace", 3)
+    )
 
     try:
         while True:
@@ -1920,10 +2015,21 @@ async def _hold(
                 )
                 refusal = consent_verdict(state)
                 if refusal.blocked:
+                    if not state.reachable:
+                        _consent_unreachable_streak += 1
+                        if _consent_unreachable_streak < _MAX_UNREACHABLE_BEFORE_CLOSE:
+                            logger.warning(
+                                "consent_check_unreachable",
+                                streak=_consent_unreachable_streak,
+                                max=_MAX_UNREACHABLE_BEFORE_CLOSE,
+                                session_id=session_id,
+                            )
+                            continue
                     await websocket.close(
                         code=CLOSE_FORBIDDEN, reason=refusal.detail[:120]
                     )
                     return
+                _consent_unreachable_streak = 0
 
             # G-02: check batcher timer on each poll cycle
             timer_batch = batcher.check_timer()
@@ -1943,6 +2049,22 @@ async def _hold(
             # Binary audio → STT queue(s) (F-05, O-03)
             raw_bytes = message.get("bytes")
             if raw_bytes:
+                _audio_counter = stt_state.get("_audio_counter", 0)
+                _audio_counter += 1
+                stt_state["_audio_counter"] = _audio_counter
+                if _audio_counter <= 5 or _audio_counter % 500 == 0:
+                    logger.info(
+                        "audio_chunk_received",
+                        chunk_num=_audio_counter,
+                        size=len(raw_bytes),
+                        first_bytes=(
+                            raw_bytes[:4].hex()
+                            if len(raw_bytes) >= 4
+                            else raw_bytes.hex()
+                        ),
+                        has_stream_queues=bool(stt_state.get("stream_queues")),
+                        has_audio_q=stt_state.get("audio_q") is not None,
+                    )
                 stream_queues = stt_state.get("stream_queues")
                 if stream_queues:
                     if len(raw_bytes) > 1:
@@ -1950,6 +2072,12 @@ async def _hold(
                         q = stream_queues.get(stream_idx)
                         if q is not None:
                             q.put_nowait(raw_bytes[1:])
+                        elif _audio_counter <= 10:
+                            logger.warning(
+                                "audio_no_queue_for_stream",
+                                stream_idx=stream_idx,
+                                available=list(stream_queues.keys()),
+                            )
                     continue
                 elif stt_state.get("audio_q") is not None:
                     stt_state["audio_q"].put_nowait(raw_bytes)
@@ -2135,6 +2263,19 @@ async def _hold(
                     await analysis_task
                 except (asyncio.CancelledError, Exception):  # noqa: BLE001
                     pass
+
+        post_tasks = [t for t in analysis_state.get("post_tasks", []) if not t.done()]
+        if post_tasks:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*post_tasks, return_exceptions=True),
+                    timeout=get_settings().ANALYSIS_TIMEOUT_S,
+                )
+            except (asyncio.TimeoutError, Exception):  # noqa: BLE001
+                for t in post_tasks:
+                    if not t.done():
+                        t.cancel()
+                await asyncio.gather(*post_tasks, return_exceptions=True)
 
         # L-03: persist prompt versions to Django at LIVE session end.
         if backend is not None and redis_manager is not None:
