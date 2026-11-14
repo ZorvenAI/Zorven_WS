@@ -137,6 +137,7 @@ export default function MeetingView({
 
   const [liveFeedback, setLiveFeedback] = useState<FeedbackItem[]>([]);
   const seqRef = useRef(0);
+  const resyncRef = useRef<(() => void) | null>(null);
 
   const handleFrame = useCallback((frame: ServerFrame) => {
     const id = `ws-${frame.seq ?? ++seqRef.current}`;
@@ -183,11 +184,19 @@ export default function MeetingView({
         }
         break;
       }
-      case 'coverage':
-        if (text) {
-          setLiveFeedback((prev) => [...prev, { id, kind: 'coverage', text, at }]);
+      case 'coverage': {
+        const map = frame.map as Record<string, number> | undefined;
+        if (map && typeof map === 'object') {
+          const parts = Object.entries(map)
+            .map(([wf, pct]) => `${wf}: ${Math.round((pct as number) * 100)}%`)
+            .join(', ');
+          setLiveFeedback((prev) => [
+            ...prev,
+            { id, kind: 'coverage', text: `Coverage — ${parts}`, at },
+          ]);
         }
         break;
+      }
       case 'green_signal':
         if (typeof frame.question_id === 'string') {
           setLiveFeedback((prev) => [
@@ -195,6 +204,14 @@ export default function MeetingView({
             { id, kind: 'coverage', text: text || 'Question answered', at },
           ]);
         }
+        break;
+      case 'adhoc_detected':
+        if (text) {
+          setLiveFeedback((prev) => [...prev, { id, kind: 'fact', text, at }]);
+        }
+        break;
+      case 'resync':
+        resyncRef.current?.();
         break;
     }
   }, []);
@@ -418,6 +435,7 @@ export default function MeetingView({
             sendControl={socket.sendControl}
             micAssignments={micAssignments}
             onOpenMicSetup={() => setMicSetupOpen(true)}
+            onResyncRef={resyncRef}
           />
         </div>
       </div>

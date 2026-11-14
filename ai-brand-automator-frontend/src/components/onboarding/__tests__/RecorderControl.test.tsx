@@ -123,6 +123,7 @@ const recorderStub = (over: Partial<UseMeetingRecorder> = {}): UseMeetingRecorde
   mimeType: null,
   start: async () => {},
   stop: async () => {},
+  restartAudio: () => {},
   ...over,
 });
 

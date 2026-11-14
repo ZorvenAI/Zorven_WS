@@ -118,6 +118,23 @@ def test_open_with_consent_creates_a_recording(
     assert response.data["has_summary"] is False
 
 
+def test_open_marks_stale_recording_as_failed(consented_session, public_tenant, editor):
+    stale = MeetingRecording.objects.create(
+        session=consented_session,
+        tenant=public_tenant,
+        status=RecordingStatus.RECORDING,
+    )
+
+    response = client_for(editor, public_tenant).post(recordings_url(consented_session))
+
+    assert response.status_code == 201
+    stale.refresh_from_db()
+    assert stale.status == RecordingStatus.FAILED
+    new_id = response.data["id"]
+    assert new_id != stale.pk
+    assert MeetingRecording.objects.get(pk=new_id).status == RecordingStatus.RECORDING
+
+
 def test_a_viewer_cannot_open_a_recording(consented_session, public_tenant, viewer):
     response = client_for(viewer, public_tenant).post(recordings_url(consented_session))
 
@@ -170,18 +187,23 @@ def test_stop_is_idempotent(consented_session, public_tenant, editor):
 
 
 def test_stop_touches_only_its_own_row(consented_session, public_tenant, editor):
-    """AC-2's "on that row only", with three cycles open at once — B-02 made
-    MEETING_LIVE re-entrant, so concurrent opens are the normal case."""
+    """AC-2's "on that row only": stopping one recording does not affect
+    another.  Opening a new recording marks unstopped predecessors as
+    FAILED (stale-cleanup), so only the latest is ever RECORDING."""
     client = client_for(editor, public_tenant)
     ids = [client.post(recordings_url(consented_session)).data["id"] for _ in range(3)]
 
-    client.post(f"{RECORDINGS}{ids[1]}/stop/", {"duration_s": 42}, format="json")
+    rows = {r.pk: r for r in MeetingRecording.objects.filter(session=consented_session)}
+    assert rows[ids[0]].status == RecordingStatus.FAILED
+    assert rows[ids[1]].status == RecordingStatus.FAILED
+    assert rows[ids[2]].status == RecordingStatus.RECORDING
+
+    client.post(f"{RECORDINGS}{ids[2]}/stop/", {"duration_s": 42}, format="json")
 
     rows = {r.pk: r for r in MeetingRecording.objects.filter(session=consented_session)}
-    assert rows[ids[1]].status == RecordingStatus.UPLOADED
-    assert rows[ids[0]].status == RecordingStatus.RECORDING
-    assert rows[ids[2]].status == RecordingStatus.RECORDING
-    assert rows[ids[0]].stopped_at is None and rows[ids[2]].stopped_at is None
+    assert rows[ids[2]].status == RecordingStatus.UPLOADED
+    assert rows[ids[0]].status == RecordingStatus.FAILED
+    assert rows[ids[1]].status == RecordingStatus.FAILED
 
 
 def test_duration_is_absent_rather_than_wrong(consented_session, public_tenant, editor):

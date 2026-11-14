@@ -81,6 +81,8 @@ export interface UseMeetingRecorder {
   mimeType: string | null;
   start: () => Promise<void>;
   stop: () => Promise<void>;
+  /** Restart the MediaRecorder on the same stream (fresh container header). */
+  restartAudio: () => void;
 }
 
 /** The first opus type this browser will actually produce, or null. */
@@ -104,6 +106,7 @@ export function useMeetingRecorder(): UseMeetingRecorder {
   const startedAt = useRef(0);
   const ticker = useRef<ReturnType<typeof setInterval> | null>(null);
   const nextIndex = useRef(0);
+  const generationRef = useRef(0);
 
   /**
    * Elapsed comes from the audio clock, never from Date.now().
@@ -188,8 +191,11 @@ export function useMeetingRecorder(): UseMeetingRecorder {
     recorder.current = media;
     setMimeType(type);
 
+    generationRef.current += 1;
+    const gen = generationRef.current;
     media.ondataavailable = (event: BlobEvent) => {
       if (!event.data || event.data.size === 0) return;
+      if (generationRef.current !== gen) return;
       const index = nextIndex.current;
       nextIndex.current += 1;
       chunksRef.current.push({ blob: event.data, index });
@@ -264,5 +270,36 @@ export function useMeetingRecorder(): UseMeetingRecorder {
 
   useEffect(() => teardown, [teardown]);
 
-  return { state, error, elapsedSeconds, chunksRef, chunkCount, mimeType, start, stop };
+  const restartAudio = useCallback(() => {
+    const currentStream = stream.current;
+    if (!currentStream || state !== 'recording') return;
+
+    const media = recorder.current;
+    if (media && media.state !== 'inactive') {
+      media.onstop = null;
+      media.stop();
+    }
+
+    const type = mimeType ?? supportedOpusMimeType();
+    if (!type) return;
+
+    generationRef.current += 1;
+    const gen = generationRef.current;
+
+    const newMedia = new MediaRecorder(currentStream, { mimeType: type });
+    recorder.current = newMedia;
+
+    newMedia.ondataavailable = (event: BlobEvent) => {
+      if (!event.data || event.data.size === 0) return;
+      if (generationRef.current !== gen) return;
+      const index = nextIndex.current;
+      nextIndex.current += 1;
+      chunksRef.current.push({ blob: event.data, index });
+      setChunkCount((n) => n + 1);
+    };
+
+    newMedia.start(TIMESLICE_MS);
+  }, [state, mimeType]);
+
+  return { state, error, elapsedSeconds, chunksRef, chunkCount, mimeType, start, stop, restartAudio };
 }

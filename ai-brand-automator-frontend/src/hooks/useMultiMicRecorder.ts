@@ -47,6 +47,7 @@ export interface UseMultiMicRecorder {
   mimeType: string | null;
   start: () => Promise<void>;
   stop: () => Promise<void>;
+  restartAudio: () => void;
 }
 
 interface StreamHandle {
@@ -209,5 +210,30 @@ export function useMultiMicRecorder(
 
   useEffect(() => teardown, [teardown]);
 
-  return { state, error, elapsedSeconds, chunksRef, chunkCount, mimeType, start, stop };
+  const restartAudio = useCallback(() => {
+    if (state !== 'recording') return;
+    const type = mimeType ?? supportedOpusMimeType();
+    if (!type) return;
+
+    const replaced: StreamHandle[] = [];
+    for (const h of handles.current) {
+      if (h.recorder.state !== 'inactive') {
+        try { h.recorder.stop(); } catch { /* already stopped */ }
+      }
+      const newRec = new MediaRecorder(h.mediaStream, { mimeType: type });
+      const { streamIndex } = h;
+      newRec.ondataavailable = (event: BlobEvent) => {
+        if (!event.data || event.data.size === 0) return;
+        const index = nextIndex.current;
+        nextIndex.current += 1;
+        chunksRef.current.push({ blob: event.data, index, streamIndex });
+        setChunkCount((n) => n + 1);
+      };
+      newRec.start(TIMESLICE_MS);
+      replaced.push({ streamIndex, mediaStream: h.mediaStream, recorder: newRec });
+    }
+    handles.current = replaced;
+  }, [state, mimeType]);
+
+  return { state, error, elapsedSeconds, chunksRef, chunkCount, mimeType, start, stop, restartAudio };
 }

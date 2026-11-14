@@ -657,6 +657,25 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 status=http.HTTP_403_FORBIDDEN,
             )
 
+        # Lock the session row to serialise concurrent recording-open
+        # requests — without this two requests can each see an empty
+        # predecessor set and both create a RECORDING row.
+        # The caller (@recordings) is already @db_transaction.atomic.
+        # Cannot use self.get_queryset() directly because its
+        # select_related produces LEFT OUTER JOINs and PostgreSQL
+        # refuses FOR UPDATE on the nullable side of an outer join.
+        tenant = getattr(self.request, "tenant", None)
+        lock_qs = OnboardingSession.objects.filter(pk=session.pk)
+        if tenant:
+            lock_qs = lock_qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+        lock_qs.select_for_update().get(pk=session.pk)
+
+        MeetingRecording.objects.filter(
+            session=session,
+            status=RecordingStatus.RECORDING,
+            stopped_at__isnull=True,
+        ).update(status=RecordingStatus.FAILED)
+
         recording = MeetingRecording.objects.create(
             session=session,
             tenant=session.tenant,
