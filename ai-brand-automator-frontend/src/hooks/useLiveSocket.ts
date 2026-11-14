@@ -273,8 +273,8 @@ export function useLiveSocket({
       };
 
       ws.onmessage = handleMessage;
-      ws.onclose = (ev) => { console.log('[useLiveSocket] ws.onclose', { code: ev.code, reason: ev.reason, wasClean: ev.wasClean }); handleClose(); };
-      ws.onerror = (ev) => { console.error('[useLiveSocket] ws.onerror', ev); };
+      ws.onclose = handleClose;
+      ws.onerror = () => {};
     };
 
     // If the prior mount left a still-usable WebSocket (strict mode), reuse it.
