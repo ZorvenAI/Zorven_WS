@@ -61,7 +61,7 @@ describe('NFR-COMPAT · the manual wizard survives', () => {
     const source = fs.readFileSync(path.join(APP, 'page.tsx'), 'utf8');
 
     expect(source).not.toMatch(/router\.push/);
-    expect(source).toContain('OnboardingHome');
+    expect(source).toContain('OnboardingUnified');
   });
 });
 

@@ -1,20 +1,29 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+/**
+ * /onboarding/sessions/[sessionId]/review — redirects to unified OIA screen.
+ *
+ * Kept as a redirect so existing bookmarks and links continue to work.
+ */
+
+import { useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 
 import { useAuth } from '@/hooks/useAuth';
-import KeyFindingsReview from '@/components/onboarding/KeyFindingsReview';
 
 export default function ReviewPage() {
   useAuth();
   const params = useParams<{ sessionId: string }>();
+  const router = useRouter();
   const sessionId = params?.sessionId;
 
-  if (!sessionId) {
-    return (
-      <p className="text-sm text-brand-silver">No session selected.</p>
-    );
-  }
+  useEffect(() => {
+    if (sessionId) {
+      router.replace(`/onboarding?session=${sessionId}&tab=review`);
+    } else {
+      router.replace('/onboarding');
+    }
+  }, [sessionId, router]);
 
-  return <KeyFindingsReview sessionId={sessionId} />;
+  return <p className="p-4 text-sm text-brand-silver">Redirecting…</p>;
 }
