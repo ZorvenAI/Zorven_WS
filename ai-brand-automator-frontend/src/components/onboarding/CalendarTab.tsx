@@ -1,6 +1,6 @@
 'use client';
 
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { CalendarDays, MessageSquare } from 'lucide-react';
 
 import CalendarPane from '@/components/onboarding/CalendarPane';
@@ -16,6 +16,8 @@ type SubTab = 'calendar' | 'chat';
 
 export default function CalendarTab() {
   const { canEdit } = useTenantRole();
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => { setHasMounted(true); }, []);
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('calendar');
 
   return (
@@ -36,7 +38,7 @@ export default function CalendarTab() {
             <CalendarDays className="h-3.5 w-3.5" aria-hidden />
             Calendar
           </button>
-          {canEdit && (
+          {hasMounted && canEdit && (
             <button
               type="button"
               role="tab"

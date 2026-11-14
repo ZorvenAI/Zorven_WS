@@ -10,7 +10,7 @@
  * from the header.
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -46,7 +46,10 @@ function Inner({
   initialTab: DetailTab;
 }) {
   const router = useRouter();
-  const { canEdit } = useTenantRole();
+  const { canEdit: canEditRole } = useTenantRole();
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => { setHasMounted(true); }, []);
+  const canEdit = hasMounted && canEditRole;
 
   const [selectedSession, setSelectedSession] =
     useState<OnboardingSessionSummary | null>(() =>
@@ -99,9 +102,6 @@ function Inner({
     updateUrl(null, 'calendar');
   }, [updateUrl]);
 
-  // Auto-collapse sidebar in meeting view for maximum screen real estate
-  const isFullWidth = activeTab === 'meeting';
-
   const showOverviewTab = !!selectedSession;
   const showMeetingTab =
     !!selectedSession &&
@@ -141,7 +141,7 @@ function Inner({
           selectedSessionId={selectedSession?.id ?? null}
           onSelectSession={handleSelectSession}
           onSwitchToChat={handleSwitchToChat}
-          collapsed={isFullWidth || sidebarCollapsed}
+          collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
         />
 
@@ -183,7 +183,7 @@ function Inner({
           )}
 
           {/* Tab content */}
-          <div className="min-h-0 flex-1 overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {activeTab === 'overview' && selectedSession && (
               <SessionOverviewTab
                 sessionId={selectedSession.id}
