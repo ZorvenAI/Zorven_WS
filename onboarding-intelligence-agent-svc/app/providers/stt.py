@@ -233,6 +233,7 @@ class GoogleSTTAdapter(STTAdapter):
         stream_start = time.monotonic()
         session_start = time.monotonic()
         last_result_at = time.monotonic()
+        last_audio_fed_at = time.monotonic()
 
         task = asyncio.create_task(
             self._stream_worker(current_feed, result_q, config=config, offset_s=0.0)
@@ -247,8 +248,15 @@ class GoogleSTTAdapter(STTAdapter):
             async for chunk in audio:
                 elapsed = time.monotonic() - stream_start
                 current_feed.put_nowait(chunk)
+                last_audio_fed_at = time.monotonic()
 
                 if task.done():
+                    # Drain any final results or queued exception before
+                    # deciding whether this was a clean stream-limit exit.
+                    async for r in self._drain_q(result_q, seen):
+                        last_result_at = time.monotonic()
+                        yield r
+
                     exc = task.exception() if not task.cancelled() else None
                     if exc:
                         raise exc
@@ -296,12 +304,17 @@ class GoogleSTTAdapter(STTAdapter):
                     last_result_at = time.monotonic()
                     yield r
 
-                if not drained and time.monotonic() - last_result_at > 30.0:
+                # Only mark the stream stale when the transport itself is
+                # dead — audio has stopped flowing AND no results arrived.
+                # Silence (audio flowing, no speech) is a normal meeting
+                # pause and must not kill the stream.
+                _now = time.monotonic()
+                _audio_gap = _now - last_audio_fed_at
+                if not drained and _now - last_result_at > 30.0 and _audio_gap > 5.0:
                     logger.warning(
                         "stt_stream_stale",
-                        seconds_since_result=round(
-                            time.monotonic() - last_result_at, 1
-                        ),
+                        seconds_since_result=round(_now - last_result_at, 1),
+                        seconds_since_audio=round(_audio_gap, 1),
                     )
                     raise STTUnavailable("STT stream stale — no results for 30 s")
 

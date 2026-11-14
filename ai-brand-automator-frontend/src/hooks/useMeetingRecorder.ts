@@ -106,6 +106,7 @@ export function useMeetingRecorder(): UseMeetingRecorder {
   const startedAt = useRef(0);
   const ticker = useRef<ReturnType<typeof setInterval> | null>(null);
   const nextIndex = useRef(0);
+  const generationRef = useRef(0);
 
   /**
    * Elapsed comes from the audio clock, never from Date.now().
@@ -190,8 +191,11 @@ export function useMeetingRecorder(): UseMeetingRecorder {
     recorder.current = media;
     setMimeType(type);
 
+    generationRef.current += 1;
+    const gen = generationRef.current;
     media.ondataavailable = (event: BlobEvent) => {
       if (!event.data || event.data.size === 0) return;
+      if (generationRef.current !== gen) return;
       const index = nextIndex.current;
       nextIndex.current += 1;
       chunksRef.current.push({ blob: event.data, index });
@@ -279,11 +283,15 @@ export function useMeetingRecorder(): UseMeetingRecorder {
     const type = mimeType ?? supportedOpusMimeType();
     if (!type) return;
 
+    generationRef.current += 1;
+    const gen = generationRef.current;
+
     const newMedia = new MediaRecorder(currentStream, { mimeType: type });
     recorder.current = newMedia;
 
     newMedia.ondataavailable = (event: BlobEvent) => {
       if (!event.data || event.data.size === 0) return;
+      if (generationRef.current !== gen) return;
       const index = nextIndex.current;
       nextIndex.current += 1;
       chunksRef.current.push({ blob: event.data, index });

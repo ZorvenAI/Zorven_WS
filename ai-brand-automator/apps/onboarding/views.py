@@ -657,17 +657,25 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
                 status=http.HTTP_403_FORBIDDEN,
             )
 
-        MeetingRecording.objects.filter(
-            session=session,
-            status=RecordingStatus.RECORDING,
-            stopped_at__isnull=True,
-        ).update(status=RecordingStatus.FAILED)
+        from django.db import transaction
 
-        recording = MeetingRecording.objects.create(
-            session=session,
-            tenant=session.tenant,
-            status=RecordingStatus.RECORDING,
-        )
+        with transaction.atomic():
+            # Lock the session row to serialise concurrent recording-open
+            # requests — without this two requests can each see an empty
+            # predecessor set and both create a RECORDING row.
+            type(session).objects.select_for_update().get(pk=session.pk)
+
+            MeetingRecording.objects.filter(
+                session=session,
+                status=RecordingStatus.RECORDING,
+                stopped_at__isnull=True,
+            ).update(status=RecordingStatus.FAILED)
+
+            recording = MeetingRecording.objects.create(
+                session=session,
+                tenant=session.tenant,
+                status=RecordingStatus.RECORDING,
+            )
         return Response(
             MeetingRecordingSerializer(recording).data, status=http.HTTP_201_CREATED
         )

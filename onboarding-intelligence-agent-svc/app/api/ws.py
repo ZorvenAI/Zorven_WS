@@ -321,6 +321,7 @@ async def _stt_loop(
     speaker: int = 0,
     speaker_name: str | None = None,
     speaker_role: str | None = None,
+    resync_offset_s: float = 0.0,
 ) -> None:
     """Background task: feed audio to STT, emit frames.
 
@@ -342,6 +343,14 @@ async def _stt_loop(
             sample_rate=sample_rate,
             codec=codec,
         ):
+            if resync_offset_s:
+                result = STTResult(
+                    text=result.text,
+                    is_final=result.is_final,
+                    t_start=result.t_start + resync_offset_s,
+                    t_end=result.t_end + resync_offset_s,
+                    stability=result.stability,
+                )
             if result.is_final:
                 await _emit_final(
                     websocket,
@@ -904,6 +913,10 @@ async def _run_analysis(
     # window.  Under the old design _spawn_analysis cancelled the whole
     # task, so sufficiency and follow-ups almost never completed.
     if updated_questions:
+        # Monotonic version so a slower earlier chain cannot overwrite a
+        # newer evaluation (Copilot review comment #3).
+        post_version = analysis_state.get("post_version", 0) + 1
+        analysis_state["post_version"] = post_version
         post_task = asyncio.create_task(
             _tolerating_a_closed_socket(
                 _run_post_analysis(
@@ -914,6 +927,7 @@ async def _run_analysis(
                     analysis_state,
                     updated_questions,
                     context.tenant_context,
+                    version=post_version,
                 ),
                 what="post_analysis",
                 session_id=session.session_id,
@@ -932,6 +946,7 @@ async def _run_post_analysis(
     analysis_state: dict[str, Any],
     updated_questions: list[str],
     tenant_context: TenantContext,
+    version: int = 0,
 ) -> None:
     """Sufficiency, follow-ups and coverage — the chain after SKL-OIA-04.
 
@@ -939,6 +954,11 @@ async def _run_post_analysis(
     window fires (the mapping task above IS cancellable).
     """
     import time as _time
+
+    # If a newer chain was spawned while we were waiting, bail out so
+    # an older, slower evaluation does not overwrite newer scores.
+    if version and analysis_state.get("post_version", 0) > version:
+        return
 
     _suf_t0 = _time.perf_counter()
     await _evaluate_sufficiency(
@@ -952,6 +972,10 @@ async def _run_post_analysis(
     from app.metrics import record_sufficiency_latency
 
     record_sufficiency_latency((_time.perf_counter() - _suf_t0) * 1000)
+
+    # Re-check after the LLM call — another chain may have overtaken us.
+    if version and analysis_state.get("post_version", 0) > version:
+        return
 
     await _update_coverage(
         websocket, session, events, analysis_state, updated_questions
@@ -1496,7 +1520,18 @@ async def _handle_control(
                 return
 
             # Stale streams — clean up so the new start can proceed.
-            logger.info("stt_resync_cleanup", had_stream_queues=bool(existing_sq))
+            # Preserve the elapsed time so post-resync timestamps stay
+            # recording-relative rather than resetting to zero.
+            prev_started = stt_state.get("stt_started_at", 0.0)
+            if prev_started:
+                stt_state["stt_offset_s"] = stt_state.get("stt_offset_s", 0.0) + (
+                    _time.monotonic() - prev_started
+                )
+            logger.info(
+                "stt_resync_cleanup",
+                had_stream_queues=bool(existing_sq),
+                offset_s=round(stt_state.get("stt_offset_s", 0.0), 1),
+            )
             stt_state["stream_queues"] = None
             stt_state["stream_tasks"] = None
             stt_state["stream_map"] = None
@@ -1511,6 +1546,8 @@ async def _handle_control(
             return
 
         stt_state["recording_id"] = start.recording_id
+        stt_state["stt_started_at"] = _time.monotonic()
+        resync_offset = stt_state.get("stt_offset_s", 0.0)
 
         if start.operator_speaker is not None:
             await session.set_operator_speaker(start.operator_speaker)
@@ -1540,6 +1577,7 @@ async def _handle_control(
                         speaker=sd.stream_index,
                         speaker_name=sd.speaker_name,
                         speaker_role=sd.speaker_role,
+                        resync_offset_s=resync_offset,
                     )
                 )
                 idx = sd.stream_index
@@ -1588,6 +1626,7 @@ async def _handle_control(
                     codec=start.codec,
                     sample_rate=start.sample_rate,
                     stt_state=stt_state,
+                    resync_offset_s=resync_offset,
                 )
             )
             stt_state["audio_q"] = audio_q
@@ -2024,6 +2063,18 @@ async def _hold(
                                 max=_MAX_UNREACHABLE_BEFORE_CLOSE,
                                 session_id=session_id,
                             )
+                            # Fail-closed: pause STT while consent is
+                            # unverifiable so no speech is processed during
+                            # the grace window.
+                            _pause_q = stt_state.get("audio_q")
+                            if _pause_q is not None:
+                                _pause_q.put_nowait(None)
+                                stt_state["audio_q"] = None
+                            _pause_sq = stt_state.get("stream_queues")
+                            if _pause_sq:
+                                for _q in _pause_sq.values():
+                                    _q.put_nowait(None)
+                                stt_state["stream_queues"] = {}
                             continue
                     await websocket.close(
                         code=CLOSE_FORBIDDEN, reason=refusal.detail[:120]
@@ -2049,22 +2100,6 @@ async def _hold(
             # Binary audio → STT queue(s) (F-05, O-03)
             raw_bytes = message.get("bytes")
             if raw_bytes:
-                _audio_counter = stt_state.get("_audio_counter", 0)
-                _audio_counter += 1
-                stt_state["_audio_counter"] = _audio_counter
-                if _audio_counter <= 5 or _audio_counter % 500 == 0:
-                    logger.info(
-                        "audio_chunk_received",
-                        chunk_num=_audio_counter,
-                        size=len(raw_bytes),
-                        first_bytes=(
-                            raw_bytes[:4].hex()
-                            if len(raw_bytes) >= 4
-                            else raw_bytes.hex()
-                        ),
-                        has_stream_queues=bool(stt_state.get("stream_queues")),
-                        has_audio_q=stt_state.get("audio_q") is not None,
-                    )
                 stream_queues = stt_state.get("stream_queues")
                 if stream_queues:
                     if len(raw_bytes) > 1:
@@ -2072,12 +2107,6 @@ async def _hold(
                         q = stream_queues.get(stream_idx)
                         if q is not None:
                             q.put_nowait(raw_bytes[1:])
-                        elif _audio_counter <= 10:
-                            logger.warning(
-                                "audio_no_queue_for_stream",
-                                stream_idx=stream_idx,
-                                available=list(stream_queues.keys()),
-                            )
                     continue
                 elif stt_state.get("audio_q") is not None:
                     stt_state["audio_q"].put_nowait(raw_bytes)

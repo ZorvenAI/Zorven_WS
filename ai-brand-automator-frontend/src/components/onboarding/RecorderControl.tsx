@@ -88,7 +88,7 @@ export default function RecorderControl({
   const multiMic = useMultiMicRecorder(multiDevices);
   const live: UseMeetingRecorder | UseMultiMicRecorder = recorder ?? (useMulti ? multiMic : singleMic);
 
-  const { state, error, elapsedSeconds, chunksRef, chunkCount, start, stop, restartAudio } = live as UseMeetingRecorder;
+  const { state, error, elapsedSeconds, chunksRef, chunkCount, start, stop, restartAudio } = live;
   const recording = state === 'recording';
   const busy = state === 'requesting' || state === 'stopping';
 
