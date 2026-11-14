@@ -231,7 +231,6 @@ class GoogleSTTAdapter(STTAdapter):
         seen: set[tuple[float, str]] = set()
         current_feed: asyncio.Queue[bytes | None] = asyncio.Queue()
         stream_start = time.monotonic()
-        session_start = time.monotonic()
         last_result_at = time.monotonic()
         last_audio_fed_at = time.monotonic()
 

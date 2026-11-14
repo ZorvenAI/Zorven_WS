@@ -215,10 +215,10 @@ export function useMultiMicRecorder(
     const type = mimeType ?? supportedOpusMimeType();
     if (!type) return;
 
+    const replaced: StreamHandle[] = [];
     for (const h of handles.current) {
       if (h.recorder.state !== 'inactive') {
-        h.recorder.onstop = null;
-        h.recorder.stop();
+        try { h.recorder.stop(); } catch { /* already stopped */ }
       }
       const newRec = new MediaRecorder(h.mediaStream, { mimeType: type });
       const { streamIndex } = h;
@@ -229,9 +229,10 @@ export function useMultiMicRecorder(
         chunksRef.current.push({ blob: event.data, index, streamIndex });
         setChunkCount((n) => n + 1);
       };
-      h.recorder = newRec;
       newRec.start(TIMESLICE_MS);
+      replaced.push({ streamIndex, mediaStream: h.mediaStream, recorder: newRec });
     }
+    handles.current = replaced;
   }, [state, mimeType]);
 
   return { state, error, elapsedSeconds, chunksRef, chunkCount, mimeType, start, stop, restartAudio };
