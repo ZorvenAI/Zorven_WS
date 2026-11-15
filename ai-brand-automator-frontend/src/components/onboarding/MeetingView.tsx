@@ -26,7 +26,7 @@
  * all pushing updates into the pane, which is what the card says too.
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ArrowLeft, ShieldCheck } from 'lucide-react';
 
@@ -84,9 +84,45 @@ export default function MeetingView({
   const [consentSaving, setConsentSaving] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
   const [micSetupOpen, setMicSetupOpen] = useState(false);
-  const [micAssignments, setMicAssignments] = useState<MicAssignment[]>([]);
+  const [micAssignments, setMicAssignments] = useState<MicAssignment[]>(() => {
+    if (typeof window === 'undefined' || !sessionId) return [];
+    try {
+      const stored = localStorage.getItem(`oia:mic:${sessionId}`);
+      return stored ? (JSON.parse(stored) as MicAssignment[]) : [];
+    } catch {
+      return [];
+    }
+  });
   const [rollCallOpen, setRollCallOpen] = useState(false);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
+
+  useEffect(() => {
+    if (micAssignments.length === 0) return;
+    let cancelled = false;
+    navigator.mediaDevices?.enumerateDevices().then((all) => {
+      if (cancelled) return;
+      const ids = new Set(
+        all.filter((d) => d.kind === 'audioinput').map((d) => d.deviceId),
+      );
+      const valid = micAssignments.filter((a) => ids.has(a.deviceId));
+      if (valid.length < micAssignments.length) {
+        setMicAssignments(valid);
+        if (sessionId) {
+          try {
+            localStorage.setItem(
+              `oia:mic:${sessionId}`,
+              JSON.stringify(valid),
+            );
+          } catch {
+            /* non-critical */
+          }
+        }
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const granted = consent?.granted === true;
 
@@ -336,6 +372,16 @@ export default function MeetingView({
         onConfirm={(assignments) => {
           setMicAssignments(assignments);
           setMicSetupOpen(false);
+          if (sessionId) {
+            try {
+              localStorage.setItem(
+                `oia:mic:${sessionId}`,
+                JSON.stringify(assignments),
+              );
+            } catch {
+              /* quota exceeded — non-critical */
+            }
+          }
           if (assignments.length > 0) {
             setRollCallOpen(true);
           }
