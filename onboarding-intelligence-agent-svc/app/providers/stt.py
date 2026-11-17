@@ -545,14 +545,19 @@ class FakeSTTAdapter(STTAdapter):
     ) -> AsyncIterator[STTResult]:
         drain_task = asyncio.create_task(self._drain_audio(audio))
         try:
+            import time as _time
+
             offset_s = 0.0
             while not drain_task.done():
+                loop_start = _time.monotonic()
                 max_t_end = 0.0
                 for event in self._events:
                     if drain_task.done():
                         return
-                    delay = event.get("delay_ms", 50) / 1000.0
-                    await asyncio.sleep(delay)
+                    target = event["t_start"]
+                    elapsed = _time.monotonic() - loop_start
+                    if target > elapsed:
+                        await asyncio.sleep(target - elapsed)
                     t_start = event["t_start"] + offset_s
                     t_end = event["t_end"] + offset_s
                     max_t_end = max(max_t_end, t_end)
