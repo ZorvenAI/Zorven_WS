@@ -280,6 +280,7 @@ export function useChunkUploader({
     const legacy = keys.length === 1 && keys[0] === LEGACY_STREAM;
     for (let i = consumed.current; i < arr.length; i += 1) {
       const chunk = arr[i];
+      if (!chunk.blob) continue;
       let key = legacy ? LEGACY_STREAM : (chunk.streamIndex ?? keys[0]);
       // A chunk tagged for a mic nobody declared would land on a key that
       // neither the cadence nor `finalise` iterates, so its audio would be

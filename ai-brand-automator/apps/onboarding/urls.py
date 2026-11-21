@@ -34,6 +34,7 @@ from apps.onboarding.views import (
     patch_session_prompt_versions,
     process_callback,
     session_attendance,
+    session_description,
     session_evidence,
     session_transcribe_clip,
     update_recording_summary,
@@ -88,6 +89,11 @@ urlpatterns = [
         "sessions/<pk>/transcribe-clip/",
         session_transcribe_clip,
         name="onboarding-session-transcribe-clip",
+    ),
+    path(
+        "sessions/<pk>/description/",
+        session_description,
+        name="onboarding-session-description",
     ),
     # I-02: OIA writes summary results back via X-Service-Token auth.
     path(

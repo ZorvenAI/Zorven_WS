@@ -14,6 +14,7 @@ import re
 import uuid
 
 from django.db import IntegrityError
+from django.shortcuts import get_object_or_404
 from django.db.models import Prefetch, Q
 from django.db import transaction as db_transaction
 from django.utils import timezone
@@ -2840,6 +2841,37 @@ class ScheduledMeetingViewSet(
         return Response(ScheduledMeetingSerializer(meeting).data)
 
 
+# ── Three-Tier Transcript: session description (F-01) ────────────────
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def session_description(request, pk):
+    """``GET /api/v1/onboarding/sessions/<pk>/description/``
+
+    Returns the T3 description from the most recent recording.
+    """
+    tenant = getattr(request, "tenant", None)
+    qs = OnboardingSession.objects.all()
+    if tenant:
+        qs = qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+    else:
+        qs = qs.filter(tenant__isnull=True)
+
+    session = get_object_or_404(qs, pk=pk)
+    recording = (
+        MeetingRecording.objects.filter(session=session).order_by("-created_at").first()
+    )
+    description = getattr(recording, "description", "") or ""
+    has_clean = bool(getattr(recording, "transcript_clean", None))
+    return Response(
+        {
+            "description": description,
+            "has_clean_transcript": has_clean,
+        }
+    )
+
+
 # ── Internal service-to-service endpoint (I-02) ─────────────────────
 
 
@@ -2919,6 +2951,27 @@ def update_recording_summary(request, pk):
             if isinstance(missing, (int, float)) and missing >= 0:
                 recording.transcript_missing_s = int(missing)
             update_fields += ["transcript_complete", "transcript_missing_s"]
+
+        # Three-Tier Transcript: T2 clean transcript, T3 description, GCS paths.
+        transcript_clean = request.data.get("transcript_clean")
+        if isinstance(transcript_clean, (list, str)) and transcript_clean:
+            recording.transcript_clean = transcript_clean
+            update_fields.append("transcript_clean")
+
+        description_text = request.data.get("description")
+        if isinstance(description_text, str) and description_text:
+            recording.description = description_text
+            update_fields.append("description")
+
+        for gcs_field in (
+            "transcript_clean_gcs_path",
+            "description_gcs_path",
+            "raw_transcript_gcs_path",
+        ):
+            value = request.data.get(gcs_field)
+            if isinstance(value, str) and value:
+                setattr(recording, gcs_field, value)
+                update_fields.append(gcs_field)
 
         recording.status = RecordingStatus.SUMMARIZED
         recording.save(update_fields=update_fields)

@@ -508,10 +508,17 @@ return v + 1
             qid = str(q.get("id", ""))
             if not qid:
                 continue
+            text = q.get("text", "")
+            target_field = q.get("target_field", "")
+            wf = q.get("workflow_target", "WF1")
+            if wf == "WF1" and not target_field and text:
+                from app.logic.field_map import infer_workflow_from_text
+
+                wf = infer_workflow_from_text(text)
             entry = {
-                "text": q.get("text", ""),
-                "target_field": q.get("target_field", ""),
-                "workflow_target": q.get("workflow_target", "WF1"),
+                "text": text,
+                "target_field": target_field,
+                "workflow_target": wf,
                 "status": q.get("status", "OPEN"),
                 "evidence": [],
                 "score": None,

@@ -71,6 +71,7 @@ export function useMultiMicRecorder(
   const startedAt = useRef(0);
   const ticker = useRef<ReturnType<typeof setInterval> | null>(null);
   const nextIndex = useRef(0);
+  const restartRef = useRef<(() => void) | null>(null);
 
   const readElapsed = useCallback(() => {
     const context = audioContext.current;
@@ -138,6 +139,28 @@ export function useMultiMicRecorder(
         chunksRef.current.push({ blob: event.data, index, streamIndex });
         setChunkCount((n) => n + 1);
       };
+
+      recorder.onerror = () => {
+        const hasLiveTrack = mediaStream.getTracks().some((t) => t.readyState === 'live');
+        if (hasLiveTrack && restartRef.current) {
+          restartRef.current();
+        } else {
+          setError('Recording interrupted — microphone became unavailable.');
+          setState('idle');
+          teardown();
+        }
+      };
+
+      for (const track of mediaStream.getTracks()) {
+        track.onended = () => {
+          const anyRecording = handles.current.some((h) => h.recorder.state === 'recording');
+          if (anyRecording) {
+            setError('A microphone disconnected.');
+            setState('idle');
+            teardown();
+          }
+        };
+      }
 
       opened.push({ streamIndex, mediaStream, recorder });
     }
@@ -229,11 +252,23 @@ export function useMultiMicRecorder(
         chunksRef.current.push({ blob: event.data, index, streamIndex });
         setChunkCount((n) => n + 1);
       };
+      newRec.onerror = () => {
+        const hasLiveTrack = h.mediaStream.getTracks().some((t) => t.readyState === 'live');
+        if (hasLiveTrack && restartRef.current) {
+          restartRef.current();
+        } else {
+          setError('Recording interrupted — microphone became unavailable.');
+          setState('idle');
+          teardown();
+        }
+      };
       newRec.start(TIMESLICE_MS);
       replaced.push({ streamIndex, mediaStream: h.mediaStream, recorder: newRec });
     }
     handles.current = replaced;
-  }, [state, mimeType]);
+  }, [state, mimeType, teardown]);
+
+  restartRef.current = restartAudio;
 
   return { state, error, elapsedSeconds, chunksRef, chunkCount, mimeType, start, stop, restartAudio };
 }

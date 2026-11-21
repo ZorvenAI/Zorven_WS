@@ -27,15 +27,16 @@ import SessionOverviewTab from '@/components/onboarding/SessionOverviewTab';
 import MeetingTab from '@/components/onboarding/MeetingTab';
 import KeyFindingsReview from '@/components/onboarding/KeyFindingsReview';
 import CalendarTab from '@/components/onboarding/CalendarTab';
+import DescriptionTab from '@/components/onboarding/DescriptionTab';
 import {
   wizardDeepLink,
   type OnboardingSessionSummary,
 } from '@/lib/onboarding-sessions';
 
-type DetailTab = 'overview' | 'meeting' | 'review' | 'calendar';
+type DetailTab = 'overview' | 'meeting' | 'review' | 'description' | 'calendar';
 
 function isValidTab(value: string | null): value is DetailTab {
-  return value === 'overview' || value === 'meeting' || value === 'review' || value === 'calendar';
+  return value === 'overview' || value === 'meeting' || value === 'review' || value === 'description' || value === 'calendar';
 }
 
 function Inner({
@@ -115,6 +116,12 @@ function Inner({
       selectedSession.status === 'CONFIRMED' ||
       selectedSession.status === 'COMPLETED' ||
       activeTab === 'review');
+  const showDescriptionTab =
+    !!selectedSession &&
+    (selectedSession.status === 'REVIEW_PENDING' ||
+      selectedSession.status === 'CONFIRMED' ||
+      selectedSession.status === 'COMPLETED' ||
+      activeTab === 'description');
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
@@ -171,6 +178,13 @@ function Inner({
                 visible={showReviewTab}
                 onClick={() => handleTabChange('review')}
               />
+              <TabButton
+                icon={<FileText className="h-3.5 w-3.5" />}
+                label="Description"
+                active={activeTab === 'description'}
+                visible={showDescriptionTab}
+                onClick={() => handleTabChange('description')}
+              />
               <div className="mx-2 h-4 w-px bg-white/10" />
               <TabButton
                 icon={<CalendarDays className="h-3.5 w-3.5" />}
@@ -199,6 +213,9 @@ function Inner({
             )}
             {activeTab === 'review' && selectedSession && (
               <KeyFindingsReview sessionId={selectedSession.id} />
+            )}
+            {activeTab === 'description' && selectedSession && (
+              <DescriptionTab sessionId={selectedSession.id} />
             )}
             {activeTab === 'calendar' && <CalendarTab />}
             {!selectedSession && activeTab !== 'calendar' && (

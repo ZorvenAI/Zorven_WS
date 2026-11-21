@@ -103,19 +103,32 @@ export default function RecorderControl({
     const chunks = chunksRef.current;
     while (sentChunkIndex.current < chunks.length) {
       const chunk = chunks[sentChunkIndex.current];
-      const streamIdx = 'streamIndex' in chunk ? (chunk as { streamIndex: number }).streamIndex : -1;
-      chunk.blob.arrayBuffer().then((buf) => {
-        if (streamIdx >= 0) {
-          const audio = new Uint8Array(buf);
-          const prefixed = new Uint8Array(1 + audio.length);
-          prefixed[0] = streamIdx;
-          prefixed.set(audio, 1);
-          sendBinary(prefixed);
-        } else {
-          sendBinary(new Uint8Array(buf));
-        }
-      });
+      if (chunk.blob) {
+        const streamIdx = 'streamIndex' in chunk ? (chunk as { streamIndex: number }).streamIndex : -1;
+        chunk.blob.arrayBuffer().then((buf) => {
+          if (streamIdx >= 0) {
+            const audio = new Uint8Array(buf);
+            const prefixed = new Uint8Array(1 + audio.length);
+            prefixed[0] = streamIdx;
+            prefixed.set(audio, 1);
+            sendBinary(prefixed);
+          } else {
+            sendBinary(new Uint8Array(buf));
+          }
+        }).catch(() => {
+          // Blob backing store evicted by Chrome under memory pressure.
+        });
+      }
       sentChunkIndex.current += 1;
+    }
+    // Release blob references already consumed by both the WS sender (above)
+    // and the uploader (which runs absorb() on the same chunkCount trigger
+    // and always keeps pace).  Nulling the blob — not splicing the array —
+    // keeps indices stable for the uploader's consumed cursor.
+    for (let i = 0; i < sentChunkIndex.current; i++) {
+      if (chunks[i] && chunks[i].blob) {
+        (chunks[i] as { blob: Blob | null }).blob = null!;
+      }
     }
   }, [recording, chunkCount, sendBinary, chunksRef]);
 

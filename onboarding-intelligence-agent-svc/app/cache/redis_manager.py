@@ -113,6 +113,22 @@ class TenantKeys:
         """List · 4 h · finalized redacted segments, capped, replay source."""
         return f"{self._scope}live:{session_id}:transcript"
 
+    def transcript_clean(self, session_id: str) -> str:
+        """String (JSON) · 24 h · T2 complete clean transcript."""
+        return f"{self._scope}live:{session_id}:transcript_clean"
+
+    def clean_version(self, session_id: str) -> str:
+        """String (int) · 24 h · T2 generation counter."""
+        return f"{self._scope}live:{session_id}:clean_version"
+
+    def description(self, session_id: str) -> str:
+        """String (JSON) · 24 h · T3 current description."""
+        return f"{self._scope}live:{session_id}:description"
+
+    def desc_version(self, session_id: str) -> str:
+        """String (int) · 24 h · T3 generation counter."""
+        return f"{self._scope}live:{session_id}:desc_version"
+
     def questions(self, session_id: str) -> str:
         """Hash · 4 h · question_id → status/score/evidence/override."""
         return f"{self._scope}live:{session_id}:questions"

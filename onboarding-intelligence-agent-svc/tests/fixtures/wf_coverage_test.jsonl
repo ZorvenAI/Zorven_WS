@@ -1,0 +1,30 @@
+{"text": "hello", "is_final": false, "t_start": 0.0, "t_end": 0.5, "stability": 0.6, "delay_ms": 50}
+{"text": "Hello, welcome to the brand strategy session for Pomodoro.", "is_final": true, "t_start": 0.0, "t_end": 2.8, "stability": 1.0, "delay_ms": 150}
+{"text": "thank you", "is_final": false, "t_start": 3.5, "t_end": 4.0, "stability": 0.6, "delay_ms": 80}
+{"text": "Thank you for having me today, let me share our brand details.", "is_final": true, "t_start": 3.5, "t_end": 5.2, "stability": 1.0, "delay_ms": 150}
+{"text": "so our unique selling", "is_final": false, "t_start": 6.0, "t_end": 7.0, "stability": 0.7, "delay_ms": 100}
+{"text": "So our unique selling proposition is that we are a family-owned authentic Italian restaurant using recipes passed down through three generations. We make all our pasta fresh daily in-house, and we source our tomatoes and olive oil directly from Italy. That really sets us apart from other pizza shops in Wexford and Cranberry Township.", "is_final": true, "t_start": 6.0, "t_end": 18.0, "stability": 1.0, "delay_ms": 200}
+{"text": "that's great", "is_final": false, "t_start": 19.0, "t_end": 19.5, "stability": 0.6, "delay_ms": 80}
+{"text": "That's great, what about your brand guidelines?", "is_final": true, "t_start": 19.0, "t_end": 21.0, "stability": 1.0, "delay_ms": 150}
+{"text": "yes we have", "is_final": false, "t_start": 22.0, "t_end": 23.0, "stability": 0.7, "delay_ms": 100}
+{"text": "Yes, we have established brand guidelines. Our brand colors are deep red and cream white, we use the Playfair Display font for headings and Open Sans for body text. Our logo is a classic Italian-style emblem with a pizza oven. We want a warm, family-friendly, and welcoming tone of voice in all our marketing.", "is_final": true, "t_start": 22.0, "t_end": 38.0, "stability": 1.0, "delay_ms": 200}
+{"text": "and do you have", "is_final": false, "t_start": 39.0, "t_end": 40.0, "stability": 0.7, "delay_ms": 100}
+{"text": "And do you have high-quality photos and videos?", "is_final": true, "t_start": 39.0, "t_end": 41.5, "stability": 1.0, "delay_ms": 150}
+{"text": "yes actually we just", "is_final": false, "t_start": 42.0, "t_end": 43.0, "stability": 0.7, "delay_ms": 100}
+{"text": "Yes, actually we just had a professional photo shoot done last month. We have beautiful high-quality photos of all our signature dishes, the dining room with the wood-fired oven visible, and outdoor patio seating. We also have some short videos of our chef preparing fresh pasta.", "is_final": true, "t_start": 42.0, "t_end": 56.0, "stability": 1.0, "delay_ms": 200}
+{"text": "perfect now for", "is_final": false, "t_start": 57.0, "t_end": 58.0, "stability": 0.7, "delay_ms": 100}
+{"text": "Perfect. Now for the ad campaign, what is your primary objective?", "is_final": true, "t_start": 57.0, "t_end": 60.0, "stability": 1.0, "delay_ms": 150}
+{"text": "our main goal is", "is_final": false, "t_start": 61.0, "t_end": 62.0, "stability": 0.7, "delay_ms": 100}
+{"text": "Our main goal with the Meta ad campaign is to drive more online ordering for delivery and takeout, especially during weekday evenings. We also want to increase dine-in traffic during happy hour from 4 to 6 PM and promote our private event and catering packages for the holiday season.", "is_final": true, "t_start": 61.0, "t_end": 78.0, "stability": 1.0, "delay_ms": 200}
+{"text": "what about your", "is_final": false, "t_start": 79.0, "t_end": 80.0, "stability": 0.7, "delay_ms": 100}
+{"text": "What about your ideal customer profile?", "is_final": true, "t_start": 79.0, "t_end": 82.0, "stability": 1.0, "delay_ms": 150}
+{"text": "our ideal customers", "is_final": false, "t_start": 83.0, "t_end": 84.0, "stability": 0.7, "delay_ms": 100}
+{"text": "Our ideal customers fall into three main groups. First, families with young children in the Cranberry Township area who want a nice sit-down dinner. Second, busy professionals aged 25 to 45 who order delivery through our app. And third, corporate clients in the Wexford business park who need catering for meetings and events.", "is_final": true, "t_start": 83.0, "t_end": 100.0, "stability": 1.0, "delay_ms": 200}
+{"text": "and your marketing", "is_final": false, "t_start": 101.0, "t_end": 102.0, "stability": 0.7, "delay_ms": 100}
+{"text": "And your monthly marketing budget for Meta ads?", "is_final": true, "t_start": 101.0, "t_end": 104.0, "stability": 1.0, "delay_ms": 150}
+{"text": "we've allocated", "is_final": false, "t_start": 105.0, "t_end": 106.0, "stability": 0.7, "delay_ms": 100}
+{"text": "We have allocated fifteen hundred dollars per month specifically for Meta advertising. That includes both Facebook and Instagram ads. We're open to adjusting the split between the two platforms based on performance.", "is_final": true, "t_start": 105.0, "t_end": 118.0, "stability": 1.0, "delay_ms": 200}
+{"text": "what kind of offers", "is_final": false, "t_start": 119.0, "t_end": 120.0, "stability": 0.7, "delay_ms": 100}
+{"text": "What kind of compelling offers or hooks could we feature in the ads?", "is_final": true, "t_start": 119.0, "t_end": 123.0, "stability": 1.0, "delay_ms": 150}
+{"text": "we've had great", "is_final": false, "t_start": 124.0, "t_end": 125.0, "stability": 0.7, "delay_ms": 100}
+{"text": "We have had great success with a few offers. First, ten percent off your first online order. Second, a free bruschetta appetizer with any dine-in entree on weeknights. And third, our family meal deal where you get a large pizza, pasta, salad, and breadsticks for forty-five dollars. Those always drive the most engagement.", "is_final": true, "t_start": 124.0, "t_end": 142.0, "stability": 1.0, "delay_ms": 200}
