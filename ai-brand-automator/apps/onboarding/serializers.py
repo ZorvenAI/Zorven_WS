@@ -9,7 +9,6 @@ to the same field, which is the shape of bug B-02's review caught on
 
 from __future__ import annotations
 
-from collections import Counter
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.contrib.auth.models import User

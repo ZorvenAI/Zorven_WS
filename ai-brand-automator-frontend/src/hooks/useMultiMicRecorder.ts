@@ -268,7 +268,9 @@ export function useMultiMicRecorder(
     handles.current = replaced;
   }, [state, mimeType, teardown]);
 
-  restartRef.current = restartAudio;
+  useEffect(() => {
+    restartRef.current = restartAudio;
+  }, [restartAudio]);
 
   return { state, error, elapsedSeconds, chunksRef, chunkCount, mimeType, start, stop, restartAudio };
 }

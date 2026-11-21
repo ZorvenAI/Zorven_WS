@@ -570,7 +570,7 @@ class MeetingRecording(models.Model):
     transcript_clean = models.JSONField(
         default=list,
         blank=True,
-        help_text="T2 — cleaned transcript. Same schema as transcript but noise removed.",
+        help_text="T2 — cleaned transcript. Same schema, noise removed.",
     )
     transcript_clean_gcs_path = models.CharField(
         max_length=500,

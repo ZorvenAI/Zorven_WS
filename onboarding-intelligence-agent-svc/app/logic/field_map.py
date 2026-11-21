@@ -96,62 +96,78 @@ DEFAULT_WORKFLOW_TARGET: Final[WorkflowTarget] = "WF1"
 _TEXT_PATTERNS: Final[list[tuple[re.Pattern[str], WorkflowTarget]]] = [
     (
         re.compile(
-            r"\b(ad campaign|ad creative|meta ad|facebook ad|instagram ad|google ad|advertising campaign|campaign objective|run.{0,15}ads)\b",
+            r"\b(ad campaign|ad creative|meta ad|facebook ad"
+            r"|instagram ad|google ad|advertising campaign"
+            r"|campaign objective|run.{0,15}ads)\b",
             re.I,
         ),
         "WF3",
     ),
     (
         re.compile(
-            r"\b(marketing budget|ad spend|advertising budget|monthly budget.{0,15}(market|ad|campaign))\b",
+            r"\b(marketing budget|ad spend|advertising budget"
+            r"|monthly budget.{0,15}(market|ad|campaign))\b",
             re.I,
         ),
         "WF3",
     ),
     (
         re.compile(
-            r"\b(hooks?\b.{0,15}\bads?\b|offers?.{0,15}\bads?\b|ad hooks?|creative hooks?)\b",
+            r"\b(hooks?\b.{0,15}\bads?\b"
+            r"|offers?.{0,15}\bads?\b"
+            r"|ad hooks?|creative hooks?)\b",
             re.I,
         ),
         "WF3",
     ),
     (
         re.compile(
-            r"\b(sales channel|distribution channel|pricing strateg|pricing model|customer proof|testimonial|case stud)\b",
+            r"\b(sales channel|distribution channel"
+            r"|pricing strateg|pricing model"
+            r"|customer proof|testimonial|case stud)\b",
             re.I,
         ),
         "WF3",
     ),
     (
         re.compile(
-            r"\b(ideal customer profile|customer persona|buyer persona|customer segment)\b",
+            r"\b(ideal customer profile|customer persona"
+            r"|buyer persona|customer segment)\b",
             re.I,
         ),
         "WF3",
     ),
     (
         re.compile(
-            r"\b(brand guidelines?|brand colou?rs?|brand fonts?|brand identity|brand voice|tone of voice|brand personalit|brand position)",
+            r"\b(brand guidelines?|brand colou?rs?"
+            r"|brand fonts?|brand identity|brand voice"
+            r"|tone of voice|brand personalit"
+            r"|brand position)",
             re.I,
         ),
         "WF2",
     ),
     (
         re.compile(
-            r"\b(trademarks?|brand assets?|logos?|visual identity|brand book)", re.I
-        ),
-        "WF2",
-    ),
-    (
-        re.compile(
-            r"\b(target audience|decision.maker|competitor|competition|digital presence|social media)\b",
+            r"\b(trademarks?|brand assets?|logos?" r"|visual identity|brand book)",
             re.I,
         ),
         "WF2",
     ),
     (
         re.compile(
-            r"\b(photos?|videos?|media assets?|visual assets?|high.quality.{0,15}(images?|photos?|videos?))",
+            r"\b(target audience|decision.maker"
+            r"|competitor|competition"
+            r"|digital presence|social media)\b",
+            re.I,
+        ),
+        "WF2",
+    ),
+    (
+        re.compile(
+            r"\b(photos?|videos?|media assets?"
+            r"|visual assets?"
+            r"|high.quality.{0,15}(images?|photos?|videos?))",
             re.I,
         ),
         "WF2",

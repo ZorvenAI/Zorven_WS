@@ -1,9 +1,10 @@
 'use client';
 
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { CalendarDays, MessageSquare } from 'lucide-react';
 
 import CalendarPane from '@/components/onboarding/CalendarPane';
+import { useHasMounted } from '@/hooks/useHasMounted';
 import { useTenantRole } from '@/hooks/useTenantRole';
 
 const LazyChatInterface = lazy(() =>
@@ -16,8 +17,7 @@ type SubTab = 'calendar' | 'chat';
 
 export default function CalendarTab({ initialSubTab }: { initialSubTab?: SubTab }) {
   const { canEdit } = useTenantRole();
-  const [hasMounted, setHasMounted] = useState(false);
-  useEffect(() => { setHasMounted(true); }, []);
+  const hasMounted = useHasMounted();
   const [activeSubTab, setActiveSubTab] = useState<SubTab>(initialSubTab ?? 'calendar');
 
   return (

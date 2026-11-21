@@ -10,7 +10,7 @@
  * from the header.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -21,6 +21,7 @@ import {
   Radio,
 } from 'lucide-react';
 
+import { useHasMounted } from '@/hooks/useHasMounted';
 import { useTenantRole } from '@/hooks/useTenantRole';
 import SessionListSidebar from '@/components/onboarding/SessionListSidebar';
 import SessionOverviewTab from '@/components/onboarding/SessionOverviewTab';
@@ -43,8 +44,7 @@ export default function OnboardingUnified() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { canEdit: canEditRole } = useTenantRole();
-  const [hasMounted, setHasMounted] = useState(false);
-  useEffect(() => { setHasMounted(true); }, []);
+  const hasMounted = useHasMounted();
   const canEdit = hasMounted && canEditRole;
 
   // Derive state from URL — the URL is the source of truth (fixes #9, #5, #6).
@@ -59,20 +59,21 @@ export default function OnboardingUnified() {
 
   // Track whether a meeting recording is in progress to prevent unmount.
   const [meetingRecordingActive, setMeetingRecordingActive] = useState(false);
-  const meetingSessionIdRef = useRef<string | null>(null);
+  const [meetingSessionId, setMeetingSessionId] = useState<string | null>(null);
 
-  // When the sidebar delivers a full session object, store it keyed by ID.
-  // If sessionParam changes but selectedSession is stale, the sidebar will
-  // call onSelectSession with the real data once it loads.
-  useEffect(() => {
+  // Reset selection when the URL session param changes (render-time adjustment
+  // avoids the react-hooks/set-state-in-effect rule).
+  const [prevSessionParam, setPrevSessionParam] = useState(sessionParam);
+  if (sessionParam !== prevSessionParam) {
+    setPrevSessionParam(sessionParam);
     if (!sessionParam) {
       setSelectedSession(null);
-      meetingSessionIdRef.current = null;
+      setMeetingSessionId(null);
     } else if (selectedSession && selectedSession.id !== sessionParam) {
       setSelectedSession(null);
-      meetingSessionIdRef.current = null;
+      setMeetingSessionId(null);
     }
-  }, [sessionParam, selectedSession]);
+  }
 
   const updateUrl = useCallback(
     (sessionId: string | null, tab: DetailTab | 'calendar-chat', { replace = false }: { replace?: boolean } = {}) => {
@@ -91,14 +92,14 @@ export default function OnboardingUnified() {
 
   const handleSelectSession = useCallback(
     (session: OnboardingSessionSummary) => {
-      if (meetingRecordingActive && meetingSessionIdRef.current && meetingSessionIdRef.current !== session.id) {
+      if (meetingRecordingActive && meetingSessionId && meetingSessionId !== session.id) {
         return;
       }
       setSelectedSession(session);
       const tab = activeTab === 'calendar' ? 'overview' : activeTab;
       updateUrl(session.id, tab);
     },
-    [activeTab, updateUrl, meetingRecordingActive],
+    [activeTab, updateUrl, meetingRecordingActive, meetingSessionId],
   );
 
   const handleTabChange = useCallback(
@@ -119,7 +120,7 @@ export default function OnboardingUnified() {
   const handleMeetingRecordingChange = useCallback((active: boolean) => {
     setMeetingRecordingActive(active);
     if (active && selectedSession) {
-      meetingSessionIdRef.current = selectedSession.id;
+      setMeetingSessionId(selectedSession.id);
     }
   }, [selectedSession]);
 
@@ -145,7 +146,7 @@ export default function OnboardingUnified() {
 
   // Fix #2: Keep MeetingTab mounted (hidden) while recording to prevent
   // audio loss. The meeting session ID tracks which session owns the recorder.
-  const keepMeetingMounted = meetingRecordingActive && meetingSessionIdRef.current;
+  const keepMeetingMounted = meetingRecordingActive && meetingSessionId;
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
@@ -235,11 +236,11 @@ export default function OnboardingUnified() {
               />
             )}
             {/* Fix #2: Keep MeetingTab mounted (hidden) during recording. */}
-            {keepMeetingMounted && meetingSessionIdRef.current && activeTab !== 'meeting' && (
+            {keepMeetingMounted && meetingSessionId && activeTab !== 'meeting' && (
               <div className="hidden">
                 <MeetingTab
-                  key={meetingSessionIdRef.current}
-                  sessionId={meetingSessionIdRef.current}
+                  key={meetingSessionId}
+                  sessionId={meetingSessionId}
                   onBack={() => handleTabChange('overview')}
                   onRecordingChange={handleMeetingRecordingChange}
                 />

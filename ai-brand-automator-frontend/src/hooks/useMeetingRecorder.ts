@@ -336,7 +336,9 @@ export function useMeetingRecorder(): UseMeetingRecorder {
     newMedia.start(TIMESLICE_MS);
   }, [state, mimeType, teardown]);
 
-  restartRef.current = restartAudio;
+  useEffect(() => {
+    restartRef.current = restartAudio;
+  }, [restartAudio]);
 
   return { state, error, elapsedSeconds, chunksRef, chunkCount, mimeType, start, stop, restartAudio };
 }
