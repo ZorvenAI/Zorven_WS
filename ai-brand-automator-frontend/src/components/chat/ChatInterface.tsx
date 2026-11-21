@@ -46,9 +46,10 @@ const WELCOME_MESSAGE: Message = {
 
 export interface ChatInterfaceProps {
   defaultSidebarOpen?: boolean;
+  ignoreSessionParam?: boolean;
 }
 
-export function ChatInterface({ defaultSidebarOpen = true }: ChatInterfaceProps) {
+export function ChatInterface({ defaultSidebarOpen = true, ignoreSessionParam = false }: ChatInterfaceProps) {
   const { canEdit: canEditFlag } = useTenantRole();
   const { activeBrand, refreshBrands } = useBrandContext();
   const [hasMounted, setHasMounted] = useState(false);
@@ -335,8 +336,8 @@ export function ChatInterface({ defaultSidebarOpen = true }: ChatInterfaceProps)
   // Support ?session= query param for shared links (takes priority over localStorage)
   const searchParams = useSearchParams();
   const querySessionId = useMemo(
-    () => searchParams.get('session'),
-    [searchParams]
+    () => ignoreSessionParam ? null : searchParams.get('session'),
+    [searchParams, ignoreSessionParam]
   );
 
   // On mount: restore session from query param, localStorage, or auto-select most recent.

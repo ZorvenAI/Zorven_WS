@@ -17,9 +17,10 @@ const CONSENT_POLL_MS = 3000;
 interface MeetingTabProps {
   sessionId: string;
   onBack: () => void;
+  onRecordingChange?: (active: boolean) => void;
 }
 
-export default function MeetingTab({ sessionId, onBack }: MeetingTabProps) {
+export default function MeetingTab({ sessionId, onBack, onRecordingChange }: MeetingTabProps) {
   const [questionnaire, setQuestionnaire] = useState<QuestionnaireDetail | null>(null);
   const [consent, setConsent] = useState<ConsentState | null>(null);
   const [loading, setLoading] = useState(true);

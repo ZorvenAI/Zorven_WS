@@ -10,7 +10,7 @@
  * from the header.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -39,38 +39,43 @@ function isValidTab(value: string | null): value is DetailTab {
   return value === 'overview' || value === 'meeting' || value === 'review' || value === 'description' || value === 'calendar';
 }
 
-function Inner({
-  initialSessionId,
-  initialTab,
-}: {
-  initialSessionId: string | null;
-  initialTab: DetailTab;
-}) {
+export default function OnboardingUnified() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { canEdit: canEditRole } = useTenantRole();
   const [hasMounted, setHasMounted] = useState(false);
   useEffect(() => { setHasMounted(true); }, []);
   const canEdit = hasMounted && canEditRole;
 
+  // Derive state from URL — the URL is the source of truth (fixes #9, #5, #6).
+  const sessionParam = searchParams?.get('session') ?? null;
+  const tabParam = searchParams?.get('tab') ?? null;
+  const activeTab: DetailTab = isValidTab(tabParam) ? tabParam : sessionParam ? 'overview' : 'calendar';
+  const calendarSubTab = tabParam === 'calendar-chat' ? 'chat' as const : undefined;
+
   const [selectedSession, setSelectedSession] =
-    useState<OnboardingSessionSummary | null>(() =>
-      initialSessionId
-        ? {
-            id: initialSessionId,
-            company: null,
-            company_name: null,
-            status: 'DRAFT' as const,
-            questionnaire: null,
-            created_at: '',
-            updated_at: '',
-          }
-        : null,
-    );
-  const [activeTab, setActiveTab] = useState<DetailTab>(initialTab);
+    useState<OnboardingSessionSummary | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  // Track whether a meeting recording is in progress to prevent unmount.
+  const [meetingRecordingActive, setMeetingRecordingActive] = useState(false);
+  const meetingSessionIdRef = useRef<string | null>(null);
+
+  // When the sidebar delivers a full session object, store it keyed by ID.
+  // If sessionParam changes but selectedSession is stale, the sidebar will
+  // call onSelectSession with the real data once it loads.
+  useEffect(() => {
+    if (!sessionParam) {
+      setSelectedSession(null);
+      meetingSessionIdRef.current = null;
+    } else if (selectedSession && selectedSession.id !== sessionParam) {
+      setSelectedSession(null);
+      meetingSessionIdRef.current = null;
+    }
+  }, [sessionParam, selectedSession]);
+
   const updateUrl = useCallback(
-    (sessionId: string | null, tab: DetailTab) => {
+    (sessionId: string | null, tab: DetailTab | 'calendar-chat') => {
       const params = new URLSearchParams();
       if (sessionId) params.set('session', sessionId);
       params.set('tab', tab);
@@ -82,26 +87,37 @@ function Inner({
 
   const handleSelectSession = useCallback(
     (session: OnboardingSessionSummary) => {
+      if (meetingRecordingActive && meetingSessionIdRef.current && meetingSessionIdRef.current !== session.id) {
+        return;
+      }
       setSelectedSession(session);
       const tab = activeTab === 'calendar' ? 'overview' : activeTab;
-      setActiveTab(tab);
       updateUrl(session.id, tab);
     },
-    [activeTab, updateUrl],
+    [activeTab, updateUrl, meetingRecordingActive],
   );
 
   const handleTabChange = useCallback(
     (tab: DetailTab) => {
-      setActiveTab(tab);
-      updateUrl(selectedSession?.id ?? null, tab);
+      if (meetingRecordingActive && tab !== 'meeting') {
+        return;
+      }
+      updateUrl(selectedSession?.id ?? sessionParam, tab);
     },
-    [selectedSession, updateUrl],
+    [selectedSession, sessionParam, updateUrl, meetingRecordingActive],
   );
 
+  // Fix #7: "prepare in chat" should open the chat subtab, not just calendar.
   const handleSwitchToChat = useCallback(() => {
-    setActiveTab('calendar');
-    updateUrl(null, 'calendar');
+    updateUrl(null, 'calendar-chat');
   }, [updateUrl]);
+
+  const handleMeetingRecordingChange = useCallback((active: boolean) => {
+    setMeetingRecordingActive(active);
+    if (active && selectedSession) {
+      meetingSessionIdRef.current = selectedSession.id;
+    }
+  }, [selectedSession]);
 
   const showOverviewTab = !!selectedSession;
   const showMeetingTab =
@@ -123,6 +139,10 @@ function Inner({
       selectedSession.status === 'COMPLETED' ||
       activeTab === 'description');
 
+  // Fix #2: Keep MeetingTab mounted (hidden) while recording to prevent
+  // audio loss. The meeting session ID tracks which session owns the recorder.
+  const keepMeetingMounted = meetingRecordingActive && meetingSessionIdRef.current;
+
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
       {/* Header */}
@@ -133,19 +153,22 @@ function Inner({
             Prepare, meet, review — all in one place.
           </p>
         </div>
-        <Link
-          href={wizardDeepLink(selectedSession)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-brand-silver transition-colors hover:bg-white/5 hover:text-white"
-        >
-          <FileText className="h-3.5 w-3.5" aria-hidden />
-          Go to Forms
-        </Link>
+        {/* Fix #8: Only show "Go to Forms" for editors, matching OnboardingHome guard. */}
+        {canEdit && (
+          <Link
+            href={wizardDeepLink(selectedSession)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-brand-silver transition-colors hover:bg-white/5 hover:text-white"
+          >
+            <FileText className="h-3.5 w-3.5" aria-hidden />
+            Go to Forms
+          </Link>
+        )}
       </header>
 
       {/* Main content: sidebar + detail */}
       <div className="flex min-h-0 flex-1">
         <SessionListSidebar
-          selectedSessionId={selectedSession?.id ?? null}
+          selectedSessionId={selectedSession?.id ?? sessionParam}
           onSelectSession={handleSelectSession}
           onSwitchToChat={handleSwitchToChat}
           collapsed={sidebarCollapsed}
@@ -198,26 +221,42 @@ function Inner({
 
           {/* Tab content */}
           <div className="min-h-0 flex-1 overflow-y-auto">
+            {/* Fix #1: Key by session ID so React remounts on session switch, resetting child state. */}
             {activeTab === 'overview' && selectedSession && (
               <SessionOverviewTab
+                key={selectedSession.id}
                 sessionId={selectedSession.id}
                 onOpenMeeting={() => handleTabChange('meeting')}
                 onOpenReview={() => handleTabChange('review')}
               />
             )}
+            {/* Fix #2: Keep MeetingTab mounted (hidden) during recording. */}
+            {keepMeetingMounted && meetingSessionIdRef.current && activeTab !== 'meeting' && (
+              <div className="hidden">
+                <MeetingTab
+                  key={meetingSessionIdRef.current}
+                  sessionId={meetingSessionIdRef.current}
+                  onBack={() => handleTabChange('overview')}
+                  onRecordingChange={handleMeetingRecordingChange}
+                />
+              </div>
+            )}
             {activeTab === 'meeting' && selectedSession && (
               <MeetingTab
+                key={selectedSession.id}
                 sessionId={selectedSession.id}
                 onBack={() => handleTabChange('overview')}
+                onRecordingChange={handleMeetingRecordingChange}
               />
             )}
             {activeTab === 'review' && selectedSession && (
-              <KeyFindingsReview sessionId={selectedSession.id} />
+              <KeyFindingsReview key={selectedSession.id} sessionId={selectedSession.id} />
             )}
             {activeTab === 'description' && selectedSession && (
-              <DescriptionTab sessionId={selectedSession.id} />
+              <DescriptionTab key={selectedSession.id} sessionId={selectedSession.id} />
             )}
-            {activeTab === 'calendar' && <CalendarTab />}
+            {/* Fix #4: Pass initialSubTab so chat vs calendar can be distinguished. */}
+            {activeTab === 'calendar' && <CalendarTab initialSubTab={calendarSubTab} />}
             {!selectedSession && activeTab !== 'calendar' && (
               <div className="flex h-full flex-col items-center justify-center gap-3 text-brand-silver">
                 <LayoutDashboard className="h-10 w-10 opacity-30" />
@@ -270,13 +309,4 @@ function TabButton({
       {label}
     </button>
   );
-}
-
-export default function OnboardingUnified() {
-  const searchParams = useSearchParams();
-  const sessionParam = searchParams?.get('session') ?? null;
-  const tabParam = searchParams?.get('tab') ?? null;
-  const tab: DetailTab = isValidTab(tabParam) ? tabParam : sessionParam ? 'overview' : 'calendar';
-
-  return <Inner initialSessionId={sessionParam} initialTab={tab} />;
 }

@@ -2845,7 +2845,7 @@ class ScheduledMeetingViewSet(
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsTenantViewer])
 def session_description(request, pk):
     """``GET /api/v1/onboarding/sessions/<pk>/description/``
 
@@ -2854,7 +2854,7 @@ def session_description(request, pk):
     tenant = getattr(request, "tenant", None)
     qs = OnboardingSession.objects.all()
     if tenant:
-        qs = qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+        qs = qs.filter(tenant_scope_q(tenant))
     else:
         qs = qs.filter(tenant__isnull=True)
 

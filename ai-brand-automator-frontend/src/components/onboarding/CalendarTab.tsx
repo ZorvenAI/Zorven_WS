@@ -8,17 +8,17 @@ import { useTenantRole } from '@/hooks/useTenantRole';
 
 const LazyChatInterface = lazy(() =>
   import('@/components/chat/ChatInterface').then((m) => ({
-    default: () => m.ChatInterface({ defaultSidebarOpen: false }),
+    default: () => m.ChatInterface({ defaultSidebarOpen: false, ignoreSessionParam: true }),
   })),
 );
 
 type SubTab = 'calendar' | 'chat';
 
-export default function CalendarTab() {
+export default function CalendarTab({ initialSubTab }: { initialSubTab?: SubTab }) {
   const { canEdit } = useTenantRole();
   const [hasMounted, setHasMounted] = useState(false);
   useEffect(() => { setHasMounted(true); }, []);
-  const [activeSubTab, setActiveSubTab] = useState<SubTab>('calendar');
+  const [activeSubTab, setActiveSubTab] = useState<SubTab>(initialSubTab ?? 'calendar');
 
   return (
     <div className="flex h-full flex-col">
