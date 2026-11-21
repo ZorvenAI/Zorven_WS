@@ -162,7 +162,7 @@ Django dispatches job → pipeline-orchestrator-svc → sequential execution (Ka
   → Callback → Django AnalysisJob (atomic update) → extract_metrics_task (analytics)
 ```
 
-When `ORCHESTRATION_KAFKA_ENABLED=false` (default), dispatch is HTTP. When `true`, dispatch goes through `pipeline-trigger-topic`.
+When `ORCHESTRATION_KAFKA_ENABLED=false` (default), dispatch is HTTP. When `true`, dispatch goes through `pipeline-trigger-topic`. See `deployment/CLAUDE.md` for the full Kafka topics table.
 
 **Two pipeline modes:**
 - **Chat (auto-detect)**: No manifest. `PipelineComposer` uses Gemini function-calling to dynamically compose a pipeline from the node catalog.
@@ -311,6 +311,8 @@ export default function MyPage() {
 }
 ```
 
+**File uploads**: Use `apiClient.upload()` — it omits the `Content-Type` header so the browser sets the multipart boundary automatically. Never set `Content-Type` manually for multipart requests.
+
 ### Frontend Polling (setTimeout, not setInterval)
 
 ```tsx
@@ -349,6 +351,7 @@ Use `sanitize_text_input()`, `sanitize_ai_prompt()`, `validate_file_upload()` fr
 - **Format**: Black (88 char lines) + Flake8
 - **Dispatch errors**: 4xx → non-retryable (mark FAILED), 5xx/timeout → retryable (leave QUEUED)
 - **SSRF prevention**: External URLs validated against `ALLOWED_URL_PREFIXES`
+- **Kong proxy check**: Backend verifies `X-Kong-Proxy: true` header when `KONG_ENABLED=true` — only enable behind Kong
 - **DB SSL**: `sslmode=require`, `channel_binding=require` for Neon
 
 ### Frontend
@@ -380,9 +383,15 @@ Use `sanitize_text_input()`, `sanitize_ai_prompt()`, `validate_file_upload()` fr
 | Skill loader + router | `pipeline-orchestrator-svc/app/skills/` |
 | Analytics extractors | `ai-brand-automator/analytics/extractors/` |
 | OIA models + review API | `ai-brand-automator/apps/onboarding/` |
+| Auth views (login/register) | `ai-brand-automator/brand_automator/auth_views.py` |
 | Frontend API client | `ai-brand-automator-frontend/src/lib/api.ts` |
 | Frontend env config | `ai-brand-automator-frontend/src/lib/env.ts` |
+| Frontend error types | `ai-brand-automator-frontend/src/lib/errors.ts` |
+| Orchestration API (FE) | `ai-brand-automator-frontend/src/lib/orchestration.ts` |
+| Orchestration types (FE) | `ai-brand-automator-frontend/src/types/orchestration.ts` |
 | Tenant context | `ai-brand-automator-frontend/src/contexts/TenantContext.tsx` |
+| Tenant role hook | `ai-brand-automator-frontend/src/hooks/useTenantRole.ts` |
+| Job polling hook | `ai-brand-automator-frontend/src/hooks/usePollingJob.ts` |
 
 ## Key Environment Variables
 
@@ -390,12 +399,14 @@ Use `sanitize_text_input()`, `sanitize_ai_prompt()`, `validate_file_upload()` fr
 # Backend (.env) — via decouple.config()
 SECRET_KEY=<required>                        # Fernet encryption key derived from this
 GOOGLE_API_KEY=<gemini-key>                  # Omit for mock mode in tests
+STRIPE_SECRET_KEY=<stripe-key>
 DATABASE_URL=<neon-postgres-url>
 KONG_ENABLED=false                           # true only behind Kong
 KAFKA_CONSUMERS_ENABLED=false
 ORCHESTRATOR_URL=http://localhost:8010
 ORCHESTRATOR_SERVICE_TOKEN=<service-token>
 ORCHESTRATOR_CALLBACK_TOKEN=<callback-token>
+ORCHESTRATOR_TIMEOUT=30                      # HTTP timeout for dispatch calls (seconds)
 BACKEND_URL=http://localhost:8001
 WORKER_TOKEN=<worker-token>
 ORCHESTRATION_KAFKA_ENABLED=false            # true for Kafka dispatch (vs HTTP)
