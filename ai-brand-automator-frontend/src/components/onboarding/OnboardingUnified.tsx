@@ -75,12 +75,16 @@ export default function OnboardingUnified() {
   }, [sessionParam, selectedSession]);
 
   const updateUrl = useCallback(
-    (sessionId: string | null, tab: DetailTab | 'calendar-chat') => {
+    (sessionId: string | null, tab: DetailTab | 'calendar-chat', { replace = false }: { replace?: boolean } = {}) => {
       const params = new URLSearchParams();
       if (sessionId) params.set('session', sessionId);
       params.set('tab', tab);
-      const query = params.toString();
-      router.replace(`/onboarding?${query}`, { scroll: false });
+      const url = `/onboarding?${params.toString()}`;
+      if (replace) {
+        router.replace(url, { scroll: false });
+      } else {
+        router.push(url, { scroll: false });
+      }
     },
     [router],
   );

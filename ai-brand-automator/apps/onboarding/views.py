@@ -1279,6 +1279,7 @@ class MeetingRecordingViewSet(
         asset = BrandAsset.objects.create(
             tenant=recording.tenant,
             company=company,
+            onboarding_session=recording.session,
             file_name=recording.upload_gcs_path.rsplit("/", 1)[-1],
             # "other", not "video": §10.1 calls this audio, and the curation
             # pipeline branches on this value. Miscalling it video would send

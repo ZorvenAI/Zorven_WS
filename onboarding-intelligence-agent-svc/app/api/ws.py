@@ -1736,12 +1736,12 @@ async def _handle_control(
             cancel_ev = asyncio.Event()
             stt_state["t2t3_cancel"] = cancel_ev
             stt_state["t2_task"] = asyncio.create_task(
-                _t2.run(cancel_ev), name=f"t2-clean-{session_id}"
+                _t2.run(cancel_ev), name=f"t2-clean-{session.session_id}"
             )
             stt_state["t3_task"] = asyncio.create_task(
-                _t3.run(cancel_ev), name=f"t3-desc-{session_id}"
+                _t3.run(cancel_ev), name=f"t3-desc-{session.session_id}"
             )
-            logger.info("t2t3_started", session_id=session_id)
+            logger.info("t2t3_started", session_id=session.session_id)
         return
 
     if frame_type == ClientFrameType.STOP.value:
@@ -1802,17 +1802,19 @@ async def _handle_control(
             _cancel_ev.set()
         _t2c = stt_state.get("t2_cleaner")
         _t3g = stt_state.get("t3_generator")
-        _fin_timeout = getattr(cfg, "FINALIZE_TIMEOUT_S", 30)
+        from app.core.config import get_settings as _gs_fin
+
+        _fin_timeout = getattr(_gs_fin(), "FINALIZE_TIMEOUT_S", 30)
         if _t2c:
             try:
                 await asyncio.wait_for(_t2c.finalize(), timeout=_fin_timeout)
             except Exception:  # noqa: BLE001
-                logger.warning("t2_finalize_timeout", session_id=session_id)
+                logger.warning("t2_finalize_timeout", session_id=session.session_id)
         if _t3g:
             try:
                 await asyncio.wait_for(_t3g.finalize(), timeout=_fin_timeout)
             except Exception:  # noqa: BLE001
-                logger.warning("t3_finalize_timeout", session_id=session_id)
+                logger.warning("t3_finalize_timeout", session_id=session.session_id)
         _t2t = stt_state.get("t2_task")
         _t3t = stt_state.get("t3_task")
         if _t2t or _t3t:
