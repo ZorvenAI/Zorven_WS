@@ -171,7 +171,7 @@ export default function KeyFindingsReview({
     setSubmitError(null);
     try {
       await submitReview(sessionId);
-      router.push(`/onboarding/sessions/${sessionId}`);
+      router.push(`/onboarding?session=${sessionId}&tab=overview`);
     } catch (err) {
       setSubmitError(String(err));
     } finally {
@@ -215,11 +215,11 @@ export default function KeyFindingsReview({
       {/* Header */}
       <div>
         <Link
-          href={`/onboarding/sessions/${sessionId}`}
+          href={`/onboarding?session=${sessionId}&tab=overview`}
           className="mb-3 inline-flex items-center gap-2 text-sm text-brand-silver hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
-          Back to session
+          Back to overview
         </Link>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold text-white">Key Findings</h1>

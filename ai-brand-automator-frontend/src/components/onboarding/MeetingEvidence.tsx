@@ -169,7 +169,7 @@ export default function MeetingEvidence({ sessionId }: MeetingEvidenceProps) {
                 <span className="flex-1" />
                 {r.has_summary && (
                   <a
-                    href={`/onboarding/sessions/${sessionId}?recording=${r.id}`}
+                    href={`/onboarding?session=${sessionId}&tab=overview&recording=${r.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs text-brand-electric hover:underline"
@@ -207,7 +207,7 @@ export default function MeetingEvidence({ sessionId }: MeetingEvidenceProps) {
                   />
                 )}
                 <a
-                  href={`/onboarding/sessions/${sessionId}`}
+                  href={`/onboarding?session=${sessionId}&tab=overview`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="truncate text-white hover:text-brand-electric"

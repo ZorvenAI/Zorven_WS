@@ -1783,7 +1783,7 @@ services:
       - OIA_KAFKA_BOOTSTRAP_SERVERS=${OIA_KAFKA_BOOTSTRAP_SERVERS:-}
       - OIA_LOG_LEVEL=INFO
       # STT provider: "google" for real Speech-to-Text, "fake" for fixture replay.
-      - OIA_STT_PROVIDER=${OIA_STT_PROVIDER:-google}
+      - OIA_STT_PROVIDER=${OIA_STT_PROVIDER:-fake}
       - OIA_STT_PROJECT=${OIA_STT_PROJECT:-zorven-503517}
       - OIA_STT_FAKE_FIXTURE=/app/config/fixtures/two_speaker_2min.jsonl
       - GOOGLE_APPLICATION_CREDENTIALS=/gcloud/application_default_credentials.json
