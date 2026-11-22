@@ -565,6 +565,37 @@ class MeetingRecording(models.Model):
             "prompts are attributed by, so no name is sent to a provider"
         ),
     )
+
+    # ── Three-Tier Transcript fields ───────────────────────────────
+    transcript_clean = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="T2 — cleaned transcript. Same schema, noise removed.",
+    )
+    transcript_clean_gcs_path = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="GCS path to clean transcript JSON",
+    )
+    description = models.TextField(
+        blank=True,
+        default="",
+        help_text="T3 — structured brand-building description from clean transcript",
+    )
+    description_gcs_path = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="GCS path to description document",
+    )
+    raw_transcript_gcs_path = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="GCS path to raw (T1) transcript — diagnostics only",
+    )
+
     started_at = models.DateTimeField(auto_now_add=True)
     stopped_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

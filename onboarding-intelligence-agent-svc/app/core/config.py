@@ -87,7 +87,7 @@ class Settings(BaseSettings):
     COVERAGE_CROSSCHECK_TOLERANCE: float = 0.05
 
     # ── Extraction (J-03, Design §8.2 SKL-OIA-10) ──────────
-    PROCESS_MODEL: str = "gemini-2.0-flash"
+    PROCESS_MODEL: str = "claude-sonnet-4"
     EXTRACTION_MAX_STEPS: int = 40
     EXTRACTION_TEMPERATURE: float = 0.1
     EXTRACTION_RETRY_LIMIT: int = 1
@@ -116,6 +116,15 @@ class Settings(BaseSettings):
     PG07_PROCESS_TOKEN_BUDGET: int = 120_000
     OG03_KEY_CONFIDENCE_THRESHOLD: float = 0.6
     OG04_JUDGE_SAMPLE_RATE: float = 0.1
+
+    # ── Three-Tier Transcript (Design §6) ──────────────────
+    CLEAN_INTERVAL_S: int = 30
+    CLEAN_MIN_SEGMENTS: int = 5
+    DESCRIPTION_INTERVAL_S: int = 60
+    DESCRIPTION_MIN_CHARS: int = 200
+    FINALIZE_TIMEOUT_S: int = 30
+    CLEAN_MODEL: str = "claude-sonnet-4"
+    DESCRIPTION_MODEL: str = "claude-sonnet-4"
 
     # ── Batcher (G-02, Design §4.3) ────────────────────────
     BATCH_WINDOW_S: float = 3.0

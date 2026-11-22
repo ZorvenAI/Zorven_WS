@@ -107,6 +107,7 @@ export function useMeetingRecorder(): UseMeetingRecorder {
   const ticker = useRef<ReturnType<typeof setInterval> | null>(null);
   const nextIndex = useRef(0);
   const generationRef = useRef(0);
+  const restartRef = useRef<(() => void) | null>(null);
 
   /**
    * Elapsed comes from the audio clock, never from Date.now().
@@ -202,11 +203,33 @@ export function useMeetingRecorder(): UseMeetingRecorder {
       setChunkCount((n) => n + 1);
     };
 
+    media.onerror = () => {
+      const tracks = granted.getTracks();
+      const hasLiveTrack = tracks.some((t) => t.readyState === 'live');
+      if (hasLiveTrack && restartRef.current) {
+        restartRef.current();
+      } else {
+        setError('Recording interrupted — microphone became unavailable.');
+        setState('idle');
+        teardown();
+      }
+    };
+
+    for (const track of granted.getTracks()) {
+      track.onended = () => {
+        if (recorder.current?.state === 'recording') {
+          setError('Microphone disconnected.');
+          setState('idle');
+          teardown();
+        }
+      };
+    }
+
     media.start(TIMESLICE_MS);
     setState('recording');
     setElapsed(0);
     ticker.current = setInterval(() => setElapsed(readElapsed()), 200);
-  }, [readElapsed]);
+  }, [readElapsed, teardown]);
 
   const stop = useCallback(async () => {
     const media = recorder.current;
@@ -298,8 +321,24 @@ export function useMeetingRecorder(): UseMeetingRecorder {
       setChunkCount((n) => n + 1);
     };
 
+    newMedia.onerror = () => {
+      const tracks = currentStream.getTracks();
+      const hasLiveTrack = tracks.some((t) => t.readyState === 'live');
+      if (hasLiveTrack && restartRef.current) {
+        restartRef.current();
+      } else {
+        setError('Recording interrupted — microphone became unavailable.');
+        setState('idle');
+        teardown();
+      }
+    };
+
     newMedia.start(TIMESLICE_MS);
-  }, [state, mimeType]);
+  }, [state, mimeType, teardown]);
+
+  useEffect(() => {
+    restartRef.current = restartAudio;
+  }, [restartAudio]);
 
   return { state, error, elapsedSeconds, chunksRef, chunkCount, mimeType, start, stop, restartAudio };
 }

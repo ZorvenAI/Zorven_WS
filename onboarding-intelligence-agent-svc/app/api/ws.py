@@ -88,7 +88,12 @@ from app.logic.live_handshake import (
 )
 from app.logic.live_lock import REFRESH_S, LiveLock, acquire
 from app.logic.coverage import compute_coverage
-from app.logic.field_map import WorkflowTarget, resolve_field, resolve_workflow_target
+from app.logic.field_map import (
+    WorkflowTarget,
+    infer_workflow_from_text,
+    resolve_field,
+    resolve_workflow_target,
+)
 from app.logic.live_session import LiveSessionManager, SegmentBatcher, SegmentBatch
 from app.providers.stt import STTAdapter, STTResult, STTUnavailable
 from app.skills.models import SkillContext, TenantContext, Origin
@@ -379,15 +384,16 @@ async def _stt_loop(
 
                 record_stt_partial_latency((_time.perf_counter() - _partial_t0) * 1000)
     except STTUnavailable as exc:
-        if exc.resync:
-            # Container codec (WebM/Opus) hit the Google STT stream limit.
-            # Ask the frontend to restart its MediaRecorder so the next
-            # `start` frame creates a fresh STT session with a valid header.
-            logger.info("stt_resync_requested", reason=exc.reason)
-            try:
-                await websocket.send_json({"type": "resync"})
-            except Exception:  # noqa: BLE001 - socket may be closing
-                pass
+        if getattr(exc, "resync", False):
+            logger.warning("stt_rollover_fallback", reason=exc.reason)
+            return
+        cause = exc.__cause__
+        cause_str = f"{type(cause).__name__}: {cause}" if cause else ""
+        is_auth_error = (
+            "Reauthentication" in cause_str or "credentials" in cause_str.lower()
+        )
+        if is_auth_error:
+            logger.info("stt_auth_unavailable", reason=cause_str)
         else:
             logger.warning("stt_unavailable", reason=exc.reason, mode=exc.degraded_mode)
             await session.set_mode(LiveSessionManager.MODE_RECORD_ONLY)
@@ -742,6 +748,32 @@ async def _tolerating_a_closed_socket(
         )
 
 
+def _hydrate_evidence_text(
+    evidence: list[dict[str, Any]],
+    segments: list[dict[str, Any]],
+) -> None:
+    """Add transcript text to evidence spans from the batch segments.
+
+    Evidence spans from SKL-OIA-04 carry only time references; the
+    sufficiency skill (SKL-OIA-05) needs the actual text to score.
+    """
+    for ev in evidence:
+        if ev.get("text"):
+            continue
+        ev_start = ev.get("t_start", 0.0)
+        ev_end = ev.get("t_end", 0.0)
+        parts: list[str] = []
+        for seg in segments:
+            seg_start = seg.get("t_start", 0.0)
+            seg_end = seg.get("t_end", 0.0)
+            if seg_end >= ev_start and seg_start <= ev_end:
+                txt = seg.get("text", "")
+                if txt:
+                    parts.append(txt)
+        if parts:
+            ev["text"] = " ".join(parts)
+
+
 async def _run_analysis(
     websocket: WebSocket,
     session: LiveSessionManager,
@@ -834,6 +866,8 @@ async def _run_analysis(
     batch_speaker = int(raw_speaker) if raw_speaker is not None else None
     op_speaker = await session.get_operator_speaker()
 
+    seg_list = batch.segments
+
     for chunk in chunks:
         chunk_type = chunk.get("type", "")
         if chunk_type == "attachment":
@@ -842,6 +876,7 @@ async def _run_analysis(
             evidence = chunk.get("evidence", [])
             relevance = chunk.get("relevance", 0.0)
             if qid and evidence:
+                _hydrate_evidence_text(evidence, seg_list)
                 await session.store_analysis_result(qid, evidence, relevance)
                 updated_questions.append(qid)
 
@@ -860,6 +895,8 @@ async def _run_analysis(
 
             has_result = True
             target_field, workflow_target = resolve_field(inferred)
+            if workflow_target == "WF1" and not inferred:
+                workflow_target = infer_workflow_from_text(adhoc_text)
             evidence = [
                 {
                     "recording_id": batch.recording_id,
@@ -867,6 +904,7 @@ async def _run_analysis(
                     "t_end": batch.last_t,
                 }
             ]
+            _hydrate_evidence_text(evidence, seg_list)
             qid = await session.add_adhoc_question(
                 text=adhoc_text,
                 target_field=target_field,
@@ -957,8 +995,22 @@ async def _run_post_analysis(
 
     # If a newer chain was spawned while we were waiting, bail out so
     # an older, slower evaluation does not overwrite newer scores.
-    if version and analysis_state.get("post_version", 0) > version:
+    current_pv = analysis_state.get("post_version", 0)
+    if version and current_pv > version:
+        logger.info(
+            "post_analysis_superseded",
+            version=version,
+            current=current_pv,
+            session=session.session_id,
+        )
         return
+
+    logger.info(
+        "post_analysis_started",
+        version=version,
+        question_count=len(updated_questions),
+        session=session.session_id,
+    )
 
     _suf_t0 = _time.perf_counter()
     await _evaluate_sufficiency(
@@ -1035,21 +1087,36 @@ async def _evaluate_sufficiency(
     threshold = cfg.SUFFICIENCY_GREEN_THRESHOLD
     _analysis_timeout = cfg.ANALYSIS_TIMEOUT_S
 
+    logger.info(
+        "sufficiency_eval_start",
+        session=session.session_id,
+        question_count=len(question_ids),
+    )
     for qid in question_ids:
         entry = await session.get_question_entry(qid)
         if entry is None:
+            logger.info("sufficiency_skip", qid=qid, reason="no_entry")
             continue
 
         if entry.get("status") == "GREEN":
+            logger.info("sufficiency_skip", qid=qid, reason="already_green")
             continue
         if entry.get("source") == "manual":
+            logger.info("sufficiency_skip", qid=qid, reason="manual")
             continue
 
         expected_version = entry.get("version", 0)
         evidence_spans = entry.get("evidence", [])
 
         if not evidence_spans:
+            logger.info("sufficiency_skip", qid=qid, reason="no_evidence")
             continue
+
+        logger.info(
+            "sufficiency_scoring",
+            qid=qid,
+            evidence_count=len(evidence_spans),
+        )
 
         suf_context = SkillContext(
             input_prompt="Score answer sufficiency",
@@ -1086,6 +1153,12 @@ async def _evaluate_sufficiency(
             )
             continue
 
+        logger.info(
+            "sufficiency_result",
+            qid=qid,
+            chunk_count=len(chunks),
+            types=[c.get("type") for c in chunks],
+        )
         for chunk in chunks:
             if chunk.get("type") != "sufficiency_result":
                 continue
@@ -1094,6 +1167,15 @@ async def _evaluate_sufficiency(
             is_green = chunk.get("green", False)
             missing = chunk.get("missing_aspects", [])
             ev_spans = chunk.get("evidence", [])
+
+            logger.info(
+                "sufficiency_score_detail",
+                qid=qid,
+                score=score,
+                is_green=is_green,
+                evidence_count=len(ev_spans),
+                missing=missing[:3],
+            )
 
             if is_green and ev_spans:
                 applied = await session.apply_green_signal(
@@ -1541,9 +1623,7 @@ async def _handle_control(
         await _cancel_recovery(stt_state)
 
         stt: STTAdapter | None = getattr(websocket.app.state, "stt", None)
-        if stt is None:
-            logger.warning("stt_not_configured")
-            return
+        stt_configured = stt is not None and getattr(stt, "configured", True)
 
         stt_state["recording_id"] = start.recording_id
         stt_state["stt_started_at"] = _time.monotonic()
@@ -1561,32 +1641,35 @@ async def _handle_control(
             stream_queues: dict[int, asyncio.Queue[bytes | None]] = {}
             stream_tasks: dict[int, asyncio.Task[None]] = {}
 
-            for sd in start.streams:
-                stream_map[sd.stream_index] = sd
-                q: asyncio.Queue[bytes | None] = asyncio.Queue()
-                stream_queues[sd.stream_index] = q
-                t = asyncio.create_task(
-                    _stt_loop(
-                        websocket,
-                        session,
-                        stt,
-                        q,
-                        codec=start.codec,
-                        sample_rate=start.sample_rate,
-                        stt_state=stt_state,
-                        speaker=sd.stream_index,
-                        speaker_name=sd.speaker_name,
-                        speaker_role=sd.speaker_role,
-                        resync_offset_s=resync_offset,
+            if stt_configured:
+                for sd in start.streams:
+                    stream_map[sd.stream_index] = sd
+                    q: asyncio.Queue[bytes | None] = asyncio.Queue()
+                    stream_queues[sd.stream_index] = q
+                    t = asyncio.create_task(
+                        _stt_loop(
+                            websocket,
+                            session,
+                            stt,
+                            q,
+                            codec=start.codec,
+                            sample_rate=start.sample_rate,
+                            stt_state=stt_state,
+                            speaker=sd.stream_index,
+                            speaker_name=sd.speaker_name,
+                            speaker_role=sd.speaker_role,
+                            resync_offset_s=resync_offset,
+                        )
                     )
-                )
-                idx = sd.stream_index
+                    idx = sd.stream_index
 
-                def _on_done(_: Any, _idx: int = idx) -> None:
-                    stream_queues.pop(_idx, None)
+                    def _on_done(_: Any, _idx: int = idx) -> None:
+                        stream_queues.pop(_idx, None)
 
-                t.add_done_callback(_on_done)
-                stream_tasks[sd.stream_index] = t
+                    t.add_done_callback(_on_done)
+                    stream_tasks[sd.stream_index] = t
+            else:
+                logger.info("stt_skipped", reason="adapter not configured")
 
             stt_state["stream_map"] = stream_map
             stt_state["stream_queues"] = stream_queues
@@ -1645,6 +1728,20 @@ async def _handle_control(
                 sample_rate=start.sample_rate,
                 recording_id=start.recording_id,
             )
+
+        # Spawn T2/T3 background tasks for transcript processing.
+        _t2 = stt_state.get("t2_cleaner")
+        _t3 = stt_state.get("t3_generator")
+        if _t2 and _t3 and not stt_state.get("t2_task"):
+            cancel_ev = asyncio.Event()
+            stt_state["t2t3_cancel"] = cancel_ev
+            stt_state["t2_task"] = asyncio.create_task(
+                _t2.run(cancel_ev), name=f"t2-clean-{session.session_id}"
+            )
+            stt_state["t3_task"] = asyncio.create_task(
+                _t3.run(cancel_ev), name=f"t3-desc-{session.session_id}"
+            )
+            logger.info("t2t3_started", session_id=session.session_id)
         return
 
     if frame_type == ClientFrameType.STOP.value:
@@ -1698,6 +1795,37 @@ async def _handle_control(
         # what makes it answer "not assessed" instead of inventing one.
         if session is not None:
             await session.record_marker("transcript.stopped", at=_time.time())
+
+        # Finalize T2/T3 transcript processing.
+        _cancel_ev = stt_state.get("t2t3_cancel")
+        if _cancel_ev is not None:
+            _cancel_ev.set()
+        _t2c = stt_state.get("t2_cleaner")
+        _t3g = stt_state.get("t3_generator")
+        from app.core.config import get_settings as _gs_fin
+
+        _fin_timeout = getattr(_gs_fin(), "FINALIZE_TIMEOUT_S", 30)
+        if _t2c:
+            try:
+                await asyncio.wait_for(_t2c.finalize(), timeout=_fin_timeout)
+            except Exception:  # noqa: BLE001
+                logger.warning("t2_finalize_timeout", session_id=session.session_id)
+        if _t3g:
+            try:
+                await asyncio.wait_for(_t3g.finalize(), timeout=_fin_timeout)
+            except Exception:  # noqa: BLE001
+                logger.warning("t3_finalize_timeout", session_id=session.session_id)
+        _t2t = stt_state.get("t2_task")
+        _t3t = stt_state.get("t3_task")
+        if _t2t or _t3t:
+            tasks_to_wait = [t for t in (_t2t, _t3t) if t]
+            await asyncio.wait_for(
+                asyncio.gather(*tasks_to_wait, return_exceptions=True),
+                timeout=5.0,
+            )
+        stt_state["t2_task"] = None
+        stt_state["t3_task"] = None
+        stt_state["t2t3_cancel"] = None
 
         logger.info("stt_stopped")
         return
@@ -1903,6 +2031,11 @@ async def _hold(
             await session.set_questions(questions)
         except Exception:  # noqa: BLE001
             logger.warning("set_questions_failed")
+        try:
+            _events = getattr(websocket.app.state, "events", None)
+            await _update_coverage(websocket, session, _events, None, [])
+        except Exception:  # noqa: BLE001
+            logger.warning("initial_coverage_failed")
 
     # L-01: resolve and pin prompt versions at LIVE session start.
     loader = getattr(websocket.app.state, "prompt_loader", None)
@@ -1955,6 +2088,44 @@ async def _hold(
         "degraded_sent": False,
     }
 
+    # T2/T3 transcript processing
+    from app.logic.transcript_cleaner import TranscriptCleaner
+    from app.logic.description_generator import DescriptionGenerator
+
+    llm_provider = getattr(websocket.app.state, "llm", None)
+    storage_provider = getattr(websocket.app.state, "storage", None)
+    t_keys = redis_manager.keys_for(verdict.tenant_id) if redis_manager else None
+
+    async def _send_ws_frame(frame: dict[str, Any]) -> None:
+        try:
+            seq = await session.next_seq() if session else 0
+            frame["seq"] = seq
+            await websocket.send_json(frame)
+        except Exception:  # noqa: BLE001
+            pass
+
+    t2_cleaner: TranscriptCleaner | None = None
+    t3_generator: DescriptionGenerator | None = None
+    if redis_manager and t_keys and llm_provider and storage_provider:
+        t2_cleaner = TranscriptCleaner(
+            redis=redis_manager,
+            keys=t_keys,
+            session_id=session_id,
+            llm=llm_provider,
+            storage=storage_provider,
+            settings=cfg,
+            send_ws=_send_ws_frame,
+        )
+        t3_generator = DescriptionGenerator(
+            redis=redis_manager,
+            keys=t_keys,
+            session_id=session_id,
+            llm=llm_provider,
+            storage=storage_provider,
+            settings=cfg,
+            send_ws=_send_ws_frame,
+        )
+
     stt_state: dict[str, Any] = {
         "audio_q": None,
         "stt_task": None,
@@ -1962,6 +2133,11 @@ async def _hold(
         "allowlist": allowlist,
         "batcher": batcher,
         "analysis_state": analysis_state,
+        "t2_cleaner": t2_cleaner,
+        "t3_generator": t3_generator,
+        "t2_task": None,
+        "t3_task": None,
+        "t2t3_cancel": None,
     }
 
     rate_ctx: dict[str, Any] | None = None
@@ -2266,6 +2442,31 @@ async def _hold(
                     await task
                 except asyncio.CancelledError:
                     pass
+
+        # T2/T3 cleanup on disconnect.
+        _dc_cancel = stt_state.get("t2t3_cancel")
+        if _dc_cancel is not None:
+            _dc_cancel.set()
+        for key in ("t2_task", "t3_task"):
+            task = stt_state.get(key)
+            if task is not None and not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+        _dc_t2 = stt_state.get("t2_cleaner")
+        _dc_t3 = stt_state.get("t3_generator")
+        if _dc_t2:
+            try:
+                await asyncio.wait_for(_dc_t2.finalize(), timeout=10.0)
+            except Exception:  # noqa: BLE001
+                pass
+        if _dc_t3:
+            try:
+                await asyncio.wait_for(_dc_t3.finalize(), timeout=10.0)
+            except Exception:  # noqa: BLE001
+                pass
 
         if _breaker_ref is not None and _breaker_cb is not None:
             _breaker_ref.remove_on_state_change(_breaker_cb)

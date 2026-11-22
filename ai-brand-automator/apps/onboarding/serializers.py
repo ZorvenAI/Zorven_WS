@@ -9,7 +9,6 @@ to the same field, which is the shape of bug B-02's review caught on
 
 from __future__ import annotations
 
-from collections import Counter
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.contrib.auth.models import User
@@ -352,6 +351,8 @@ class MeetingRecordingSerializer(serializers.ModelSerializer):
 
     has_summary = serializers.SerializerMethodField()
     has_transcript = serializers.SerializerMethodField()
+    has_description = serializers.SerializerMethodField()
+    has_clean_transcript = serializers.SerializerMethodField()
     stream_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -386,6 +387,8 @@ class MeetingRecordingSerializer(serializers.ModelSerializer):
             "transcript_complete",
             "transcript_missing_s",
             "has_summary",
+            "has_description",
+            "has_clean_transcript",
             "started_at",
             "stopped_at",
         ]
@@ -396,6 +399,12 @@ class MeetingRecordingSerializer(serializers.ModelSerializer):
 
     def get_has_transcript(self, obj) -> bool:
         return bool(obj.transcript)
+
+    def get_has_description(self, obj) -> bool:
+        return bool(obj.description)
+
+    def get_has_clean_transcript(self, obj) -> bool:
+        return bool(obj.transcript_clean)
 
     def get_stream_count(self, obj) -> int:
         return len(obj.stream_assets or [])
@@ -508,21 +517,27 @@ class QuestionnaireSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_coverage(self, obj) -> dict:
-        """WF1/WF2/WF3 as three fractions of the set (FR-PREP-08).
+        """WF1/WF2/WF3 answer coverage — GREEN / total per workflow.
 
         Computed rather than stored: a stored figure would drift the moment
         C-04 edits or removes a question, and the number is cheap.
         """
         questions = list(obj.questions.all())
-        total = len(questions)
-        if not total:
+        if not questions:
             return {t: 0.0 for t in WorkflowTarget.values}
-        counts = Counter(q.workflow_target for q in questions)
-        # Deliberately unrounded. Rounding to three places made three equal
-        # thirds sum to 0.999, and "coverage" that does not add up invites a
-        # reader to hunt for the missing question. Formatting is the display
-        # layer's job; the invariant is this layer's.
-        return {t: counts.get(t, 0) / total for t in WorkflowTarget.values}
+        by_wf: dict[str, list] = {t: [] for t in WorkflowTarget.values}
+        for q in questions:
+            wf = q.workflow_target or WorkflowTarget.WF1
+            if wf in by_wf:
+                by_wf[wf].append(q)
+        result = {}
+        for wf, qs in by_wf.items():
+            if not qs:
+                result[wf] = 0.0
+            else:
+                green = sum(1 for q in qs if q.status == "GREEN")
+                result[wf] = green / len(qs)
+        return result
 
 
 def _local_time(meeting: ScheduledMeeting) -> str:

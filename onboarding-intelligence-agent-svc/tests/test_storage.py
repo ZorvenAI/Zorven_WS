@@ -750,3 +750,95 @@ async def test_real_gcs_upload_and_delete(tmp_path: object) -> None:
     count = await p.delete_recording(tenant, recording)
     assert count >= 1
     assert not blob.exists()
+
+
+# ── Three-Tier Transcript persistence ────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_upload_transcript_tier_breaker_open(tmp_path: object) -> None:
+    """An open breaker must raise StorageUnavailable, not write."""
+    p = _provider(tmp_path, breaker=_open_breaker())
+
+    with pytest.raises(StorageUnavailable):
+        await p.upload_transcript_tier(TENANT, "sess-001", "raw", '{"data": true}')
+
+
+@pytest.mark.asyncio
+async def test_upload_transcript_tier_returns_path(tmp_path: object) -> None:
+    """With a closed breaker, the method returns the expected GCS path shape."""
+    import json
+
+    class _FakeBucket:
+        def __init__(self):
+            self.written: list[tuple[str, str]] = []
+
+        def blob(self, path: str):
+            return _FakeBlob(path, self.written)
+
+    class _FakeBlob:
+        def __init__(self, path: str, store: list[tuple[str, str]]):
+            self._path = path
+            self._store = store
+
+        def upload_from_string(self, data: str, content_type: str = "") -> None:
+            self._store.append((self._path, data))
+
+    bucket = _FakeBucket()
+    p = _provider(tmp_path)
+    p._ensure_bucket = lambda: bucket  # type: ignore[assignment]
+
+    path = await p.upload_transcript_tier(
+        TENANT, "sess-tier", "clean", json.dumps({"version": 1, "text": "cleaned"})
+    )
+
+    assert path == f"{LANDING_PREFIX}/{TENANT}/sess-tier/transcript/clean.json"
+    assert len(bucket.written) == 1
+    assert bucket.written[0][0] == path
+
+
+@pytest.mark.asyncio
+async def test_write_manifest_breaker_open(tmp_path: object) -> None:
+    p = _provider(tmp_path, breaker=_open_breaker())
+
+    with pytest.raises(StorageUnavailable):
+        await p.write_manifest(TENANT, "sess-001", [{"tier": "raw", "path": "x"}])
+
+
+@pytest.mark.asyncio
+async def test_write_manifest_returns_path_and_content(tmp_path: object) -> None:
+    import json
+
+    class _FakeBucket:
+        def __init__(self):
+            self.written: list[tuple[str, str]] = []
+
+        def blob(self, path: str):
+            return _FakeBlob(path, self.written)
+
+    class _FakeBlob:
+        def __init__(self, path: str, store: list[tuple[str, str]]):
+            self._path = path
+            self._store = store
+
+        def upload_from_string(self, data: str, content_type: str = "") -> None:
+            self._store.append((self._path, data))
+
+    bucket = _FakeBucket()
+    p = _provider(tmp_path)
+    p._ensure_bucket = lambda: bucket  # type: ignore[assignment]
+
+    artefacts = [
+        {"tier": "raw_transcript_gcs_path", "path": "a/b/raw.json"},
+        {"tier": "transcript_clean_gcs_path", "path": "a/b/clean.json"},
+    ]
+    path = await p.write_manifest(TENANT, "sess-mfst", artefacts)
+
+    assert path == f"{LANDING_PREFIX}/{TENANT}/sess-mfst/manifest.json"
+    assert len(bucket.written) == 1
+
+    manifest = json.loads(bucket.written[0][1])
+    assert manifest["session_id"] == "sess-mfst"
+    assert manifest["tenant_id"] == TENANT
+    assert "finalized_at" in manifest
+    assert len(manifest["artefacts"]) == 2

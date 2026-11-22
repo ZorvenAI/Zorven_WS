@@ -113,7 +113,7 @@ describe('MeetingEvidence', () => {
     const link = screen.getByText('View summary')
     expect(link).toHaveAttribute(
       'href',
-      '/onboarding/sessions/sess-1?recording=rec-1',
+      '/onboarding?session=sess-1&tab=overview&recording=rec-1',
     )
     expect(link).toHaveAttribute('target', '_blank')
   })

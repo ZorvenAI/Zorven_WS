@@ -512,6 +512,82 @@ class StorageProvider:
             if not any(parent.iterdir()):
                 parent.rmdir()
 
+    # ── Three-Tier Transcript persistence ───────────────────────
+
+    async def upload_transcript_tier(
+        self,
+        tenant_id: str,
+        session_id: str,
+        tier: str,
+        content: str,
+    ) -> str:
+        import json as _json
+
+        path = f"{LANDING_PREFIX}/{tenant_id}/{session_id}/transcript/{tier}.json"
+        try:
+            self._breaker.before_call()
+        except CircuitBreakerOpen as exc:
+            raise StorageUnavailable(
+                exc.user_message or f"{exc.dependency} is unavailable",
+            ) from exc
+
+        try:
+            bucket = self._ensure_bucket()
+            blob = bucket.blob(path)
+            await asyncio.to_thread(
+                blob.upload_from_string,
+                content if isinstance(content, str) else _json.dumps(content),
+                content_type="application/json",
+            )
+        except StorageUnavailable:
+            raise
+        except Exception as exc:
+            self._breaker.record_failure()
+            raise StorageUnavailable(f"transcript upload failed: {exc}") from exc
+
+        self._breaker.record_success()
+        return path
+
+    async def write_manifest(
+        self,
+        tenant_id: str,
+        session_id: str,
+        artefacts: list[dict[str, Any]],
+    ) -> str:
+        import json as _json
+        import datetime
+
+        path = f"{LANDING_PREFIX}/{tenant_id}/{session_id}/manifest.json"
+        manifest = {
+            "session_id": session_id,
+            "tenant_id": tenant_id,
+            "finalized_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            "artefacts": artefacts,
+        }
+        try:
+            self._breaker.before_call()
+        except CircuitBreakerOpen as exc:
+            raise StorageUnavailable(
+                exc.user_message or f"{exc.dependency} is unavailable",
+            ) from exc
+
+        try:
+            bucket = self._ensure_bucket()
+            blob = bucket.blob(path)
+            await asyncio.to_thread(
+                blob.upload_from_string,
+                _json.dumps(manifest, indent=2),
+                content_type="application/json",
+            )
+        except StorageUnavailable:
+            raise
+        except Exception as exc:
+            self._breaker.record_failure()
+            raise StorageUnavailable(f"manifest write failed: {exc}") from exc
+
+        self._breaker.record_success()
+        return path
+
 
 def register_spool_drain(
     breaker: CircuitBreaker,

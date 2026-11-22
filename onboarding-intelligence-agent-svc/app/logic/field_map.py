@@ -40,6 +40,9 @@ FIELD_MAP: Final[dict[str, WorkflowTarget]] = {
     # WF2 — brand strategy
     "brand_asset_status": "WF2",
     "brand_assets": "WF2",
+    "brand_guidelines": "WF2",
+    "brand_colors": "WF2",
+    "brand_fonts": "WF2",
     "trademark_status": "WF2",
     "trademarks": "WF2",
     "competitors": "WF2",
@@ -51,9 +54,16 @@ FIELD_MAP: Final[dict[str, WorkflowTarget]] = {
     "decision_maker": "WF2",
     "target_audience": "WF2",
     "brand_voice": "WF2",
+    "brand_tone_of_voice": "WF2",
+    "tone_of_voice": "WF2",
     "brand_personality": "WF2",
     "brand_positioning": "WF2",
     "differentiation": "WF2",
+    "photos": "WF2",
+    "videos": "WF2",
+    "media_assets": "WF2",
+    "visual_assets": "WF2",
+    "signature_dishes": "WF2",
     # WF3 — go-to-market
     "marketing_budget_range": "WF3",
     "marketing_budget": "WF3",
@@ -64,16 +74,106 @@ FIELD_MAP: Final[dict[str, WorkflowTarget]] = {
     "testimonials": "WF3",
     "case_studies": "WF3",
     "pricing": "WF3",
+    "pricing_strategy": "WF3",
     "campaigns": "WF3",
+    "campaign_objective": "WF3",
     "advertising": "WF3",
+    "ad_creative": "WF3",
+    "ad_hooks": "WF3",
+    "primary_kpi": "WF3",
+    "kpi": "WF3",
+    "ideal_customer_profile": "WF3",
     "retail_locations": "WF3",
     "stores": "WF3",
     "partnerships": "WF3",
+    "monthly_revenue": "WF3",
 }
 
 _NORMALISE_RE = re.compile(r"[\s\-]+")
 
 DEFAULT_WORKFLOW_TARGET: Final[WorkflowTarget] = "WF1"
+
+_TEXT_PATTERNS: Final[list[tuple[re.Pattern[str], WorkflowTarget]]] = [
+    (
+        re.compile(
+            r"\b(ad campaign|ad creative|meta ad|facebook ad"
+            r"|instagram ad|google ad|advertising campaign"
+            r"|campaign objective|run.{0,15}ads)\b",
+            re.I,
+        ),
+        "WF3",
+    ),
+    (
+        re.compile(
+            r"\b(marketing budget|ad spend|advertising budget"
+            r"|monthly budget.{0,15}(market|ad|campaign))\b",
+            re.I,
+        ),
+        "WF3",
+    ),
+    (
+        re.compile(
+            r"\b(hooks?\b.{0,15}\bads?\b"
+            r"|offers?.{0,15}\bads?\b"
+            r"|ad hooks?|creative hooks?)\b",
+            re.I,
+        ),
+        "WF3",
+    ),
+    (
+        re.compile(
+            r"\b(sales channel|distribution channel"
+            r"|pricing strateg|pricing model"
+            r"|customer proof|testimonial|case stud)\b",
+            re.I,
+        ),
+        "WF3",
+    ),
+    (
+        re.compile(
+            r"\b(ideal customer profile|customer persona"
+            r"|buyer persona|customer segment)\b",
+            re.I,
+        ),
+        "WF3",
+    ),
+    (
+        re.compile(
+            r"\b(brand guidelines?|brand colou?rs?"
+            r"|brand fonts?|brand identity|brand voice"
+            r"|tone of voice|brand personalit"
+            r"|brand position)",
+            re.I,
+        ),
+        "WF2",
+    ),
+    (
+        re.compile(
+            r"\b(trademarks?|brand assets?|logos?" r"|visual identity|brand book)",
+            re.I,
+        ),
+        "WF2",
+    ),
+    (
+        re.compile(
+            r"\b(target audience|decision.maker"
+            r"|competitor|competition"
+            r"|digital presence|social media)\b",
+            re.I,
+        ),
+        "WF2",
+    ),
+    (
+        re.compile(
+            r"\b(photos?|videos?|media assets?"
+            r"|visual assets?"
+            r"|high.quality.{0,15}(images?|photos?|videos?))",
+            re.I,
+        ),
+        "WF2",
+    ),
+    (re.compile(r"\b(unique selling|USP|differentiat)", re.I), "WF2"),
+]
 
 
 def _normalise(field: str) -> str:
@@ -97,3 +197,11 @@ def resolve_workflow_target(suggested_field: str) -> WorkflowTarget:
     """Map a suggested_field to its workflow_target (for notable facts)."""
     normalised = _normalise(suggested_field)
     return FIELD_MAP.get(normalised, DEFAULT_WORKFLOW_TARGET)
+
+
+def infer_workflow_from_text(question_text: str) -> WorkflowTarget:
+    """Keyword fallback when target_field is empty and workflow_target is WF1."""
+    for pattern, wf in _TEXT_PATTERNS:
+        if pattern.search(question_text):
+            return wf
+    return DEFAULT_WORKFLOW_TARGET

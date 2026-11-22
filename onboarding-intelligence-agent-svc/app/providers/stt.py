@@ -226,6 +226,9 @@ class GoogleSTTAdapter(STTAdapter):
         )
 
         container = self._is_container_codec(codec)
+        _CLUSTER_ID = b"\x1f\x43\xb6\x75"
+        init_buffer = bytearray() if container else None
+        init_segment: bytes | None = None
 
         result_q: asyncio.Queue[STTResult | Exception | None] = asyncio.Queue()
         seen: set[tuple[float, str]] = set()
@@ -249,23 +252,56 @@ class GoogleSTTAdapter(STTAdapter):
                 current_feed.put_nowait(chunk)
                 last_audio_fed_at = time.monotonic()
 
-                if task.done():
-                    # Drain any final results or queued exception before
-                    # deciding whether this was a clean stream-limit exit.
-                    async for r in self._drain_q(result_q, seen):
-                        last_result_at = time.monotonic()
-                        yield r
+                if container and init_segment is None and init_buffer is not None:
+                    init_buffer.extend(chunk)
+                    idx = init_buffer.find(_CLUSTER_ID)
+                    if idx >= 0:
+                        init_segment = bytes(init_buffer[:idx])
+                        init_buffer = None
+                        logger.info(
+                            "stt_init_segment_captured",
+                            size=len(init_segment),
+                        )
 
-                    exc = task.exception() if not task.cancelled() else None
-                    if exc:
-                        raise exc
-                    raise STTUnavailable(
-                        "STT stream ended (time limit reached)",
-                        resync=container,
+                if task.done():
+                    drain_exc: Exception | None = None
+                    try:
+                        async for r in self._drain_q(result_q, seen):
+                            last_result_at = time.monotonic()
+                            yield r
+                    except Exception as _de:
+                        drain_exc = _de
+
+                    exc = drain_exc or (
+                        task.exception() if not task.cancelled() else None
                     )
 
-                if not container:
-                    if not rolling_over and elapsed >= self._stream_limit_s:
+                    if container and init_segment is not None:
+                        logger.info(
+                            "stt_container_rollover_recovery",
+                            elapsed_s=round(elapsed, 1),
+                        )
+                        current_feed = asyncio.Queue()
+                        current_feed.put_nowait(init_segment)
+                        current_feed.put_nowait(chunk)
+                        task = asyncio.create_task(
+                            self._stream_worker(
+                                current_feed,
+                                result_q,
+                                config=config,
+                                offset_s=elapsed,
+                            )
+                        )
+                        stream_start = time.monotonic()
+                        continue
+
+                    raise STTUnavailable(
+                        "STT stream ended (time limit reached)",
+                        resync=True,
+                    )
+
+                if not rolling_over and elapsed >= self._stream_limit_s:
+                    if not container:
                         rolling_over = True
                         overlap_started_at = time.monotonic()
                         overlap_feed = asyncio.Queue()
@@ -282,20 +318,38 @@ class GoogleSTTAdapter(STTAdapter):
                             "stt_rollover_started",
                             elapsed_s=round(elapsed, 1),
                         )
-
-                    elif rolling_over and overlap_feed is not None:
+                    elif init_segment is not None:
+                        rolling_over = True
+                        overlap_started_at = time.monotonic()
+                        overlap_feed = asyncio.Queue()
+                        overlap_feed.put_nowait(init_segment)
                         overlap_feed.put_nowait(chunk)
-                        if time.monotonic() - overlap_started_at >= OVERLAP_S:
-                            current_feed.put_nowait(None)
-                            await task
-                            assert overlap_task is not None
-                            task = overlap_task
-                            current_feed = overlap_feed
-                            overlap_feed = None
-                            overlap_task = None
-                            rolling_over = False
-                            stream_start = time.monotonic()
-                            logger.info("stt_rollover_completed")
+                        overlap_task = asyncio.create_task(
+                            self._stream_worker(
+                                overlap_feed,
+                                result_q,
+                                config=config,
+                                offset_s=elapsed,
+                            )
+                        )
+                        logger.info(
+                            "stt_container_rollover_started",
+                            elapsed_s=round(elapsed, 1),
+                        )
+
+                elif rolling_over and overlap_feed is not None:
+                    overlap_feed.put_nowait(chunk)
+                    if time.monotonic() - overlap_started_at >= OVERLAP_S:
+                        current_feed.put_nowait(None)
+                        await task
+                        assert overlap_task is not None
+                        task = overlap_task
+                        current_feed = overlap_feed
+                        overlap_feed = None
+                        overlap_task = None
+                        rolling_over = False
+                        stream_start = time.monotonic()
+                        logger.info("stt_rollover_completed")
 
                 drained = False
                 async for r in self._drain_q(result_q, seen):
@@ -349,6 +403,7 @@ class GoogleSTTAdapter(STTAdapter):
         from google.cloud.speech_v2.types import cloud_speech as cs
 
         async def _requests() -> AsyncIterator[Any]:
+            nonlocal chunks_sent
             yield cs.StreamingRecognizeRequest(
                 recognizer=self._recognizer, streaming_config=config
             )
@@ -356,11 +411,14 @@ class GoogleSTTAdapter(STTAdapter):
                 chunk = await audio_q.get()
                 if chunk is None:
                     return
+                chunks_sent += 1
                 yield cs.StreamingRecognizeRequest(audio=chunk)
 
         client = self._ensure_client()
+        chunks_sent = 0
         try:
             responses = await client.streaming_recognize(requests=_requests())
+            logger.info("stt_worker_stream_opened", offset_s=round(offset_s, 1))
             async for response in responses:
                 for result in response.results:
                     if not result.alternatives:
@@ -381,7 +439,15 @@ class GoogleSTTAdapter(STTAdapter):
                         )
                     )
         except Exception as exc:
-            await result_q.put(exc)
+            logger.warning(
+                "stt_worker_error",
+                error=f"{type(exc).__name__}: {exc}",
+                chunks_sent=chunks_sent,
+            )
+            if "Max duration" in str(exc):
+                await result_q.put(None)
+            else:
+                await result_q.put(exc)
 
     @staticmethod
     def _timestamps(result: Any, alt: Any, offset_s: float) -> tuple[float, float]:
@@ -545,16 +611,32 @@ class FakeSTTAdapter(STTAdapter):
     ) -> AsyncIterator[STTResult]:
         drain_task = asyncio.create_task(self._drain_audio(audio))
         try:
-            for event in self._events:
-                delay = event.get("delay_ms", 50) / 1000.0
-                await asyncio.sleep(delay)
-                yield STTResult(
-                    text=event["text"],
-                    is_final=event["is_final"],
-                    t_start=event["t_start"],
-                    t_end=event["t_end"],
-                    stability=event.get("stability", 1.0 if event["is_final"] else 0.5),
-                )
+            import time as _time
+
+            offset_s = 0.0
+            while not drain_task.done():
+                loop_start = _time.monotonic()
+                max_t_end = 0.0
+                for event in self._events:
+                    if drain_task.done():
+                        return
+                    target = event["t_end"]
+                    elapsed = _time.monotonic() - loop_start
+                    if target > elapsed:
+                        await asyncio.sleep(target - elapsed)
+                    t_start = event["t_start"] + offset_s
+                    t_end = event["t_end"] + offset_s
+                    max_t_end = max(max_t_end, t_end)
+                    yield STTResult(
+                        text=event["text"],
+                        is_final=event["is_final"],
+                        t_start=t_start,
+                        t_end=t_end,
+                        stability=event.get(
+                            "stability", 1.0 if event["is_final"] else 0.5
+                        ),
+                    )
+                offset_s = max_t_end + 1.0
         finally:
             if not drain_task.done():
                 drain_task.cancel()

@@ -13,7 +13,6 @@ import { Play, Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 import {
   triggerProcess,
   type SessionStatus,
-  type QuestionnaireDetail,
   type WorkflowTarget,
 } from '@/lib/onboarding-sessions';
 
