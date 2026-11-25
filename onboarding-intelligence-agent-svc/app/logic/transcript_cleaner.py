@@ -10,6 +10,7 @@ import asyncio
 import json
 from typing import Any, Callable, Awaitable
 
+from app.logic.live_session import frames_for_latest_recording
 from app.cache.redis_manager import RedisManager, TenantKeys, TTL_SESSION
 from app.core.logging import get_logger
 from app.providers.llm import LLMProvider, LLMUnavailable
@@ -139,7 +140,7 @@ class TranscriptCleaner:
                     segments.append(parsed)
             except (json.JSONDecodeError, TypeError):
                 continue
-        return segments
+        return frames_for_latest_recording(segments)
 
     async def _clean_full(
         self,

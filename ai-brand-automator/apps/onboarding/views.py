@@ -3073,6 +3073,7 @@ def process_callback(request, pk):
 
         if cb_status == "SUCCEEDED":
             summary = request.data.get("summary", {})
+            recording_tiers: list = []
             if isinstance(summary, dict):
                 raw = json.dumps(summary)
                 if len(raw) > 1_000_000:
@@ -3080,6 +3081,12 @@ def process_callback(request, pk):
                         {"error": "summary exceeds 1 MB limit"},
                         status=http.HTTP_400_BAD_REQUEST,
                     )
+                # The transcript tiers belong on their recordings, not copied
+                # into the session summary.
+                summary = dict(summary)
+                tiers = summary.pop("recording_tiers", [])
+                if isinstance(tiers, list):
+                    recording_tiers = [t for t in tiers if isinstance(t, dict)]
                 session.process_summary = summary
 
             prompt_versions = request.data.get("prompt_versions", {})
@@ -3088,41 +3095,38 @@ def process_callback(request, pk):
 
             target = "REVIEW_PENDING"
 
-            # Persist T2/T3 on the most recent recording so the
-            # session_description endpoint can serve them.
-            if isinstance(summary, dict):
-                t2 = summary.get("transcript_clean")
-                t3 = summary.get("description")
-                gcs_fields = {
-                    k: summary.get(k)
-                    for k in (
-                        "transcript_clean_gcs_path",
-                        "description_gcs_path",
-                        "raw_transcript_gcs_path",
-                    )
-                    if isinstance(summary.get(k), str) and summary.get(k)
-                }
-                if t2 or t3 or gcs_fields:
-                    rec = (
-                        MeetingRecording.objects.filter(session=session)
-                        .order_by("-created_at")
-                        .select_for_update(of=("self",))
-                        .first()
-                    )
-                    if rec is not None:
-                        rec_fields: list[str] = []
-                        if isinstance(t2, (list, str)) and t2:
-                            rec.transcript_clean = t2
-                            rec_fields.append("transcript_clean")
-                        if isinstance(t3, str) and t3:
-                            rec.description = t3
-                            rec_fields.append("description")
-                        for gf, gv in gcs_fields.items():
-                            setattr(rec, gf, gv)
-                            rec_fields.append(gf)
-                        if rec_fields:
-                            rec_fields.append("updated_at")
-                            rec.save(update_fields=rec_fields)
+            # Persist T2/T3 on the recording each was generated from. An
+            # existing value is never replaced: these are legal records, and
+            # re-processing must not reword what a meeting already produced.
+            for tier in recording_tiers:
+                rec_id = str(tier.get("recording_id", ""))
+                if not rec_id.isdigit():
+                    continue
+                rec = (
+                    MeetingRecording.objects.filter(session=session, pk=int(rec_id))
+                    .select_for_update(of=("self",))
+                    .first()
+                )
+                if rec is None:
+                    continue
+                rec_fields: list[str] = []
+                for name in ("transcript_clean", "description"):
+                    value = tier.get(name)
+                    if isinstance(value, str) and value and not getattr(rec, name):
+                        setattr(rec, name, value)
+                        rec_fields.append(name)
+                for name in (
+                    "transcript_clean_gcs_path",
+                    "description_gcs_path",
+                    "raw_transcript_gcs_path",
+                ):
+                    value = tier.get(name)
+                    if isinstance(value, str) and value:
+                        setattr(rec, name, value)
+                        rec_fields.append(name)
+                if rec_fields:
+                    rec_fields.append("updated_at")
+                    rec.save(update_fields=rec_fields)
         else:
             target = "GATHERED"
 
@@ -3254,6 +3258,7 @@ def session_evidence(request, pk):
                 "id": str(rec.pk),
                 "transcript": rec.transcript or [],
                 "summary": rec.summary or {},
+                "has_description": bool(rec.description),
                 "started_at": (rec.started_at.isoformat() if rec.started_at else None),
                 "stopped_at": (rec.stopped_at.isoformat() if rec.stopped_at else None),
             }

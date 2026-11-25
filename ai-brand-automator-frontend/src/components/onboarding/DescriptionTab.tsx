@@ -18,6 +18,13 @@ interface DescriptionData {
 
 type SubTab = 'description' | 'transcript';
 
+function formatMeetingTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
 export interface DescriptionTabProps {
   sessionId: string;
 }
@@ -166,12 +173,17 @@ export default function DescriptionTab({ sessionId }: DescriptionTabProps) {
               Meeting {i + 1}
               {m.started_at && (
                 <span className="ml-1.5 opacity-70">
-                  {new Date(m.started_at).toLocaleDateString()}
+                  {formatMeetingTime(m.started_at)}
                 </span>
               )}
             </button>
           ))}
         </div>
+      )}
+      {selected?.started_at && (
+        <p className="mb-3 text-xs text-brand-silver" data-testid="meeting-time">
+          Meeting recorded {formatMeetingTime(selected.started_at)}
+        </p>
       )}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">

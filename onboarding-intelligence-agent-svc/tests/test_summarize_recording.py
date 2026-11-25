@@ -16,9 +16,56 @@ from app.skills.summarize_recording import (
     _snap_to_boundary,
     compute_transcript_coverage,
     extract_transcript_segments,
+    extract_transcript_segments_relative,
 )
 
 pytestmark = pytest.mark.unit
+
+
+# ── extract_transcript_segments_relative ─────────────────────────────
+
+
+class TestExtractPerRecording:
+    """One session key holds every recording; each summary reads only its own."""
+
+    @staticmethod
+    def _final(text: str, t_start: float, recording_id: str | None):
+        frame = {
+            "type": "transcript.final",
+            "text": text,
+            "speaker": 0,
+            "t_start": t_start,
+            "t_end": t_start + 1.0,
+            "seq": 1,
+        }
+        if recording_id is not None:
+            frame["recording_id"] = recording_id
+        return json.dumps(frame).encode()
+
+    def test_second_recording_excludes_the_first(self):
+        frames = [
+            self._final("first meeting budget", 1.0, "10"),
+            self._final("first meeting timeline", 5.0, "10"),
+            self._final("second meeting scope", 2.0, "11"),
+        ]
+        first = extract_transcript_segments_relative(frames, "10")
+        second = extract_transcript_segments_relative(frames, "11")
+
+        assert [s["text"] for s in first] == [
+            "first meeting budget",
+            "first meeting timeline",
+        ]
+        assert [s["text"] for s in second] == ["second meeting scope"]
+
+    def test_untagged_entries_are_kept(self):
+        """Entries written before tagging must not vanish mid-meeting."""
+        frames = [
+            self._final("written before tagging", 1.0, None),
+            self._final("tagged", 2.0, "11"),
+            self._final("other recording", 3.0, "12"),
+        ]
+        result = extract_transcript_segments_relative(frames, "11")
+        assert [s["text"] for s in result] == ["written before tagging", "tagged"]
 
 
 # ── extract_transcript_segments ──────────────────────────────────────

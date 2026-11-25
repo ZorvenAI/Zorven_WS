@@ -761,7 +761,9 @@ async def test_upload_transcript_tier_breaker_open(tmp_path: object) -> None:
     p = _provider(tmp_path, breaker=_open_breaker())
 
     with pytest.raises(StorageUnavailable):
-        await p.upload_transcript_tier(TENANT, "sess-001", "raw", '{"data": true}')
+        await p.upload_transcript_tier(
+            TENANT, "sess-001", "raw", '{"data": true}', recording_id="85"
+        )
 
 
 @pytest.mark.asyncio
@@ -789,10 +791,14 @@ async def test_upload_transcript_tier_returns_path(tmp_path: object) -> None:
     p._ensure_bucket = lambda: bucket  # type: ignore[assignment]
 
     path = await p.upload_transcript_tier(
-        TENANT, "sess-tier", "clean", json.dumps({"version": 1, "text": "cleaned"})
+        TENANT,
+        "sess-tier",
+        "clean",
+        json.dumps({"version": 1, "text": "cleaned"}),
+        recording_id="85",
     )
 
-    assert path == f"{LANDING_PREFIX}/{TENANT}/sess-tier/transcript/clean.json"
+    assert path == f"{LANDING_PREFIX}/{TENANT}/sess-tier/transcript/85/clean.json"
     assert len(bucket.written) == 1
     assert bucket.written[0][0] == path
 

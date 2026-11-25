@@ -608,7 +608,7 @@ async def _emit_final(
         logger.warning("emit_final_buffer_failed", seq=seq)
 
     try:
-        await session.persist_final(buffered)
+        await session.persist_final(buffered, recording_id)
     except Exception:  # noqa: BLE001
         logger.warning("persist_final_failed", seq=seq)
 

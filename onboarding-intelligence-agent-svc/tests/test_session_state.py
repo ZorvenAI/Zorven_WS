@@ -11,6 +11,7 @@ the guarantees rest on.
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
 
 import pytest
@@ -1163,3 +1164,36 @@ async def test_inflight_session_unaffected_by_revert(live_redis):
 
     # Cleanup
     await live_redis.client.delete(keys.session(session_id))
+
+
+# ── Per-recording transcript separation ──────────────────────────────
+
+
+async def test_persist_final_tags_each_entry_with_its_recording(manager):
+    """Two recordings in one session stay separable in the shared key."""
+    from app.api.schemas import TranscriptFinal
+    from app.logic.live_session import (
+        frames_for_latest_recording,
+        frames_for_recording,
+    )
+
+    def final(text: str, seq: int) -> TranscriptFinal:
+        return TranscriptFinal(seq=seq, text=text, speaker=0, t_start=1.0, t_end=2.0)
+
+    await manager.persist_final(final("first meeting", 1), "rec-1")
+    await manager.persist_final(final("second meeting a", 2), "rec-2")
+    await manager.persist_final(final("second meeting b", 3), "rec-2")
+
+    key = manager.redis.keys_for(manager.tenant_id).transcript(manager.session_id)
+    stored = [
+        json.loads(item) for item in await manager.redis.client.lrange(key, 0, -1)
+    ]
+
+    assert [f["recording_id"] for f in stored] == ["rec-1", "rec-2", "rec-2"]
+    assert [f["text"] for f in frames_for_recording(stored, "rec-1")] == [
+        "first meeting"
+    ]
+    assert [f["text"] for f in frames_for_latest_recording(stored)] == [
+        "second meeting a",
+        "second meeting b",
+    ]

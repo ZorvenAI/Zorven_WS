@@ -152,15 +152,15 @@ async def test_t3_skips_when_t2_empty():
 
 
 @pytest.mark.unit
-def test_config_models_are_claude():
-    """T-01: All three models default to claude-sonnet-4."""
+def test_config_models_are_gemini():
+    """T-01: the provider is the Gemini SDK, so all three default to a Gemini id."""
     from app.core.config import get_settings
 
     get_settings.cache_clear()
     cfg = get_settings()
-    assert cfg.CLEAN_MODEL == "claude-sonnet-4"
-    assert cfg.DESCRIPTION_MODEL == "claude-sonnet-4"
-    assert cfg.PROCESS_MODEL == "claude-sonnet-4"
+    assert cfg.CLEAN_MODEL == "gemini-3.8-flash"
+    assert cfg.DESCRIPTION_MODEL == "gemini-3.8-flash"
+    assert cfg.PROCESS_MODEL == "gemini-3.8-flash"
     get_settings.cache_clear()
 
 
