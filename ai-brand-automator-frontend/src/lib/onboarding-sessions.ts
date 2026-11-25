@@ -657,6 +657,20 @@ export async function deleteRecording(recordingId: string): Promise<void> {
   }
 }
 
+/** Delete a captured media item. */
+export async function deleteCapture(
+  sessionId: string,
+  captureId: string,
+): Promise<void> {
+  const response = await apiClient.delete(
+    `${BASE}/sessions/${sessionId}/media/${captureId}/`,
+  );
+  if (response.status === 404) return;
+  if (!response.ok) {
+    throw new Error(`API ${response.status}: ${await response.text()}`);
+  }
+}
+
 /** Fetch transcript with legal header for a recording (I-03, O-06). */
 export async function getRecordingTranscript(
   recordingId: string,
@@ -723,6 +737,7 @@ export interface ConflictSummaryItem {
 
 export interface ProcessSummary {
   fields_written: number;
+  fields_total?: number;
   key_count?: number;
   secondary_count?: number;
   conflicts: ConflictSummaryItem[];

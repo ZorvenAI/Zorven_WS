@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Camera, Check, FileText, Mic, Play, Square, Trash2, Video } from 'lucide-react';
 
 import {
+  deleteCapture,
   deleteRecording,
   getRecordingPlaybackUrl,
   type CapturedMedia,
@@ -80,9 +81,22 @@ function formatDuration(seconds: number | null): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function formatRecordingDate(iso: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 // ── Props ──
 
 export interface RecordingsLibraryProps {
+  sessionId: string;
   recordings: RecordingItem[];
   captures: CapturedMedia[];
   canDelete: boolean;
@@ -92,6 +106,7 @@ export interface RecordingsLibraryProps {
 // ── Component ──
 
 export default function RecordingsLibrary({
+  sessionId,
   recordings,
   captures,
   canDelete,
@@ -149,6 +164,15 @@ export default function RecordingsLibrary({
     }
   }, [playingId, onDeleted]);
 
+  const handleDeleteCapture = useCallback(async (captureId: string) => {
+    try {
+      await deleteCapture(sessionId, captureId);
+    } catch {
+      // best-effort
+    }
+    onDeleted?.();
+  }, [sessionId, onDeleted]);
+
   const hasItems = recordings.length > 0 || captures.length > 0;
 
   if (selectedRecordingId) {
@@ -191,7 +215,7 @@ export default function RecordingsLibrary({
                   className={`rounded border border-white/10 px-3 py-2${r.has_summary ? ' cursor-pointer hover:border-brand-electric/30' : ''}`}
                   onClick={r.has_summary ? () => setSelectedRecordingId(r.id) : undefined}
                 >
-                  <div className="flex items-center gap-2 text-sm">
+                  <div className="mb-1 flex items-center gap-2 text-sm">
                     <Mic
                       aria-hidden
                       className="h-3.5 w-3.5 shrink-0 text-brand-silver"
@@ -229,6 +253,15 @@ export default function RecordingsLibrary({
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 pl-5.5 text-[11px] text-brand-silver/70">
+                    <span>ID: {r.id}</span>
+                    {r.started_at && (
+                      <>
+                        <span className="opacity-40">|</span>
+                        <span>{formatRecordingDate(r.started_at)}</span>
+                      </>
                     )}
                   </div>
 
@@ -278,6 +311,17 @@ export default function RecordingsLibrary({
                 <span className="shrink-0 rounded bg-brand-electric/20 px-1.5 py-0.5 text-xs text-brand-electric">
                   {c.usage_tag.replace(/_/g, ' ')}
                 </span>
+                <span className="flex-1" />
+                {canDelete && (
+                  <button
+                    type="button"
+                    aria-label={`Delete capture ${c.file_name}`}
+                    className="shrink-0 rounded p-1 text-red-400/60 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                    onClick={() => void handleDeleteCapture(String(c.id))}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </li>
             ))}
           </ul>

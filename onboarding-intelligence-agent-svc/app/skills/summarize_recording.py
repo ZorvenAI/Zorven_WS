@@ -9,10 +9,11 @@ import json
 from collections.abc import Awaitable
 from typing import Any, cast
 
+from app.logic.live_session import frames_for_recording
 from app.core.logging import get_logger
 
 from app.cache.idempotency import IdempotencyGuard
-from app.cache.redis_manager import RedisManager
+from app.cache.redis_manager import RedisManager, TTL_SESSION
 from app.providers.llm import LLMProvider
 from app.services.backend_client import BackendClient
 from app.skills.base import BaseSkill
@@ -84,7 +85,7 @@ class SummarizeRecording(BaseSkill):
             return SkillResult(skill_id=self.meta.skill_id, output=cached)
 
         segments = await self._read_transcript(
-            tenant_id, session_id, started_at, stopped_at
+            tenant_id, session_id, str(recording_id), started_at, stopped_at
         )
         coverage = compute_transcript_coverage(
             await self._read_markers(tenant_id, session_id),
@@ -121,11 +122,18 @@ class SummarizeRecording(BaseSkill):
         }
 
         if self._backend is not None:
+            keys = self._redis.keys_for(tenant_id)
+
+            t2_text = await self._generate_t2(keys, session_id, segments)
+            t3_text = await self._generate_t3(keys, session_id, t2_text)
+
             await self._backend.update_recording_summary(
                 tenant_id=tenant_id,
                 recording_id=recording_id,
                 summary=summary,
                 transcript_segments=segments,
+                transcript_clean=t2_text or None,
+                description=t3_text or None,
             )
 
             await self._guard.store(tenant_id, f"skl08:{recording_id}", output)
@@ -138,11 +146,18 @@ class SummarizeRecording(BaseSkill):
         self,
         tenant_id: str,
         session_id: str,
+        recording_id: str,
         started_at: float,
         stopped_at: float,
     ) -> list[dict[str, Any]]:
         assert self._redis is not None
         keys = self._redis.keys_for(tenant_id)
+        key = keys.transcript(session_id)
+        raw_frames = await cast(
+            "Awaitable[list[Any]]", self._redis.client.lrange(key, 0, -1)
+        )
+        if raw_frames:
+            return extract_transcript_segments_relative(raw_frames, recording_id)
         key = keys.live_frames(session_id)
         raw_frames = await cast(
             "Awaitable[list[Any]]", self._redis.client.lrange(key, 0, -1)
@@ -171,6 +186,70 @@ class SummarizeRecording(BaseSkill):
             if isinstance(parsed, dict) and isinstance(parsed.get("at"), (int, float)):
                 markers.append(parsed)
         return markers
+
+    async def _generate_t2(
+        self,
+        keys: Any,
+        session_id: str,
+        segments: list[dict[str, Any]],
+    ) -> str:
+        """Generate T2 (clean transcript) from raw segments."""
+        if not segments or self._llm is None:
+            return ""
+        try:
+            from app.logic.transcript_cleaner import TranscriptCleaner
+
+            cleaner = TranscriptCleaner(
+                redis=self._redis,
+                keys=keys,
+                session_id=session_id,
+                llm=self._llm,
+                storage=None,
+                settings=type(
+                    "S", (), {"CLEAN_MODEL": None, "ANALYSIS_TIMEOUT_S": 60}
+                )(),
+            )
+            t2_text = await cleaner.run_batch(segments)
+            if t2_text:
+                await self._redis.client.set(
+                    keys.transcript_clean(session_id), t2_text, ex=TTL_SESSION
+                )
+            return t2_text or ""
+        except Exception:
+            logger.warning("t2_generation_failed", session_id=session_id)
+            return ""
+
+    async def _generate_t3(
+        self,
+        keys: Any,
+        session_id: str,
+        t2_text: str,
+    ) -> str:
+        """Generate T3 (description) from clean transcript."""
+        if not t2_text or self._llm is None:
+            return ""
+        try:
+            from app.logic.description_generator import DescriptionGenerator
+
+            desc_gen = DescriptionGenerator(
+                redis=self._redis,
+                keys=keys,
+                session_id=session_id,
+                llm=self._llm,
+                storage=None,
+                settings=type(
+                    "S", (), {"DESCRIPTION_MODEL": None, "ANALYSIS_TIMEOUT_S": 60}
+                )(),
+            )
+            t3_text = await desc_gen.run_batch(t2_text)
+            if t3_text:
+                await self._redis.client.set(
+                    keys.description(session_id), t3_text, ex=TTL_SESSION
+                )
+            return t3_text or ""
+        except Exception:
+            logger.warning("t3_generation_failed", session_id=session_id)
+            return ""
 
     @staticmethod
     def _format_transcript(segments: list[dict[str, Any]]) -> str:
@@ -358,6 +437,50 @@ def extract_transcript_segments(
                 # The role, not the name, is what prompts are attributed by —
                 # it distinguishes who asked from who answered without sending
                 # a person's name to a model provider.
+                "speaker_role": frame.get("speaker_role"),
+                "t_start": float(t_start),
+                "t_end": float(t_end),
+                "redaction_applied": frame.get("redaction_applied", False),
+            }
+        )
+    segments.sort(key=lambda s: s["t_start"])
+    return segments
+
+
+def extract_transcript_segments_relative(
+    raw_frames: list[bytes | str],
+    recording_id: str,
+) -> list[dict[str, Any]]:
+    """Like extract_transcript_segments but without timestamp-window filtering.
+
+    The ``transcript`` Redis key stores frames with relative timestamps
+    (seconds from recording start), not absolute Unix timestamps, so the
+    started_at/stopped_at window check would reject every entry. The key is
+    shared by every recording in the session, so entries are selected by
+    their recording_id instead.
+    """
+    parsed: list[dict[str, Any]] = []
+    for raw in raw_frames:
+        try:
+            frame = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(frame, dict):
+            parsed.append(frame)
+
+    segments: list[dict[str, Any]] = []
+    for frame in frames_for_recording(parsed, recording_id):
+        if frame.get("type") != "transcript.final":
+            continue
+        t_start = frame.get("t_start")
+        t_end = frame.get("t_end")
+        if t_start is None or t_end is None:
+            continue
+        segments.append(
+            {
+                "text": frame.get("text", ""),
+                "speaker": frame.get("speaker", 0),
+                "speaker_name": frame.get("speaker_name"),
                 "speaker_role": frame.get("speaker_role"),
                 "t_start": float(t_start),
                 "t_end": float(t_end),

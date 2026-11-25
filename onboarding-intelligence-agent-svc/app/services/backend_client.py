@@ -434,12 +434,24 @@ class BackendClient:
         recording_id: str,
         summary: dict[str, Any],
         transcript_segments: list[dict[str, Any]] | None = None,
+        transcript_clean: str | list[dict[str, Any]] | None = None,
+        description: str | None = None,
+        gcs_paths: dict[str, str] | None = None,
+        duration_s: int | None = None,
     ) -> bool:
         """Write summary and transcript back to a MeetingRecording (I-02, I-03)."""
         path = RECORDING_SUMMARY_PATH.format(recording_id=recording_id)
         payload: dict[str, Any] = {"summary": summary}
         if transcript_segments is not None:
             payload["transcript"] = transcript_segments
+        if transcript_clean:
+            payload["transcript_clean"] = transcript_clean
+        if description:
+            payload["description"] = description
+        if gcs_paths:
+            payload.update(gcs_paths)
+        if duration_s is not None:
+            payload["duration_s"] = duration_s
         body = await self._patch(
             path,
             payload,

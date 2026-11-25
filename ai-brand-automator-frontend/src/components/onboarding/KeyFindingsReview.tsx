@@ -242,7 +242,9 @@ export default function KeyFindingsReview({
           <div>
             <p className="text-xs text-brand-silver">Fields written</p>
             <p className="text-lg font-semibold text-white">
-              {summary.fields_written}
+              {summary.fields_total != null
+                ? `${summary.fields_written} / ${summary.fields_total}`
+                : summary.fields_written}
             </p>
           </div>
           <div>

@@ -82,12 +82,12 @@ export default function ProcessButton({
   }, [sessionId, onDispatch]);
 
   const handleClick = useCallback(() => {
-    if (hasCoverageShortfall(coverage)) {
-      setShowWarning(true);
-    } else {
+    if (status === 'GATHERED' || !hasCoverageShortfall(coverage)) {
       void dispatch();
+    } else {
+      setShowWarning(true);
     }
-  }, [coverage, dispatch]);
+  }, [status, coverage, dispatch]);
 
   if (status === 'PROCESSING') {
     return (

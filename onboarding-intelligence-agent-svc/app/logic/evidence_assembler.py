@@ -55,6 +55,8 @@ class AssembledEvidence:
     company_name: str | None = None
     valid_recording_ids: set[str] = field(default_factory=set)
     valid_media_ids: set[str] = field(default_factory=set)
+    #: The session's recordings as Django returned them, one per meeting.
+    recordings: list[dict[str, Any]] = field(default_factory=list)
 
 
 def build_speaker_labels(segments: list[dict[str, Any]]) -> dict[int, str]:
@@ -182,9 +184,13 @@ class EvidenceAssembler:
 
         company_id = None
         company_name = None
+        recordings: list[dict[str, Any]] = []
         if django_data and isinstance(django_data, dict):
             company_id = django_data.get("company_id")
             company_name = django_data.get("company_name")
+            recordings = [
+                r for r in django_data.get("recordings") or [] if isinstance(r, dict)
+            ]
 
         evidence = AssembledEvidence(
             blocks=blocks,
@@ -197,6 +203,7 @@ class EvidenceAssembler:
             company_name=company_name,
             valid_recording_ids=valid_rec_ids,
             valid_media_ids=valid_media_ids,
+            recordings=recordings,
         )
 
         logger.info(

@@ -520,10 +520,15 @@ class StorageProvider:
         session_id: str,
         tier: str,
         content: str,
+        *,
+        recording_id: str,
     ) -> str:
         import json as _json
 
-        path = f"{LANDING_PREFIX}/{tenant_id}/{session_id}/transcript/{tier}.json"
+        path = (
+            f"{LANDING_PREFIX}/{tenant_id}/{session_id}/transcript/"
+            f"{recording_id}/{tier}.json"
+        )
         try:
             self._breaker.before_call()
         except CircuitBreakerOpen as exc:

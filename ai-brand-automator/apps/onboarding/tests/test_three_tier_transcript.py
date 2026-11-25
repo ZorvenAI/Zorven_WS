@@ -215,16 +215,42 @@ class TestSessionDescriptionEndpoint:
         url = f"/api/v1/onboarding/sessions/{session.pk}/description/"
         resp = client.get(url)
         assert resp.status_code == 200
-        assert resp.data["description"] == "## Business Identity\nTest Corp"
-        assert resp.data["has_clean_transcript"] is True
+        assert len(resp.data["meetings"]) == 1
+        meeting = resp.data["meetings"][0]
+        assert meeting["recording_id"] == rec.pk
+        assert meeting["description"] == "## Business Identity\nTest Corp"
+        assert meeting["transcript_clean"] == "cleaned text"
+
+    def test_returns_every_meeting_oldest_first(self, client, public_tenant):
+        session = make_session(tenant=public_tenant, status=SessionStatus.COMPLETED)
+        recs = []
+        for text in ("## Agreements\nFirst meeting", "## Agreements\nSecond meeting"):
+            rec = make_recording(
+                session=session,
+                tenant=public_tenant,
+                status=RecordingStatus.SUMMARIZED,
+            )
+            rec.description = text
+            rec.save(update_fields=["description"])
+            recs.append(rec)
+
+        url = f"/api/v1/onboarding/sessions/{session.pk}/description/"
+        resp = client.get(url)
+        assert resp.status_code == 200
+        assert [m["recording_id"] for m in resp.data["meetings"]] == [
+            r.pk for r in recs
+        ]
+        assert [m["description"] for m in resp.data["meetings"]] == [
+            "## Agreements\nFirst meeting",
+            "## Agreements\nSecond meeting",
+        ]
 
     def test_returns_empty_when_no_recording(self, client, public_tenant):
         session = make_session(tenant=public_tenant, status=SessionStatus.DRAFT)
         url = f"/api/v1/onboarding/sessions/{session.pk}/description/"
         resp = client.get(url)
         assert resp.status_code == 200
-        assert resp.data["description"] == ""
-        assert resp.data["has_clean_transcript"] is False
+        assert resp.data["meetings"] == []
 
     def test_returns_empty_when_no_description(self, client, public_tenant):
         session = make_session(tenant=public_tenant, status=SessionStatus.COMPLETED)
@@ -236,7 +262,8 @@ class TestSessionDescriptionEndpoint:
         url = f"/api/v1/onboarding/sessions/{session.pk}/description/"
         resp = client.get(url)
         assert resp.status_code == 200
-        assert resp.data["description"] == ""
+        assert resp.data["meetings"][0]["description"] == ""
+        assert resp.data["meetings"][0]["transcript_clean"] == ""
 
     def test_requires_authentication(self, public_tenant):
         session = make_session(tenant=public_tenant)

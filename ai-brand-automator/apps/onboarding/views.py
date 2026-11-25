@@ -820,6 +820,28 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
 
         return Response(BrandAssetSerializer(asset).data, status=http.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["delete"], url_path=r"media/(?P<media_pk>[^/.]+)")
+    def media_detail(self, request, pk=None, media_pk=None):
+        """``DELETE /sessions/{id}/media/{media_pk}/`` — delete a capture."""
+        session = self.get_object()
+        if not IsTenantEditor().has_permission(request, self):
+            return Response(
+                {
+                    "code": errors.ROLE_DENIED,
+                    "detail": "Deleting captures requires Editor or above.",
+                },
+                status=http.HTTP_403_FORBIDDEN,
+            )
+        tenant = getattr(request, "tenant", None)
+        qs = BrandAsset.objects.filter(onboarding_session=session, pk=media_pk)
+        if tenant:
+            qs = qs.filter(Q(tenant=tenant) | Q(tenant__isnull=True))
+        asset = qs.first()
+        if asset is None:
+            return Response(status=http.HTTP_404_NOT_FOUND)
+        asset.delete()
+        return Response(status=http.HTTP_204_NO_CONTENT)
+
 
 class MeetingRecordingViewSet(
     RoleBasedPermissionMixin,
@@ -2850,7 +2872,8 @@ class ScheduledMeetingViewSet(
 def session_description(request, pk):
     """``GET /api/v1/onboarding/sessions/<pk>/description/``
 
-    Returns the T3 description from the most recent recording.
+    Returns the T3 description and T2 transcript of every recording in the
+    session, oldest first — a session can hold any number of meetings.
     """
     tenant = getattr(request, "tenant", None)
     qs = OnboardingSession.objects.all()
@@ -2860,15 +2883,18 @@ def session_description(request, pk):
         qs = qs.filter(tenant__isnull=True)
 
     session = get_object_or_404(qs, pk=pk)
-    recording = (
-        MeetingRecording.objects.filter(session=session).order_by("-created_at").first()
-    )
-    description = getattr(recording, "description", "") or ""
-    has_clean = bool(getattr(recording, "transcript_clean", None))
+    recordings = MeetingRecording.objects.filter(session=session).order_by("created_at")
     return Response(
         {
-            "description": description,
-            "has_clean_transcript": has_clean,
+            "meetings": [
+                {
+                    "recording_id": rec.pk,
+                    "started_at": rec.started_at,
+                    "description": rec.description or "",
+                    "transcript_clean": rec.transcript_clean or "",
+                }
+                for rec in recordings
+            ]
         }
     )
 
@@ -3047,6 +3073,7 @@ def process_callback(request, pk):
 
         if cb_status == "SUCCEEDED":
             summary = request.data.get("summary", {})
+            recording_tiers: list = []
             if isinstance(summary, dict):
                 raw = json.dumps(summary)
                 if len(raw) > 1_000_000:
@@ -3054,6 +3081,12 @@ def process_callback(request, pk):
                         {"error": "summary exceeds 1 MB limit"},
                         status=http.HTTP_400_BAD_REQUEST,
                     )
+                # The transcript tiers belong on their recordings, not copied
+                # into the session summary.
+                summary = dict(summary)
+                tiers = summary.pop("recording_tiers", [])
+                if isinstance(tiers, list):
+                    recording_tiers = [t for t in tiers if isinstance(t, dict)]
                 session.process_summary = summary
 
             prompt_versions = request.data.get("prompt_versions", {})
@@ -3061,6 +3094,39 @@ def process_callback(request, pk):
                 session.prompt_versions = prompt_versions
 
             target = "REVIEW_PENDING"
+
+            # Persist T2/T3 on the recording each was generated from. An
+            # existing value is never replaced: these are legal records, and
+            # re-processing must not reword what a meeting already produced.
+            for tier in recording_tiers:
+                rec_id = str(tier.get("recording_id", ""))
+                if not rec_id.isdigit():
+                    continue
+                rec = (
+                    MeetingRecording.objects.filter(session=session, pk=int(rec_id))
+                    .select_for_update(of=("self",))
+                    .first()
+                )
+                if rec is None:
+                    continue
+                rec_fields: list[str] = []
+                for name in ("transcript_clean", "description"):
+                    value = tier.get(name)
+                    if isinstance(value, str) and value and not getattr(rec, name):
+                        setattr(rec, name, value)
+                        rec_fields.append(name)
+                for name in (
+                    "transcript_clean_gcs_path",
+                    "description_gcs_path",
+                    "raw_transcript_gcs_path",
+                ):
+                    value = tier.get(name)
+                    if isinstance(value, str) and value:
+                        setattr(rec, name, value)
+                        rec_fields.append(name)
+                if rec_fields:
+                    rec_fields.append("updated_at")
+                    rec.save(update_fields=rec_fields)
         else:
             target = "GATHERED"
 
@@ -3192,6 +3258,7 @@ def session_evidence(request, pk):
                 "id": str(rec.pk),
                 "transcript": rec.transcript or [],
                 "summary": rec.summary or {},
+                "has_description": bool(rec.description),
                 "started_at": (rec.started_at.isoformat() if rec.started_at else None),
                 "stopped_at": (rec.stopped_at.isoformat() if rec.stopped_at else None),
             }

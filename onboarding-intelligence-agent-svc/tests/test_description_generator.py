@@ -113,6 +113,7 @@ def test_initial_state():
 @pytest.mark.unit
 def test_description_prompt_has_all_sections():
     for section in [
+        "Agreements",
         "Business Identity",
         "Products & Services",
         "Target Audience",

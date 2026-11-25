@@ -236,24 +236,23 @@ class ProcessExecutor:
                 )
 
             # ── T2/T3: transcript cleaning and description ────────
+            # One pair per recording, built from that recording's own stored
+            # transcript. A recording that already has a description is left
+            # alone: T3 is a legal record, and re-processing must not reword it.
             from app.logic.transcript_cleaner import TranscriptCleaner
             from app.logic.description_generator import DescriptionGenerator
 
-            t2_text = ""
-            t3_text = ""
+            recording_tiers: list[dict[str, Any]] = []
             if self._llm is not None:
-                raw_key = keys.transcript(session_id)
-                raw_items = await self._redis.client.lrange(raw_key, 0, -1)
-                raw_segments: list[dict[str, Any]] = []
-                for item in raw_items or []:
-                    try:
-                        parsed = json.loads(item)
-                        if isinstance(parsed, dict):
-                            raw_segments.append(parsed)
-                    except (json.JSONDecodeError, TypeError):
+                min_chars = getattr(self._settings, "DESCRIPTION_MIN_CHARS", 200)
+                for rec in evidence.recordings:
+                    segments = rec.get("transcript")
+                    if (
+                        rec.get("has_description")
+                        or not isinstance(segments, list)
+                        or not segments
+                    ):
                         continue
-
-                if raw_segments:
                     cleaner = TranscriptCleaner(
                         redis=self._redis,
                         keys=keys,
@@ -262,16 +261,11 @@ class ProcessExecutor:
                         storage=getattr(self, "_storage", None),
                         settings=self._settings,
                     )
-                    t2_text = await cleaner.run_batch(raw_segments)
-                    if t2_text:
-                        await self._redis.client.set(
-                            keys.transcript_clean(session_id),
-                            t2_text,
-                            ex=TTL_SESSION,
-                        )
-
-                    min_chars = getattr(self._settings, "DESCRIPTION_MIN_CHARS", 200)
-                    if t2_text and len(t2_text) >= min_chars:
+                    t2_text = await cleaner.run_batch(segments)
+                    if not t2_text:
+                        continue
+                    t3_text = ""
+                    if len(t2_text) >= min_chars:
                         desc_gen = DescriptionGenerator(
                             redis=self._redis,
                             keys=keys,
@@ -281,19 +275,20 @@ class ProcessExecutor:
                             settings=self._settings,
                         )
                         t3_text = await desc_gen.run_batch(t2_text)
-                        if t3_text:
-                            await self._redis.client.set(
-                                keys.description(session_id),
-                                t3_text,
-                                ex=TTL_SESSION,
-                            )
-
-                    logger.info(
-                        "process_t2t3_complete",
-                        job_id=job_id,
-                        t2_chars=len(t2_text),
-                        t3_chars=len(t3_text),
+                    recording_tiers.append(
+                        {
+                            "recording_id": str(rec.get("id", "")),
+                            "raw_segments": segments,
+                            "transcript_clean": t2_text,
+                            "description": t3_text,
+                        }
                     )
+
+                logger.info(
+                    "process_t2t3_complete",
+                    job_id=job_id,
+                    recordings=len(recording_tiers),
+                )
 
             # ── J-03: field extraction ────────────────────────────
             from app.logic.field_extractor import (
@@ -426,8 +421,6 @@ class ProcessExecutor:
                 "dropped_ungrounded": extraction.dropped_ungrounded_total,
                 "steps_used": extraction.steps_used,
                 "generated": generated,
-                "transcript_clean": t2_text if t2_text else None,
-                "description": t3_text if t3_text else None,
             }
             if extraction.dropped_ungrounded_total:
                 from app.metrics import DROPPED_UNGROUNDED
@@ -438,41 +431,43 @@ class ProcessExecutor:
             # ── GCS finalization: T1/T2/T3 + manifest ────────
             storage = getattr(self, "_storage", None)
             if storage is not None:
-                gcs_paths: dict[str, str] = {}
                 try:
-                    if raw_segments:
-                        path = await storage.upload_transcript_tier(
-                            tenant.tenant_id,
-                            session_id,
-                            "raw",
-                            json.dumps(raw_segments),
-                        )
-                        gcs_paths["raw_transcript_gcs_path"] = path
-                    if t2_text:
-                        path = await storage.upload_transcript_tier(
-                            tenant.tenant_id,
-                            session_id,
-                            "clean",
-                            json.dumps({"version": 1, "text": t2_text}),
-                        )
-                        gcs_paths["transcript_clean_gcs_path"] = path
-                    if t3_text:
-                        path = await storage.upload_transcript_tier(
-                            tenant.tenant_id,
-                            session_id,
-                            "description",
-                            json.dumps({"version": 1, "text": t3_text}),
-                        )
-                        gcs_paths["description_gcs_path"] = path
-
-                    artefacts = [{"tier": k, "path": v} for k, v in gcs_paths.items()]
+                    artefacts: list[dict[str, str]] = []
+                    for tier in recording_tiers:
+                        rec_id = tier["recording_id"]
+                        uploads = {
+                            "raw_transcript_gcs_path": (
+                                "raw",
+                                json.dumps(tier["raw_segments"]),
+                            ),
+                            "transcript_clean_gcs_path": (
+                                "clean",
+                                json.dumps(
+                                    {"version": 1, "text": tier["transcript_clean"]}
+                                ),
+                            ),
+                        }
+                        if tier["description"]:
+                            uploads["description_gcs_path"] = (
+                                "description",
+                                json.dumps({"version": 1, "text": tier["description"]}),
+                            )
+                        for field_name, (tier_name, content) in uploads.items():
+                            path = await storage.upload_transcript_tier(
+                                tenant.tenant_id,
+                                session_id,
+                                tier_name,
+                                content,
+                                recording_id=rec_id,
+                            )
+                            tier[field_name] = path
+                            artefacts.append({"tier": field_name, "path": path})
                     if artefacts:
                         await storage.write_manifest(
                             tenant.tenant_id,
                             session_id,
                             artefacts,
                         )
-                    summary.update(gcs_paths)
                 except Exception:
                     logger.warning(
                         "process_gcs_finalize_failed",
@@ -480,6 +475,11 @@ class ProcessExecutor:
                         session_id=session_id,
                         exc_info=True,
                     )
+
+            summary["recording_tiers"] = [
+                {k: v for k, v in tier.items() if k != "raw_segments"}
+                for tier in recording_tiers
+            ]
 
         except GuardrailViolation as exc:
             logger.error(

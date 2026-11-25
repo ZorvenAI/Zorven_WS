@@ -195,6 +195,11 @@ export function CompanyForm() {
           <option value="healthcare">Healthcare</option>
           <option value="finance">Finance</option>
           <option value="retail">Retail</option>
+          <option value="food_beverage">Food & Beverage</option>
+          <option value="hospitality">Hospitality</option>
+          <option value="real_estate">Real Estate</option>
+          <option value="manufacturing">Manufacturing</option>
+          <option value="professional_services">Professional Services</option>
           <option value="education">Education</option>
           <option value="other">Other</option>
         </select>

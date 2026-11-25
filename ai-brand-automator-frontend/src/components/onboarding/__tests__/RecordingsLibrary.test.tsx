@@ -46,6 +46,7 @@ function capture(overrides: Partial<CapturedMedia> = {}): CapturedMedia {
 it('renders recordings with status chips', () => {
   render(
     <RecordingsLibrary
+      sessionId="test-session"
       recordings={[
         recording({ id: 'r1', status: 'RECORDING', duration_s: null }),
         recording({ id: 'r2', status: 'UPLOADED' }),
@@ -65,6 +66,7 @@ it('renders recordings with status chips', () => {
 it('renders captures with usage tag badge', () => {
   render(
     <RecordingsLibrary
+      sessionId="test-session"
       recordings={[]}
       captures={[
         capture({ usage_tag: 'business_photo' }),
@@ -86,6 +88,7 @@ it('renders captures with usage tag badge', () => {
 it('shows "Processing" for UPLOADED status', () => {
   render(
     <RecordingsLibrary
+      sessionId="test-session"
       recordings={[recording({ status: 'UPLOADED' })]}
       captures={[]}
       canDelete={false}
@@ -98,6 +101,7 @@ it('shows "Processing" for UPLOADED status', () => {
 it('shows "Failed" with warning icon for FAILED status', () => {
   render(
     <RecordingsLibrary
+      sessionId="test-session"
       recordings={[recording({ status: 'FAILED' })]}
       captures={[]}
       canDelete={false}
@@ -112,6 +116,7 @@ it('shows "Failed" with warning icon for FAILED status', () => {
 it('disables play while RECORDING', () => {
   render(
     <RecordingsLibrary
+      sessionId="test-session"
       recordings={[recording({ status: 'RECORDING', audio_asset: null })]}
       captures={[]}
       canDelete={false}
@@ -124,6 +129,7 @@ it('disables play while RECORDING', () => {
 it('shows play button when UPLOADED with audio_asset', () => {
   render(
     <RecordingsLibrary
+      sessionId="test-session"
       recordings={[recording({ status: 'UPLOADED', audio_asset: 'asset-1' })]}
       captures={[]}
       canDelete={false}
@@ -138,6 +144,7 @@ it('shows play button when UPLOADED with audio_asset', () => {
 it('hides delete button for viewers (canDelete=false)', () => {
   render(
     <RecordingsLibrary
+      sessionId="test-session"
       recordings={[recording()]}
       captures={[]}
       canDelete={false}
@@ -150,6 +157,7 @@ it('hides delete button for viewers (canDelete=false)', () => {
 it('shows delete button for admins (canDelete=true)', () => {
   render(
     <RecordingsLibrary
+      sessionId="test-session"
       recordings={[recording()]}
       captures={[]}
       canDelete={true}
@@ -163,7 +171,7 @@ it('shows delete button for admins (canDelete=true)', () => {
 
 it('shows placeholder when no items', () => {
   render(
-    <RecordingsLibrary recordings={[]} captures={[]} canDelete={false} />,
+    <RecordingsLibrary sessionId="test-session" recordings={[]} captures={[]} canDelete={false} />,
   );
 
   expect(
@@ -176,6 +184,7 @@ it('shows placeholder when no items', () => {
 it('formats duration as M:SS', () => {
   render(
     <RecordingsLibrary
+      sessionId="test-session"
       recordings={[recording({ duration_s: 125 })]}
       captures={[]}
       canDelete={false}
@@ -188,6 +197,7 @@ it('formats duration as M:SS', () => {
 it('shows dash when duration is null', () => {
   render(
     <RecordingsLibrary
+      sessionId="test-session"
       recordings={[recording({ duration_s: null })]}
       captures={[]}
       canDelete={false}

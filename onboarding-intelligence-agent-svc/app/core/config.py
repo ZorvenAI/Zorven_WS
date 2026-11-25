@@ -87,7 +87,7 @@ class Settings(BaseSettings):
     COVERAGE_CROSSCHECK_TOLERANCE: float = 0.05
 
     # ── Extraction (J-03, Design §8.2 SKL-OIA-10) ──────────
-    PROCESS_MODEL: str = "claude-sonnet-4"
+    PROCESS_MODEL: str = "gemini-3.8-flash"
     EXTRACTION_MAX_STEPS: int = 40
     EXTRACTION_TEMPERATURE: float = 0.1
     EXTRACTION_RETRY_LIMIT: int = 1
@@ -123,8 +123,8 @@ class Settings(BaseSettings):
     DESCRIPTION_INTERVAL_S: int = 60
     DESCRIPTION_MIN_CHARS: int = 200
     FINALIZE_TIMEOUT_S: int = 30
-    CLEAN_MODEL: str = "claude-sonnet-4"
-    DESCRIPTION_MODEL: str = "claude-sonnet-4"
+    CLEAN_MODEL: str = "gemini-3.8-flash"
+    DESCRIPTION_MODEL: str = "gemini-3.8-flash"
 
     # ── Batcher (G-02, Design §4.3) ────────────────────────
     BATCH_WINDOW_S: float = 3.0

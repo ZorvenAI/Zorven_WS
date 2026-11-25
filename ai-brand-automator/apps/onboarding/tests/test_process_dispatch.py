@@ -213,6 +213,86 @@ class TestProcessCallback:
         assert session.process_summary == {"fields_extracted": 5}
 
     @override_settings(OIA_SERVICE_TOKEN=SERVICE_TOKEN)
+    def test_callback_saves_tiers_on_their_own_recordings(self, public_tenant):
+        """Each meeting keeps its own T2/T3, and an existing T3 is not reworded."""
+        company = make_company(tenant=public_tenant, name="Tier Co")
+        session = make_session(
+            company=company,
+            tenant=public_tenant,
+            status=SessionStatus.PROCESSING,
+        )
+        first = make_recording(
+            session=session,
+            tenant=public_tenant,
+            status=RecordingStatus.SUMMARIZED,
+        )
+        first.description = "## Agreements\nOriginal first meeting"
+        first.save(update_fields=["description"])
+        second = make_recording(
+            session=session,
+            tenant=public_tenant,
+            status=RecordingStatus.SUMMARIZED,
+        )
+        # A company holds one active session, so the other one is a finished one.
+        other_session = make_session(
+            company=company,
+            tenant=public_tenant,
+            status=SessionStatus.COMPLETED,
+        )
+        foreign = make_recording(
+            session=other_session,
+            tenant=public_tenant,
+            status=RecordingStatus.SUMMARIZED,
+        )
+
+        client = APIClient()
+        client.defaults["SERVER_NAME"] = "localhost"
+        url = f"/api/v1/onboarding/internal/sessions/{session.pk}/process/callback/"
+        resp = client.post(
+            url,
+            data={
+                "job_id": "job-tiers",
+                "status": "SUCCEEDED",
+                "summary": {
+                    "fields_written": 3,
+                    "recording_tiers": [
+                        {
+                            "recording_id": str(first.pk),
+                            "transcript_clean": "first clean",
+                            "description": "## Agreements\nReworded",
+                        },
+                        {
+                            "recording_id": str(second.pk),
+                            "transcript_clean": "second clean",
+                            "description": "## Agreements\nSecond meeting",
+                            "description_gcs_path": "a/b/description.json",
+                        },
+                        {
+                            "recording_id": str(foreign.pk),
+                            "description": "must not land on another session",
+                        },
+                    ],
+                },
+            },
+            format="json",
+            HTTP_X_SERVICE_TOKEN=SERVICE_TOKEN,
+            HTTP_X_TENANT_ID=str(public_tenant.pk),
+        )
+        assert resp.status_code == status.HTTP_200_OK
+
+        first.refresh_from_db()
+        second.refresh_from_db()
+        foreign.refresh_from_db()
+        session.refresh_from_db()
+        assert first.description == "## Agreements\nOriginal first meeting"
+        assert first.transcript_clean == "first clean"
+        assert second.description == "## Agreements\nSecond meeting"
+        assert second.transcript_clean == "second clean"
+        assert second.description_gcs_path == "a/b/description.json"
+        assert foreign.description == ""
+        assert session.process_summary == {"fields_written": 3}
+
+    @override_settings(OIA_SERVICE_TOKEN=SERVICE_TOKEN)
     def test_callback_failed_transitions_to_gathered(self, public_tenant):
         company = make_company(tenant=public_tenant, name="Fail Co")
         session = make_session(

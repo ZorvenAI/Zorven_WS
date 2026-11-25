@@ -30,6 +30,27 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
+
+def frames_for_recording(
+    frames: list[dict[str, Any]], recording_id: str
+) -> list[dict[str, Any]]:
+    """The transcript entries that belong to *recording_id*.
+
+    An entry with no recording_id was written before entries were tagged; it
+    is kept rather than dropped, because the key lives four hours and losing
+    part of an in-flight meeting's transcript is worse than the overlap.
+    """
+    return [f for f in frames if f.get("recording_id") in (None, "", recording_id)]
+
+
+def frames_for_latest_recording(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The entries of the recording the session wrote to most recently."""
+    for frame in reversed(frames):
+        if frame.get("recording_id"):
+            return frames_for_recording(frames, frame["recording_id"])
+    return frames
+
+
 _ARRAY_FIELDS = ("evidence", "missing_aspects", "suggestions", "suggestion_accepted")
 
 
@@ -263,6 +284,27 @@ class LiveSessionManager:
         pipe.expire(key, TTL_LIVE)
         await pipe.execute()
         return payload
+
+    async def persist_final(self, frame: ServerFrame, recording_id: str) -> None:
+        """Append a transcript.final to the durable transcript key.
+
+        Unlike live_frames (capped at BUFFER_FRAMES), the transcript key
+        keeps every final for the full session so SummarizeRecording and
+        TranscriptCleaner see the complete recording.
+
+        The key is per session and a session holds any number of recordings,
+        so each entry carries its recording_id — readers filter on it, or one
+        meeting's transcript would absorb every earlier meeting's.
+        """
+        payload = frame.model_dump(mode="json")
+        payload["recording_id"] = recording_id
+        keys = self._keys()
+        key = keys.transcript(self.session_id)
+
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.rpush(key, json.dumps(payload))
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
 
     async def record_marker(self, kind: str, at: float, **fields: Any) -> None:
         """Record that transcription stopped or restarted (#662).

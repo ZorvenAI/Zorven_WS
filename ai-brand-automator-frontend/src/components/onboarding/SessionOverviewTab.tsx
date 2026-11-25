@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Radio } from 'lucide-react';
+import { FileText, Radio } from 'lucide-react';
 
+import { apiClient } from '@/lib/api';
 import { useLibraryPolling } from '@/hooks/useLibraryPolling';
 import { useTenantRole } from '@/hooks/useTenantRole';
 import QuestionChecklist from '@/components/onboarding/QuestionChecklist';
@@ -29,6 +30,8 @@ export default function SessionOverviewTab({
   const [questionnaire, setQuestionnaire] = useState<QuestionnaireDetail | null>(null);
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const [transcriptClean, setTranscriptClean] = useState<string>('');
 
   const library = useLibraryPolling(sessionId);
   const { isAdmin } = useTenantRole();
@@ -72,6 +75,33 @@ export default function SessionOverviewTab({
     timer = setTimeout(poll, 3000);
     return () => clearTimeout(timer);
   }, [sessionId, session?.status]);
+
+  useEffect(() => {
+    const hasSummarized = library.recordings.some(
+      (r) => r.status === 'SUMMARIZED',
+    );
+    if (!hasSummarized) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiClient.get(
+          `/onboarding/sessions/${sessionId}/description/`,
+        );
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as {
+          meetings?: { transcript_clean?: string }[];
+        };
+        if (!cancelled) {
+          setTranscriptClean(data.meetings?.at(-1)?.transcript_clean ?? '');
+        }
+      } catch {
+        /* non-critical */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, library.recordings]);
 
   const canMeet =
     session?.status === 'READY' ||
@@ -137,11 +167,47 @@ export default function SessionOverviewTab({
             Recordings and captures
           </h2>
           <RecordingsLibrary
+            sessionId={sessionId}
             recordings={library.recordings}
             captures={library.captures}
             canDelete={isAdmin}
             onDeleted={library.refresh}
           />
+        </div>
+      )}
+
+      {/* Full transcript (T2) */}
+      {transcriptClean && (
+        <div className="glass-card p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <FileText className="h-4 w-4 text-brand-electric" aria-hidden />
+            <h2 className="text-sm font-semibold text-white">
+              Full Transcript
+            </h2>
+          </div>
+          <div className="max-h-[500px] overflow-y-auto rounded-lg bg-white/5 p-4">
+            {transcriptClean.split('\n').map((line, i) => {
+              if (!line.trim()) return <br key={i} />;
+              const colonIdx = line.indexOf(':');
+              if (colonIdx > 0 && colonIdx < 60) {
+                const speaker = line.slice(0, colonIdx);
+                const text = line.slice(colonIdx + 1);
+                return (
+                  <p key={i} className="mb-2 text-sm">
+                    <span className="font-medium text-brand-electric">
+                      {speaker}:
+                    </span>
+                    <span className="text-brand-silver">{text}</span>
+                  </p>
+                );
+              }
+              return (
+                <p key={i} className="mb-2 text-sm text-brand-silver">
+                  {line}
+                </p>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
