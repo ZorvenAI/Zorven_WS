@@ -27,6 +27,17 @@ outcome of the onboarding.
 
 Structure your output with these sections (omit any section with no evidence):
 
+## Agreements
+Points the two parties agreed during this meeting. The parties are the
+operator (the agency) and the participant (the client). List a point ONLY when
+one party proposed or stated it and the other party explicitly accepted it in
+the transcript. One bullet per agreement, stating what was agreed, who
+proposed it, who accepted it, and the approximate timestamp. Use only what was
+said: never infer an agreement from silence, a change of topic, or a one-sided
+statement. A proposal with no clear acceptance is not an agreement — list it
+under "needs clarification" instead. Omit this section entirely, heading
+included, when the meeting contains no agreements.
+
 ## Business Identity
 Company name, industry, location, founding story, years in operation.
 

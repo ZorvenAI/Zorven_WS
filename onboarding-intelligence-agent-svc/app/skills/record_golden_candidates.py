@@ -31,6 +31,15 @@ from app.skills.models import SkillContext, SkillResult
 logger = get_logger(__name__)
 
 
+def _to_uuid(value: uuid.UUID | str) -> uuid.UUID:
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, AttributeError):
+        return uuid.uuid5(uuid.NAMESPACE_URL, str(value))
+
+
 class RecordGoldenCandidates(BaseSkill):
     """Record admin-edit pairs as golden-dataset candidates for the prompt flywheel
     (§17.3)."""
@@ -111,8 +120,8 @@ class RecordGoldenCandidates(BaseSkill):
 
         envelope = MessageEnvelope(
             correlation_id=corr_id,
-            tenant_id=uuid.UUID(str(tenant_id)),
-            session_id=uuid.UUID(str(session_id)) if session_id else None,
+            tenant_id=_to_uuid(tenant_id),
+            session_id=_to_uuid(session_id) if session_id else None,
             payload=candidate.model_dump(mode="json"),
         )
 

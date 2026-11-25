@@ -387,6 +387,13 @@ class EvidenceRef(BaseModel):
     t_end: float | None = None
     media_id: str | None = None
 
+    @field_validator("recording_id", mode="before")
+    @classmethod
+    def _coerce_recording_id(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        return str(v)
+
 
 class FieldCandidate(BaseModel):
     """One field extracted by the LLM, before grounding and PG-06 checks."""

@@ -90,15 +90,24 @@ class EventEmitter:
             trace_id=trace_id,
             span_id=span_id,
             correlation_id=correlation_id,
-            tenant_id=uuid.UUID(str(tenant_id)),
-            session_id=uuid.UUID(str(session_id)) if session_id else None,
-            user_id=uuid.UUID(str(user_id)) if user_id else None,
+            tenant_id=self._to_uuid(tenant_id),
+            session_id=self._to_uuid(session_id) if session_id else None,
+            user_id=self._to_uuid(user_id) if user_id else None,
             role=role,
             skill_id=skill_id,
             payload=body,
             duration_ms=duration_ms,
             outcome=outcome,
         )
+
+    @staticmethod
+    def _to_uuid(value: uuid.UUID | str) -> uuid.UUID:
+        if isinstance(value, uuid.UUID):
+            return value
+        try:
+            return uuid.UUID(str(value))
+        except (ValueError, AttributeError):
+            return uuid.uuid5(uuid.NAMESPACE_URL, str(value))
 
     @staticmethod
     def _trace_ids(event_type: EventType) -> tuple[str, str]:

@@ -16,6 +16,15 @@ function mockFetch(data: object, status = 200) {
   });
 }
 
+function meeting(id: number, description: string, transcript_clean = '') {
+  return {
+    recording_id: id,
+    started_at: '2026-11-24T10:00:00Z',
+    description,
+    transcript_clean,
+  };
+}
+
 beforeEach(() => {
   jest.restoreAllMocks();
 });
@@ -31,9 +40,7 @@ it('shows loading spinner initially', () => {
 
 it('renders description sections when data loads', async () => {
   global.fetch = mockFetch({
-    description:
-      '## Business Identity\nAcme Corp in retail\n\n## Target Audience\nSmall businesses',
-    has_clean_transcript: true,
+    meetings: [meeting(1, '## Business Identity\nAcme Corp in retail\n\n## Target Audience\nSmall businesses')],
   });
 
   await act(async () => {
@@ -49,8 +56,7 @@ it('renders description sections when data loads', async () => {
 
 it('shows empty state when no description', async () => {
   global.fetch = mockFetch({
-    description: '',
-    has_clean_transcript: false,
+    meetings: [meeting(1, '')],
   });
 
   await act(async () => {
@@ -89,8 +95,7 @@ it('shows error when API returns non-200', async () => {
 
 it('renders the refresh button', async () => {
   global.fetch = mockFetch({
-    description: '## Business Identity\nSomething',
-    has_clean_transcript: true,
+    meetings: [meeting(1, '## Business Identity\nSomething')],
   });
 
   await act(async () => {
@@ -104,8 +109,7 @@ it('renders the refresh button', async () => {
 
 it('renders heading "Brand-Building Description"', async () => {
   global.fetch = mockFetch({
-    description: '## Business Identity\nContent here',
-    has_clean_transcript: true,
+    meetings: [meeting(1, '## Business Identity\nContent here')],
   });
 
   await act(async () => {
@@ -115,4 +119,48 @@ it('renders heading "Brand-Building Description"', async () => {
   await waitFor(() => {
     expect(screen.getByText('Brand-Building Description')).toBeInTheDocument();
   });
+});
+
+it('renders the Agreements section of a description', async () => {
+  global.fetch = mockFetch({
+    meetings: [
+      meeting(1, '## Agreements\n- Budget split evenly between dine-in and takeout'),
+    ],
+  });
+
+  await act(async () => {
+    render(<DescriptionTab sessionId={SESSION_ID} />);
+  });
+
+  await waitFor(() => {
+    expect(screen.getByText('Agreements')).toBeInTheDocument();
+  });
+  expect(screen.getByText(/Budget split evenly/)).toBeInTheDocument();
+  expect(screen.queryByRole('tablist', { name: 'Meetings' })).toBeNull();
+});
+
+it('lets the operator switch between meetings of one session', async () => {
+  global.fetch = mockFetch({
+    meetings: [
+      meeting(1, '## Agreements\n- First meeting agreement'),
+      meeting(2, '## Agreements\n- Second meeting agreement'),
+    ],
+  });
+
+  await act(async () => {
+    render(<DescriptionTab sessionId={SESSION_ID} />);
+  });
+
+  // The most recent meeting is shown first.
+  await waitFor(() => {
+    expect(screen.getByText(/Second meeting agreement/)).toBeInTheDocument();
+  });
+  expect(screen.queryByText(/First meeting agreement/)).toBeNull();
+
+  await act(async () => {
+    screen.getByRole('tab', { name: /Meeting 1/ }).click();
+  });
+
+  expect(screen.getByText(/First meeting agreement/)).toBeInTheDocument();
+  expect(screen.queryByText(/Second meeting agreement/)).toBeNull();
 });

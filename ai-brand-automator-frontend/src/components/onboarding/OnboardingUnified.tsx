@@ -139,7 +139,9 @@ export default function OnboardingUnified() {
       activeTab === 'review');
   const showDescriptionTab =
     !!selectedSession &&
-    (selectedSession.status === 'REVIEW_PENDING' ||
+    (selectedSession.status === 'GATHERED' ||
+      selectedSession.status === 'PROCESSING' ||
+      selectedSession.status === 'REVIEW_PENDING' ||
       selectedSession.status === 'CONFIRMED' ||
       selectedSession.status === 'COMPLETED' ||
       activeTab === 'description');

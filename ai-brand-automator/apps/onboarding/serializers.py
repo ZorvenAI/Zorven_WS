@@ -15,6 +15,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone as dj_timezone
 from rest_framework import serializers
 
+from apps.onboarding.field_map import all_mapped_fields
 from apps.onboarding.models import (
     ConsentRecord,
     FieldProvenance,
@@ -42,6 +43,9 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
     """
 
     company_name = serializers.SerializerMethodField()
+    process_summary = serializers.SerializerMethodField(
+        help_text="OIA callback summary, with fields_written counted live",
+    )
     legal_next_states = serializers.SerializerMethodField(
         help_text="Statuses reachable from the current one (§9.4)",
     )
@@ -91,6 +95,21 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
             "legal_next_states",
             "consent",
         ]
+
+    def get_process_summary(self, obj) -> dict:
+        # The stored summary is a snapshot from the PROCESS callback, so its
+        # fields_written goes stale as soon as a field is reviewed or edited.
+        summary = obj.process_summary or {}
+        company = getattr(obj, "company", None)
+        if "fields_written" not in summary or company is None:
+            return summary
+        mapped = all_mapped_fields()
+        filled = sum(
+            1
+            for name in mapped
+            if getattr(company, name, None) not in (None, "", [], {})
+        )
+        return {**summary, "fields_written": filled, "fields_total": len(mapped)}
 
     def get_company_name(self, obj) -> str | None:
         # `.name`, not `str(company)`: Company.__str__ is "Name (tenant-name)",

@@ -17,7 +17,12 @@ FIELD_TYPE_HINTS: Final[dict[str, str]] = {
     "name": "string — Company or brand name",
     "legal_name": "string — Registered legal entity name",
     "description": "string — Brief company description",
-    "industry": "string — Industry sector",
+    "industry": (
+        "string — exactly one of: technology, healthcare, finance, retail, "
+        "food_beverage, hospitality, real_estate, manufacturing, "
+        "professional_services, education, other. Pick the closest match; "
+        "use other only when none fits"
+    ),
     "core_problem": "string — Main problem the company solves",
     "website": "string — URL",
     "address": "string — Street address",
@@ -26,11 +31,11 @@ FIELD_TYPE_HINTS: Final[dict[str, str]] = {
     "postal_code": "string — Postal/ZIP code",
     "country": "string — Country",
     "founder_story": "string — Origin story in the founder's words",
-    "trademark_status": "string — registered, pending, or none",
+    "trademark_status": "string — exactly one of: registered, pending, none",
     "decision_maker": "string — Who signs off on brand/campaign decisions",
     # Page 2 — Brand Voice
     "brand_voice": (
-        "string — one of: professional, friendly, bold, authoritative, "
+        "string — exactly one of: professional, friendly, bold, authoritative, "
         "playful, innovative, warm, technical"
     ),
     "vision_statement": "string — Vision statement",
@@ -57,7 +62,11 @@ FIELD_TYPE_HINTS: Final[dict[str, str]] = {
         '"text": "...", "source": "...", "date": "..."}]'
     ),
     # Page 4 — Assets & Market
-    "brand_asset_status": "string — What brand assets exist (logo, guidelines, none)",
+    "brand_asset_status": (
+        "string — exactly one of: none (no brand assets), basic (logo only), "
+        "partial (logo plus some guidelines such as colors, fonts or tone), "
+        "complete (full brand kit)"
+    ),
     "competitors": (
         "JSON array of objects: " '[{"name": "...", "url": "...", "notes": "..."}]'
     ),

@@ -264,6 +264,22 @@ class LiveSessionManager:
         await pipe.execute()
         return payload
 
+    async def persist_final(self, frame: ServerFrame) -> None:
+        """Append a transcript.final to the durable transcript key.
+
+        Unlike live_frames (capped at BUFFER_FRAMES), the transcript key
+        keeps every final for the full session so SummarizeRecording and
+        TranscriptCleaner see the complete recording.
+        """
+        payload = frame.model_dump(mode="json")
+        keys = self._keys()
+        key = keys.transcript(self.session_id)
+
+        pipe = self.redis.client.pipeline(transaction=False)
+        pipe.rpush(key, json.dumps(payload))
+        pipe.expire(key, TTL_LIVE)
+        await pipe.execute()
+
     async def record_marker(self, kind: str, at: float, **fields: Any) -> None:
         """Record that transcription stopped or restarted (#662).
 

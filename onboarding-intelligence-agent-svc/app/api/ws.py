@@ -607,6 +607,11 @@ async def _emit_final(
     except Exception:  # noqa: BLE001
         logger.warning("emit_final_buffer_failed", seq=seq)
 
+    try:
+        await session.persist_final(buffered)
+    except Exception:  # noqa: BLE001
+        logger.warning("persist_final_failed", seq=seq)
+
     displayed = TranscriptFinal(
         seq=seq,
         text=result.text,

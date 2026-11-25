@@ -130,6 +130,7 @@ export default function RightRail({
         className="mt-4 min-h-0 flex-1 overflow-y-auto"
       >
         <RecordingsLibrary
+          sessionId={sessionId ?? ''}
           recordings={recordings}
           captures={captures}
           canDelete={canDelete}
