@@ -1783,8 +1783,9 @@ def _mandatory_refusal(verb: str) -> Response:
         {
             "error": f"a mandatory question cannot be {verb}",
             "detail": (
-                "Contract-detail questions are fixed. They leave the "
-                "questionnaire on their own once the detail is confirmed."
+                "Contract-detail questions are fixed. Once the detail is "
+                "confirmed, the next revision of the questionnaire leaves "
+                "the question out."
             ),
         },
         status=http.HTTP_409_CONFLICT,
@@ -2091,7 +2092,10 @@ class QuestionnaireViewSet(
             )
             # A revision is usually opened for a later meeting: drop the
             # contract questions answered since, add any that are new.
-            _sync_mandatory_questions(draft, approved.company)
+            # Prep runs before onboarding, so the questionnaire's own company
+            # is usually NULL; the session's is the one onboarding filled in.
+            company = approved.company or getattr(approved.session, "company", None)
+            _sync_mandatory_questions(draft, company)
 
         draft.refresh_from_db()
         return Response(
@@ -2181,19 +2185,32 @@ def _contract_fields_outstanding(company) -> list[contract_fields.ContractField]
     if company is None:
         return list(contract_fields.CONTRACT_FIELDS)
 
-    unreviewed = set(
-        FieldProvenance.objects.filter(
-            session__company=company,
-            model_name="Company",
-            field_name__in=contract_fields.contract_field_names(),
-            status__in=(ProvenanceStatus.PENDING, ProvenanceStatus.CONFLICT),
-        ).values_list("field_name", flat=True)
-    )
+    # Only the newest extraction of each field matters, and only while the
+    # value on file is still that guess. Once a person has typed something
+    # else into the company form, the value on file is theirs, even though
+    # the old provenance row was never reviewed.
+    latest: dict[str, FieldProvenance] = {}
+    for row in FieldProvenance.objects.filter(
+        session__company=company,
+        model_name="Company",
+        field_name__in=contract_fields.contract_field_names(),
+    ).order_by("field_name", "-created_at", "-pk"):
+        latest.setdefault(row.field_name, row)
+
+    def unreviewed_guess(field: str) -> bool:
+        row = latest.get(field)
+        if row is None or row.status not in (
+            ProvenanceStatus.PENDING,
+            ProvenanceStatus.CONFLICT,
+        ):
+            return False
+        return _as_text(getattr(company, field, None)) == _as_text(row.extracted_value)
+
     return [
         item
         for item in contract_fields.CONTRACT_FIELDS
-        if item.field in unreviewed
-        or not contract_fields.is_answered(getattr(company, item.field, None))
+        if not contract_fields.is_answered(getattr(company, item.field, None))
+        or unreviewed_guess(item.field)
     ]
 
 
@@ -2482,6 +2499,10 @@ def create_questionnaire(request):
             # invented name should cost that question its mapping, not cost
             # the operator their questionnaire. Reported so it is visible.
             invented.append(field)
+            field = ""
+        elif field in contract_fields.contract_field_names():
+            # The fixed contract question owns this field; a generated one
+            # claiming it would sit beside it as a second, unreviewed ask.
             field = ""
 
         cleaned.append(

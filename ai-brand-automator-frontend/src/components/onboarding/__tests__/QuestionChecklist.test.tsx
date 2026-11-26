@@ -181,6 +181,7 @@ describe('QuestionChecklist', () => {
       target_field: 'legal_name',
       category: 'CONTRACTUAL',
       mandatory: true,
+      required_to_issue: true,
     });
 
     it('tags a contract question by purpose, not by workflow', () => {
@@ -195,6 +196,23 @@ describe('QuestionChecklist', () => {
         'contract details · required',
       );
       expect(within(item).queryByText('discovery')).toBeNull();
+    });
+
+    it('marks only the details a record cannot be issued without as required', () => {
+      const optional = question({
+        id: 'c-2',
+        order: 1,
+        text: 'What is the company registration number?',
+        target_field: 'registration_number',
+        category: 'CONTRACTUAL',
+        mandatory: true,
+        required_to_issue: false,
+      });
+      render(<QuestionChecklist questions={[CONTRACT, optional]} />);
+
+      const [required, notRequired] = screen.getAllByTestId('contract-tag');
+      expect(required).toHaveTextContent('contract details · required');
+      expect(notRequired).toHaveTextContent(/^contract details$/);
     });
 
     it('keeps the contract tag out of the accessible name', () => {

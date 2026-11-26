@@ -52,7 +52,8 @@ const TAG_LABELS: Record<WorkflowTarget, string> = {
  * operator reads those numbers aloud.
  */
 const CONTRACT_TAG_STYLE = 'text-emerald-300/70';
-const CONTRACT_TAG_LABEL = 'contract details · required';
+const CONTRACT_TAG_LABEL = 'contract details';
+const CONTRACT_TAG_REQUIRED = ' · required';
 
 export interface QuestionChecklistProps {
   questions: PreparedQuestion[];
@@ -207,7 +208,9 @@ export default function QuestionChecklist({
                 aria-hidden
               >
                 {question.category === 'CONTRACTUAL'
-                  ? CONTRACT_TAG_LABEL
+                  ? `${CONTRACT_TAG_LABEL}${
+                      question.required_to_issue ? CONTRACT_TAG_REQUIRED : ''
+                    }`
                   : TAG_LABELS[question.workflow_target]}
               </span>
             </div>
