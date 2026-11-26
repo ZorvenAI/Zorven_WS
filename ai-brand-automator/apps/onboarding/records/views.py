@@ -11,8 +11,10 @@ record that is not yet fully signed is rendered on request and never stored.
 
 from __future__ import annotations
 
+import ipaddress
 from typing import Any
 
+from django.conf import settings
 from django.http import Http404, HttpResponse
 from rest_framework import status as http
 from rest_framework.decorators import api_view, permission_classes
@@ -86,11 +88,40 @@ def _record_or_404(request, pk) -> MeetingRecord:
     return record
 
 
+def _valid_ip(value: str | None) -> str | None:
+    try:
+        return str(ipaddress.ip_address((value or "").strip()))
+    except ValueError:
+        return None
+
+
 def _client_ip(request) -> str | None:
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
-    if forwarded:
-        return forwarded.split(",")[0].strip() or None
-    return request.META.get("REMOTE_ADDR") or None
+    """The caller's address, for the audit trail.
+
+    ``X-Forwarded-For`` is a list each proxy appends to, and everything to the
+    left of what our own proxies added was supplied by the caller. Reading
+    the first entry — the usual shortcut — would let anyone write an address
+    of their choosing into a record's audit trail.
+
+    So this counts in from the right. ``RECORDS_TRUSTED_PROXY_COUNT`` is how
+    many proxies in front of this service append to the header: 1 behind
+    Cloud Run's front end or Kong (the default), 0 when the service is
+    reached directly, in which case the header is ignored altogether. With
+    fewer entries than trusted proxies the header cannot be what it claims,
+    and the socket address is used instead.
+
+    Anything that is not an IP address is stored as nothing rather than
+    passed on: the column would reject it and fail the request.
+    """
+    trusted = int(getattr(settings, "RECORDS_TRUSTED_PROXY_COUNT", 1))
+    hops = [
+        hop.strip()
+        for hop in (request.META.get("HTTP_X_FORWARDED_FOR") or "").split(",")
+        if hop.strip()
+    ]
+    if trusted > 0 and len(hops) >= trusted:
+        return _valid_ip(hops[-trusted])
+    return _valid_ip(request.META.get("REMOTE_ADDR"))
 
 
 def _refusal(error: RecordError) -> Response:

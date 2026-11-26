@@ -939,3 +939,113 @@ def test_a_workspace_named_after_its_client_cannot_issue(
     assert item["blocking"] is True
     assert item["ok"] is not same
     assert issue(api_client, draft["id"]).status_code == (409 if same else 200)
+
+
+# ── The address in the audit trail cannot be chosen by the caller ────
+
+
+def created_from(recording) -> str | None:
+    return RecordEvent.objects.get(
+        record__recording=recording, event_type=RecordEventType.CREATED
+    ).ip_address
+
+
+def test_the_audit_trail_ignores_addresses_the_caller_put_in_the_header(
+    api_client, editor, recording
+):
+    """Each proxy appends to X-Forwarded-For, so everything left of the last
+    entry was supplied by the caller. The first entry is the one a forger
+    controls."""
+    response = api_client.post(
+        f"{BASE}/recordings/{recording.pk}/records/",
+        format="json",
+        HTTP_X_FORWARDED_FOR="1.1.1.1, 10.9.9.9, 203.0.113.7",
+    )
+
+    assert response.status_code == 201, response.content
+    assert created_from(recording) == "203.0.113.7"
+
+
+def test_with_two_trusted_proxies_the_address_is_two_from_the_right(
+    api_client, editor, recording, settings
+):
+    settings.RECORDS_TRUSTED_PROXY_COUNT = 2
+
+    api_client.post(
+        f"{BASE}/recordings/{recording.pk}/records/",
+        format="json",
+        HTTP_X_FORWARDED_FOR="1.1.1.1, 203.0.113.7, 10.0.0.2",
+    )
+
+    assert created_from(recording) == "203.0.113.7"
+
+
+def test_with_no_trusted_proxy_the_header_is_ignored(
+    api_client, editor, recording, settings
+):
+    """Reached directly, the whole header is the caller's to write."""
+    settings.RECORDS_TRUSTED_PROXY_COUNT = 0
+
+    api_client.post(
+        f"{BASE}/recordings/{recording.pk}/records/",
+        format="json",
+        HTTP_X_FORWARDED_FOR="1.1.1.1",
+        REMOTE_ADDR="198.51.100.4",
+    )
+
+    assert created_from(recording) == "198.51.100.4"
+
+
+def test_without_the_header_the_socket_address_is_recorded(
+    api_client, editor, recording
+):
+    api_client.post(
+        f"{BASE}/recordings/{recording.pk}/records/",
+        format="json",
+        REMOTE_ADDR="198.51.100.4",
+    )
+
+    assert created_from(recording) == "198.51.100.4"
+
+
+def test_a_header_shorter_than_the_proxy_chain_is_not_believed(
+    api_client, editor, recording, settings
+):
+    settings.RECORDS_TRUSTED_PROXY_COUNT = 2
+
+    api_client.post(
+        f"{BASE}/recordings/{recording.pk}/records/",
+        format="json",
+        HTTP_X_FORWARDED_FOR="1.1.1.1",
+        REMOTE_ADDR="198.51.100.4",
+    )
+
+    assert created_from(recording) == "198.51.100.4"
+
+
+@pytest.mark.parametrize(
+    "header", ["not-an-address", "203.0.113.7:8443", "<script>", "999.1.1.1"]
+)
+def test_a_value_that_is_not_an_address_is_recorded_as_nothing(
+    api_client, editor, recording, header
+):
+    """Not passed on to the column, which would reject it and fail the
+    request — a malformed header must not stop a record being prepared."""
+    response = api_client.post(
+        f"{BASE}/recordings/{recording.pk}/records/",
+        format="json",
+        HTTP_X_FORWARDED_FOR=header,
+    )
+
+    assert response.status_code == 201, response.content
+    assert created_from(recording) is None
+
+
+def test_an_ipv6_address_is_recorded(api_client, editor, recording):
+    api_client.post(
+        f"{BASE}/recordings/{recording.pk}/records/",
+        format="json",
+        HTTP_X_FORWARDED_FOR="2001:db8::1",
+    )
+
+    assert created_from(recording) == "2001:db8::1"
