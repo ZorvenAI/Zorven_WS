@@ -17,15 +17,17 @@ import type {
   ReadinessItem,
   RecordDetail,
   RecordStatus,
+  Signatory,
 } from '@/lib/meeting-records';
 
 jest.mock('@/lib/api', () => ({
-  apiClient: { get: jest.fn(), post: jest.fn() },
+  apiClient: { get: jest.fn(), post: jest.fn(), put: jest.fn() },
 }));
 jest.mock('@/hooks/useTenantRole');
 
 const get = apiClient.get as jest.Mock;
 const post = apiClient.post as jest.Mock;
+const put = apiClient.put as jest.Mock;
 const mockedRole = useTenantRole as jest.MockedFunction<typeof useTenantRole>;
 
 const SESSION = '6';
@@ -120,6 +122,37 @@ function detail(
       description: '',
       transcript: ['Naveen: Shall we split the budget?', 'Maria Rossi: Yes, agreed.'],
     },
+    signatories: [
+      signatory({ id: 1, party: 'AGENCY', party_name: 'Zorven Agency', name: 'Naveen H', email: 'naveen@agency.test' }),
+      signatory({ id: 2 }),
+    ],
+    remarks_to_acknowledge: {},
+    you: null,
+    consent: { version: '2026-11-draft-1', text: 'I agree to sign this document electronically.' },
+    ...overrides,
+  };
+}
+
+function signatory(overrides: Partial<Signatory> = {}): Signatory {
+  return {
+    id: 2,
+    party: 'CLIENT',
+    party_name: 'Pomodoro Trattoria LLC',
+    name: 'Maria Rossi',
+    title: 'Owner',
+    email: 'maria@example.com',
+    required: true,
+    status: 'PENDING',
+    signed_at: null,
+    declined_at: null,
+    remarks: '',
+    decline_reason: '',
+    method: '',
+    typed_name: '',
+    ip_address: null,
+    link_expires_at: null,
+    remarks_acknowledged_at: null,
+    ...overrides,
   };
 }
 
@@ -579,6 +612,160 @@ describe('DocumentsTab', () => {
 
       await waitFor(() => expect(clicked).toEqual(['meeting-records-session-6.pdf']));
       expect(get).toHaveBeenCalledWith('/onboarding/sessions/6/binder/');
+    });
+  });
+
+  describe('signatories and signing', () => {
+    async function open(record: RecordDetail) {
+      serve({
+        '/sessions/6/records/': { meetings: [meetingRow(summary(record.status))] },
+        '/records/11/': record,
+      });
+      const user = userEvent.setup();
+      render(<DocumentsTab sessionId={SESSION} />);
+      await user.click(await screen.findByRole('button', { name: 'Open MR-000085-v1' }));
+      await screen.findByRole('region', { name: 'Record MR-000085-v1' });
+      return user;
+    }
+
+    it('edits who signs a draft and saves the whole list', async () => {
+      const user = await open(detail('DRAFT'));
+      put.mockResolvedValue(ok(detail('DRAFT')));
+
+      await user.click(screen.getByRole('button', { name: 'Add signatory' }));
+      await user.type(screen.getByLabelText('Name of signatory 3'), 'Luca Rossi');
+      await user.type(screen.getByLabelText('Email of signatory 3'), 'luca@example.com');
+      await user.click(screen.getByRole('button', { name: 'Remove signatory 1' }));
+      await user.click(screen.getByRole('button', { name: 'Save signatories' }));
+
+      await waitFor(() =>
+        expect(put).toHaveBeenCalledWith('/onboarding/records/11/signatories/', {
+          signatories: [
+            { party: 'CLIENT', name: 'Maria Rossi', title: 'Owner', email: 'maria@example.com', required: true },
+            { party: 'CLIENT', name: 'Luca Rossi', title: '', email: 'luca@example.com', required: true },
+          ],
+        }),
+      );
+    });
+
+    it('shows the server’s reason when the list is refused', async () => {
+      const user = await open(detail('DRAFT'));
+      put.mockResolvedValue(
+        refused(400, { error: 'invalid_signatories', detail: 'luca@ is not a valid email address.' }),
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Save signatories' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('luca@ is not a valid email address.');
+    });
+
+    it('shows each person’s progress, remarks and evidence once issued', async () => {
+      await open(
+        detail('PARTIALLY_SIGNED', [], {
+          signatories: [
+            signatory({ id: 1, party: 'AGENCY', party_name: 'Zorven Agency', name: 'Naveen H', email: 'naveen@agency.test', link_expires_at: '2026-12-09T10:00:00Z' }),
+            signatory({
+              status: 'SIGNED',
+              signed_at: '2026-11-26T10:00:00Z',
+              typed_name: 'Maria Rossi',
+              method: 'EMAIL_CODE',
+              ip_address: '203.0.113.7',
+              remarks: 'Item 2: legal review budget only.',
+            }),
+          ],
+        }),
+      );
+
+      const people = within(screen.getByRole('list', { name: 'Signatories' })).getAllByRole('listitem');
+      expect(people[0]).toHaveTextContent('Awaiting signature');
+      expect(people[0]).toHaveTextContent('Link valid until');
+      expect(people[1]).toHaveTextContent('emailed link and one-time code · from 203.0.113.7');
+      expect(people[1]).toHaveTextContent('Remarks: Item 2: legal review budget only.');
+      expect(screen.queryByRole('form', { name: 'Your signature' })).toBeNull();
+    });
+
+    it('resends links and says the old ones stop working', async () => {
+      const user = await open(detail('ISSUED'));
+      post.mockResolvedValue(ok({ ...detail('ISSUED'), sent: 2 }));
+
+      await user.click(screen.getByRole('button', { name: 'Send reminder' }));
+
+      await waitFor(() => expect(post).toHaveBeenCalledWith('/onboarding/records/11/remind/', {}));
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'Sent 2 new signing links. Earlier links no longer work.',
+      );
+    });
+
+    it('lets the agency signatory sign, with consent and the fingerprint shown', async () => {
+      const user = await open(detail('ISSUED', [], { you: 1 }));
+      post.mockResolvedValue(ok(detail('PARTIALLY_SIGNED')));
+      const form = screen.getByRole('form', { name: 'Your signature' });
+      const button = within(form).getByRole('button', { name: 'Sign record' });
+
+      expect(button).toBeDisabled();
+      await user.click(within(form).getByRole('checkbox'));
+      await user.click(button);
+
+      await waitFor(() =>
+        expect(post).toHaveBeenCalledWith('/onboarding/records/11/sign/', {
+          content_hash: HASH,
+          action: 'sign',
+          typed_name: 'Naveen H',
+          consent: true,
+        }),
+      );
+    });
+
+    it('declines only with a reason', async () => {
+      const user = await open(detail('ISSUED', [], { you: 1 }));
+      post.mockResolvedValue(ok(detail('DECLINED')));
+      const form = screen.getByRole('form', { name: 'Your signature' });
+
+      await user.click(within(form).getByText('Decline'));
+      const button = within(form).getByRole('button', { name: 'Decline to sign' });
+      expect(button).toBeDisabled();
+      await user.type(within(form).getByLabelText('Reason for declining'), 'Wrong budget.');
+      await user.click(button);
+
+      await waitFor(() =>
+        expect(post).toHaveBeenCalledWith('/onboarding/records/11/sign/', {
+          content_hash: HASH,
+          action: 'decline',
+          reason: 'Wrong budget.',
+        }),
+      );
+    });
+
+    it('asks an agency signer to acknowledge remarks made after they signed', async () => {
+      const user = await open(
+        detail('PARTIALLY_SIGNED', [], {
+          you: 1,
+          signatories: [
+            signatory({ id: 1, party: 'AGENCY', name: 'Naveen H', email: 'naveen@agency.test', status: 'SIGNED', signed_at: '2026-11-26T09:00:00Z' }),
+            signatory({ status: 'SIGNED', signed_at: '2026-11-26T10:00:00Z', remarks: 'A remark.' }),
+          ],
+          remarks_to_acknowledge: { '1': ['Maria Rossi'] },
+        }),
+      );
+      post.mockResolvedValue(ok(detail('COMPLETED')));
+
+      expect(screen.queryByRole('form', { name: 'Your signature' })).toBeNull();
+      await user.click(screen.getByRole('button', { name: 'I have read the remarks' }));
+
+      await waitFor(() =>
+        expect(post).toHaveBeenCalledWith('/onboarding/records/11/sign/', {
+          content_hash: HASH,
+          action: 'acknowledge_remarks',
+        }),
+      );
+    });
+
+    it('lets a viewer who is a signatory sign, but not edit or remind', async () => {
+      asRole(false);
+      await open(detail('ISSUED', [], { you: 1 }));
+
+      expect(screen.getByRole('form', { name: 'Your signature' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Send reminder' })).toBeNull();
     });
   });
 

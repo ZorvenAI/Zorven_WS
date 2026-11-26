@@ -107,8 +107,13 @@ export function Navigation({ children }: { children: React.ReactNode }) {
     router.push('/auth/login');
   };
 
-  // On auth pages and public tool pages, render children without shell
-  if (pathname?.startsWith('/auth/') || pathname === '/brand-equity') {
+  // On auth pages and public pages, render children without shell. A client
+  // opening a signing link must not see the agency's workspace around it.
+  if (
+    pathname?.startsWith('/auth/') ||
+    pathname?.startsWith('/sign/') ||
+    pathname === '/brand-equity'
+  ) {
     return <>{children}</>;
   }
 

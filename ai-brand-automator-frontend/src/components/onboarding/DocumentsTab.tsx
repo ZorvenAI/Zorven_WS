@@ -23,6 +23,8 @@ import {
   XCircle,
 } from 'lucide-react';
 
+import RecordSignatories from '@/components/onboarding/RecordSignatories';
+import RecordDocumentView, { formatWhen } from '@/components/records/RecordDocumentView';
 import { useTenantRole } from '@/hooks/useTenantRole';
 import {
   RecordActionError,
@@ -57,32 +59,8 @@ const STATUS_STYLES: Record<RecordStatus, string> = {
   EXPIRED: 'border-rose-300/40 text-rose-200',
 };
 
-function formatWhen(iso: string | null): string {
-  if (!iso) return 'Time not recorded';
-  return new Date(iso).toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-}
-
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : 'Something went wrong.';
-}
-
-function Bold({ text }: { text: string }) {
-  return (
-    <>
-      {text.split(/(\*\*.+?\*\*)/g).map((part, index) =>
-        part.startsWith('**') && part.endsWith('**') && part.length > 4 ? (
-          <strong key={index} className="text-white">
-            {part.slice(2, -2)}
-          </strong>
-        ) : (
-          <span key={index}>{part}</span>
-        ),
-      )}
-    </>
-  );
 }
 
 function Readiness({ items }: { items: ReadinessItem[] }) {
@@ -115,77 +93,6 @@ function Readiness({ items }: { items: ReadinessItem[] }) {
   );
 }
 
-function Preview({ detail }: { detail: RecordDetail }) {
-  const doc = detail.document;
-  const client = doc.parties.client;
-  return (
-    <div className="space-y-5 text-sm text-brand-silver">
-      <section>
-        <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-white/60">
-          Parties
-        </h4>
-        <p>
-          <span className="text-white">{doc.parties.agency.name || '—'}</span> and{' '}
-          <span className="text-white">{client.legal_name || client.name || '—'}</span>
-        </p>
-        <p>
-          Signing for the client: {client.signatory_name || '—'}
-          {client.signatory_title ? `, ${client.signatory_title}` : ''}
-          {client.signatory_email ? ` (${client.signatory_email})` : ''}
-        </p>
-      </section>
-
-      <section>
-        <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-white/60">
-          Agreements
-        </h4>
-        {doc.agreements.items.length === 0 ? (
-          <p>No agreements were recorded in this meeting.</p>
-        ) : (
-          <ol className="space-y-1.5" aria-label="Agreements">
-            {doc.agreements.items.map((item) => (
-              <li key={item.number} className="flex gap-3">
-                <span className="shrink-0 font-semibold text-white">{item.number}</span>
-                <span className="whitespace-pre-line">
-                  <Bold text={item.text} />
-                </span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-
-      <section>
-        <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-white/60">
-          Clean transcript ({doc.transcript.length} lines)
-        </h4>
-        {doc.transcript.length === 0 ? (
-          <p>No clean transcript is available for this meeting.</p>
-        ) : (
-          <ol
-            className="max-h-72 space-y-1 overflow-y-auto rounded-lg bg-white/5 p-3"
-            aria-label="Transcript"
-          >
-            {doc.transcript.map((line, index) => (
-              <li key={index} className="flex gap-3">
-                <span className="w-7 shrink-0 text-right text-xs text-white/40">
-                  {index + 1}
-                </span>
-                <span className="break-words">{line}</span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-
-      <p className="text-xs">
-        The PDF also carries the description, attendance, recording consent and
-        the legal status clause.
-      </p>
-    </div>
-  );
-}
-
 export default function DocumentsTab({ sessionId }: DocumentsTabProps) {
   const { canEdit } = useTenantRole();
   const [meetings, setMeetings] = useState<MeetingWithRecord[]>([]);
@@ -193,6 +100,7 @@ export default function DocumentsTab({ sessionId }: DocumentsTabProps) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [confirmingIssue, setConfirmingIssue] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
   const [voiding, setVoiding] = useState(false);
@@ -225,6 +133,7 @@ export default function DocumentsTab({ sessionId }: DocumentsTabProps) {
   const run = async (action: () => Promise<RecordDetail | null | void>) => {
     setBusy(true);
     setError(null);
+    setNotice(null);
     try {
       const result = await action();
       if (result !== undefined) setDetail(result);
@@ -293,6 +202,15 @@ export default function DocumentsTab({ sessionId }: DocumentsTabProps) {
           className="rounded-lg border border-rose-300/30 p-3 text-sm text-rose-200"
         >
           {error}
+        </p>
+      )}
+
+      {notice && (
+        <p
+          role="status"
+          className="rounded-lg border border-emerald-300/30 p-3 text-sm text-emerald-200"
+        >
+          {notice}
         </p>
       )}
 
@@ -554,7 +472,15 @@ export default function DocumentsTab({ sessionId }: DocumentsTabProps) {
             </button>
           )}
 
-          <Preview detail={detail} />
+          <RecordSignatories
+            detail={detail}
+            canEdit={canEdit}
+            busy={busy}
+            run={run}
+            onNotice={setNotice}
+          />
+
+          <RecordDocumentView document={detail.document} />
 
           <section>
             <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-white/60">
