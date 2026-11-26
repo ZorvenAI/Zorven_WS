@@ -59,6 +59,16 @@ class SignatureBlock:
     title: str = ""
     email: str = ""
     signed_at: str = ""
+    typed_name: str = ""
+    method: str = ""
+    ip_address: str = ""
+    remarks: str = ""
+    declined: bool = False
+    declined_at: str = ""
+    decline_reason: str = ""
+    #: When this signer accepted remarks made after they signed.
+    acknowledged_at: str = ""
+    required: bool = True
 
 
 @dataclass(frozen=True)
@@ -362,17 +372,34 @@ def _render_record(pdf: _RecordPDF, view: RecordView) -> None:
 
     # 7 · Signatures
     pdf.section("Signatures")
+    if not view.signatures:
+        pdf.paragraph("No signatories have been named for this record.")
     for block in view.signatures:
-        if pdf.get_y() > pdf.h - 60:
+        if pdf.get_y() > pdf.h - 70:
             pdf.add_page()
         pdf.set_font(FAMILY, "B", 10)
-        pdf.multi_cell(0, 6, f"Signed for {block.party}", new_x="LMARGIN", new_y="NEXT")
+        suffix = "" if block.required else " (optional)"
+        pdf.multi_cell(
+            0, 6, f"For {block.party}{suffix}", new_x="LMARGIN", new_y="NEXT"
+        )
         pdf.pair("Name", block.name)
         pdf.pair("Title", block.title)
         pdf.pair("Email", block.email)
-        pdf.pair(
-            "Signed", format_time(block.signed_at) if block.signed_at else "Not signed"
-        )
+        if block.declined:
+            pdf.pair("Declined", format_time(block.declined_at))
+            pdf.pair("Reason given", block.decline_reason)
+        elif block.signed_at:
+            pdf.pair("Signed", format_time(block.signed_at))
+            pdf.pair("Signature", block.typed_name)
+            pdf.pair("Method", block.method)
+            if block.ip_address:
+                pdf.pair("From address", block.ip_address)
+            if block.remarks:
+                pdf.pair("Remarks", block.remarks)
+            if block.acknowledged_at:
+                pdf.pair("Acknowledged remarks", format_time(block.acknowledged_at))
+        else:
+            pdf.pair("Signed", "Not signed")
         pdf.ln(4)
 
     # 8 · Annex A — transcript

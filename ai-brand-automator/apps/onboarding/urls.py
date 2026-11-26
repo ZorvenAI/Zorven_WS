@@ -15,6 +15,7 @@ from apps.onboarding.erasure.views import (
     ErasureRequestView,
     RetentionConfigView,
 )
+from apps.onboarding.records import public_views as record_public_views
 from apps.onboarding.records import views as record_views
 from apps.onboarding.views import (
     FieldProvenanceViewSet,
@@ -196,6 +197,42 @@ urlpatterns = [
         "records/<int:pk>/issue/",
         record_views.issue_record,
         name="onboarding-record-issue",
+    ),
+    path(
+        "records/<int:pk>/signatories/",
+        record_views.record_signatories,
+        name="onboarding-record-signatories",
+    ),
+    path(
+        "records/<int:pk>/sign/",
+        record_views.sign_record,
+        name="onboarding-record-sign",
+    ),
+    path(
+        "records/<int:pk>/remind/",
+        record_views.remind_record,
+        name="onboarding-record-remind",
+    ),
+    # The signing page. No login: the emailed link is the credential.
+    path(
+        "public/records/sign/<str:token>/",
+        record_public_views.signing_overview,
+        name="onboarding-record-signing-overview",
+    ),
+    path(
+        "public/records/sign/<str:token>/code/",
+        record_public_views.signing_code,
+        name="onboarding-record-signing-code",
+    ),
+    path(
+        "public/records/sign/<str:token>/verify/",
+        record_public_views.signing_verify,
+        name="onboarding-record-signing-verify",
+    ),
+    path(
+        "public/records/sign/<str:token>/submit/",
+        record_public_views.signing_submit,
+        name="onboarding-record-signing-submit",
     ),
     path(
         "records/<int:pk>/void/",

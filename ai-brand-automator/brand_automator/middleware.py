@@ -39,6 +39,9 @@ class TenantMembershipMiddleware:
         "/api/v1/tenants/me/",
         "/api/v1/tenants/switch/",
         "/api/v1/tenants/accept-invite/",
+        # Meeting-record signing: the emailed link is the credential, and the
+        # signer has no workspace.
+        "/api/v1/onboarding/public/",
         "/health",
         "/ready",
         "/alive",
@@ -404,6 +407,7 @@ class KongAuthenticationMiddleware:
         "/ready",
         "/alive",
         "/api/v1/subscriptions/webhook",
+        "/api/v1/onboarding/public/",
         "/admin",  # Django admin handles its own auth
         "/static",
         "/media",
