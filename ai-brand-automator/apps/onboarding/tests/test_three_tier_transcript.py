@@ -91,7 +91,7 @@ class TestModelFields:
         rec.transcript_clean = "Speaker 1: Hello\nSpeaker 2: Hi"
         rec.save(update_fields=["transcript_clean"])
         rec.refresh_from_db()
-        assert isinstance(rec.transcript_clean, str)
+        assert rec.transcript_clean == "Speaker 1: Hello\nSpeaker 2: Hi"
 
     def test_description_stores_text(self, public_tenant):
         rec = make_recording(tenant=public_tenant)
