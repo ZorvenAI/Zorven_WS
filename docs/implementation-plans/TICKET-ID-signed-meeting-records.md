@@ -1,6 +1,6 @@
 # Implementation Plan: Signed Meeting Records and Contractual Questions (TICKET-ID)
 
-**Status:** Approved (by the user, 2026-11-25) — step 1 of §5.8 in progress
+**Status:** Approved (by the user, 2026-11-25) — steps 1 and 2 of §5.8 built; steps 3 and 4 not started
 **Date:** 2026-11-25
 **Target Environment:** GCP — Production
 **Design:** [contractual-documents-design.md](contractual-documents-design.md) (decisions D1–D8 accepted as recommended on 2026-11-25)
@@ -273,6 +273,43 @@ Tenants can add their own mandatory questions later; not in this release.
 - Written-only details are entered on the existing Company Info form, in a new
   "Contract details" block, until the Prepare screen exists (step 2).
 - The Review tab's field total rises from 39 to 45.
+
+**As built (step 2: record and PDF) — where it differs from §5.1–5.4**
+
+- **PDFs are returned directly, not through a storage link.** A record that is
+  not fully signed is rendered on request and never stored, so there is nothing
+  to link to yet. Writing the final PDF to storage belongs with completion
+  (step 3). `pdf_gcs_path` and `pdf_hash` exist on the model and are unused.
+- **A Unicode font is bundled** (DejaVu Sans, free licence, in
+  `apps/onboarding/records/fonts/`). The existing onboarding PDF replaces any
+  character outside Latin-1 with `?`, which a signed record cannot do. Text the
+  font still cannot draw (for example Kannada or Japanese) blocks issue with a
+  readiness item naming the characters. Supporting those scripts needs
+  additional fonts and text shaping and is not in this plan.
+- **The raw transcript and the completeness figures are frozen too**, not only
+  the description and clean transcript. The clause puts the raw transcript
+  above the clean one in precedence, so it cannot be allowed to change either.
+- **A voided record keeps its recording frozen.** It still exists and still
+  says what it said.
+- **A recording with an issued record cannot be deleted** through the API.
+  Holding records back from erasure and retention is still step 4; until then
+  the erasure cascade behaves as before and would remove them.
+- **Signature blocks are placeholders.** The client's signatory comes from the
+  frozen party details and the agency's is whoever issued the record. Nothing
+  is ever marked signed until step 3 adds signatories and signing.
+- **Readiness in step 2 has no signatory check** for the same reason. It checks
+  content, party details, unreviewed details, transcript completeness
+  (acknowledged if not complete) and reproducible characters.
+- **`RecordSignatory` and `RecordShare` are not created yet.** They arrive with
+  the steps that use them, so no empty tables ship.
+- **`POST records/<pk>/discard/` was added** to remove a draft that was never
+  issued. `sign`, `acknowledge-remarks`, `remind` and the share endpoints are
+  not built yet.
+- **Record numbers** are `MR-<recording id, six digits>-v<version>`.
+- **Times in the PDF are always UTC**, so one record read in two time zones
+  shows one time.
+- **`pypdf` was added as a test dependency** to read text out of the PDFs, and
+  `fonttools` is now declared explicitly.
 
 ### 5.6 Frontend
 

@@ -43,3 +43,8 @@ types-requests==2.31.0.20231231
 # dependency to rely on for a test that must not silently stop running.
 inflection==0.5.1
 uritemplate==4.2.0
+
+# Reads text back out of generated PDFs. The meeting-record PDFs embed a
+# Unicode font, so their text is stored as glyph ids and cannot be asserted on
+# by inflating the content stream the way the older onboarding PDF test does.
+pypdf==5.1.0

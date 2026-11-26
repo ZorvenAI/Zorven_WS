@@ -111,6 +111,8 @@ from apps.onboarding.serializers import (
     ResearchBriefSerializer,
     ScheduledMeetingSerializer,
 )
+from apps.onboarding.records.lifecycle import recording_is_frozen
+from apps.onboarding.services.contract_details import outstanding_contract_fields
 from apps.onboarding.services.session_state import InvalidTransition, transition
 from apps.onboarding.state import TRANSITIONS
 from apps.onboarding.text import levenshtein, normalise_company_name
@@ -879,6 +881,26 @@ class MeetingRecordingViewSet(
         return MeetingRecording.objects.select_related("session").filter(
             tenant_scope_q(tenant)
         )
+
+    def destroy(self, request, *args, **kwargs):
+        """Refuse to delete a recording an issued meeting record was made from.
+
+        The record would outlive the audio and transcript it rests on. A
+        recording with only a draft record can go, and takes the draft with it.
+        """
+        recording = self.get_object()
+        if recording_is_frozen(recording):
+            return Response(
+                {
+                    "error": "recording_has_issued_record",
+                    "detail": (
+                        "A meeting record has been issued from this recording, "
+                        "so it cannot be deleted."
+                    ),
+                },
+                status=http.HTTP_409_CONFLICT,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     def retrieve(self, request, *args, **kwargs):
         """``GET /recordings/{id}/`` with optional ``?include=signed_urls``.
@@ -2178,23 +2200,7 @@ def _contract_fields_outstanding(company) -> list[contract_fields.ContractField]
     With no company — the common case before onboarding starts — everything
     is outstanding.
     """
-    if company is None:
-        return list(contract_fields.CONTRACT_FIELDS)
-
-    unreviewed = set(
-        FieldProvenance.objects.filter(
-            session__company=company,
-            model_name="Company",
-            field_name__in=contract_fields.contract_field_names(),
-            status__in=(ProvenanceStatus.PENDING, ProvenanceStatus.CONFLICT),
-        ).values_list("field_name", flat=True)
-    )
-    return [
-        item
-        for item in contract_fields.CONTRACT_FIELDS
-        if item.field in unreviewed
-        or not contract_fields.is_answered(getattr(company, item.field, None))
-    ]
+    return outstanding_contract_fields(company)
 
 
 def _sync_mandatory_questions(questionnaire, company) -> int:
@@ -3089,12 +3095,27 @@ def update_recording_summary(request, pk):
         recording.summary = summary
         transcript = request.data.get("transcript")
         update_fields = ["summary", "status", "updated_at"]
-        if isinstance(transcript, list) and all(
-            isinstance(seg, dict)
-            and isinstance(seg.get("text"), str)
-            and isinstance(seg.get("t_start"), (int, float))
-            and isinstance(seg.get("t_end"), (int, float))
-            for seg in transcript
+        # Once a meeting record has been issued from this recording, the texts
+        # it was made from are fixed: a record that says one thing beside a
+        # transcript that now says another is worse than either alone. The
+        # summary and paths may still move; the words may not.
+        frozen = recording_is_frozen(recording)
+        if frozen:
+            logger.info(
+                "recording_texts_frozen recording=%s — transcript, clean "
+                "transcript and description left unchanged",
+                recording.pk,
+            )
+        if (
+            not frozen
+            and isinstance(transcript, list)
+            and all(
+                isinstance(seg, dict)
+                and isinstance(seg.get("text"), str)
+                and isinstance(seg.get("t_start"), (int, float))
+                and isinstance(seg.get("t_end"), (int, float))
+                for seg in transcript
+            )
         ):
             recording.transcript = transcript
             update_fields.append("transcript")
@@ -3108,7 +3129,11 @@ def update_recording_summary(request, pk):
         # "never assessed" is a third state, distinct from complete, and it is
         # the honest answer for anything finalised by an older agent.
         coverage = summary.get("transcript_coverage")
-        if isinstance(coverage, dict) and isinstance(coverage.get("complete"), bool):
+        if (
+            not frozen
+            and isinstance(coverage, dict)
+            and isinstance(coverage.get("complete"), bool)
+        ):
             recording.transcript_complete = coverage["complete"]
             missing = coverage.get("missing_s")
             if isinstance(missing, (int, float)) and missing >= 0:
@@ -3117,12 +3142,16 @@ def update_recording_summary(request, pk):
 
         # Three-Tier Transcript: T2 clean transcript, T3 description, GCS paths.
         transcript_clean = request.data.get("transcript_clean")
-        if isinstance(transcript_clean, (list, str)) and transcript_clean:
+        if (
+            not frozen
+            and isinstance(transcript_clean, (list, str))
+            and transcript_clean
+        ):
             recording.transcript_clean = transcript_clean
             update_fields.append("transcript_clean")
 
         description_text = request.data.get("description")
-        if isinstance(description_text, str) and description_text:
+        if not frozen and isinstance(description_text, str) and description_text:
             recording.description = description_text
             update_fields.append("description")
 
@@ -3246,9 +3275,18 @@ def process_callback(request, pk):
                 if rec is None:
                     continue
                 rec_fields: list[str] = []
+                # Already write-once (only when empty). The freeze makes the
+                # same promise explicit for a recording with an issued record,
+                # so it does not rest on the texts happening to be non-empty.
+                rec_frozen = recording_is_frozen(rec)
                 for name in ("transcript_clean", "description"):
                     value = tier.get(name)
-                    if isinstance(value, str) and value and not getattr(rec, name):
+                    if (
+                        not rec_frozen
+                        and isinstance(value, str)
+                        and value
+                        and not getattr(rec, name)
+                    ):
                         setattr(rec, name, value)
                         rec_fields.append(name)
                 for name in (

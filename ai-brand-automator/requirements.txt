@@ -47,6 +47,10 @@ google-cloud-aiplatform>=1.38.0
 # Document parsing
 python-docx>=1.1.0
 fpdf2>=2.8.0
+# Imported directly by the meeting-record PDF code to check which characters
+# the bundled font can draw. Already installed as a dependency of fpdf2;
+# declared so that does not rest on a transitive dependency.
+fonttools>=4.34.0
 
 # Workspace (async agent health checks)
 httpx>=0.27.0,<1.0.0

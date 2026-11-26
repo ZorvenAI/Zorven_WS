@@ -16,6 +16,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   CalendarDays,
   ClipboardCheck,
+  FileSignature,
   FileText,
   LayoutDashboard,
   Radio,
@@ -29,15 +30,22 @@ import MeetingTab from '@/components/onboarding/MeetingTab';
 import KeyFindingsReview from '@/components/onboarding/KeyFindingsReview';
 import CalendarTab from '@/components/onboarding/CalendarTab';
 import DescriptionTab from '@/components/onboarding/DescriptionTab';
+import DocumentsTab from '@/components/onboarding/DocumentsTab';
 import {
   wizardDeepLink,
   type OnboardingSessionSummary,
 } from '@/lib/onboarding-sessions';
 
-type DetailTab = 'overview' | 'meeting' | 'review' | 'description' | 'calendar';
+type DetailTab =
+  | 'overview'
+  | 'meeting'
+  | 'review'
+  | 'description'
+  | 'documents'
+  | 'calendar';
 
 function isValidTab(value: string | null): value is DetailTab {
-  return value === 'overview' || value === 'meeting' || value === 'review' || value === 'description' || value === 'calendar';
+  return value === 'overview' || value === 'meeting' || value === 'review' || value === 'description' || value === 'documents' || value === 'calendar';
 }
 
 export default function OnboardingUnified() {
@@ -145,6 +153,9 @@ export default function OnboardingUnified() {
       selectedSession.status === 'CONFIRMED' ||
       selectedSession.status === 'COMPLETED' ||
       activeTab === 'description');
+  // A record is made from a meeting's description and transcript, so the
+  // Documents tab appears exactly when the Description tab does.
+  const showDocumentsTab = showDescriptionTab || activeTab === 'documents';
 
   // Fix #2: Keep MeetingTab mounted (hidden) while recording to prevent
   // audio loss. The meeting session ID tracks which session owns the recorder.
@@ -215,6 +226,13 @@ export default function OnboardingUnified() {
                 visible={showDescriptionTab}
                 onClick={() => handleTabChange('description')}
               />
+              <TabButton
+                icon={<FileSignature className="h-3.5 w-3.5" />}
+                label="Documents"
+                active={activeTab === 'documents'}
+                visible={showDocumentsTab}
+                onClick={() => handleTabChange('documents')}
+              />
               <div className="mx-2 h-4 w-px bg-white/10" />
               <TabButton
                 icon={<CalendarDays className="h-3.5 w-3.5" />}
@@ -261,6 +279,9 @@ export default function OnboardingUnified() {
             )}
             {activeTab === 'description' && selectedSession && (
               <DescriptionTab key={selectedSession.id} sessionId={selectedSession.id} />
+            )}
+            {activeTab === 'documents' && selectedSession && (
+              <DocumentsTab key={selectedSession.id} sessionId={selectedSession.id} />
             )}
             {/* Fix #4: Pass initialSubTab so chat vs calendar can be distinguished. */}
             {activeTab === 'calendar' && <CalendarTab initialSubTab={calendarSubTab} />}
