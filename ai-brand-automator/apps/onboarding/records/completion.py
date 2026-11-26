@@ -79,7 +79,12 @@ def notify_declined(record_id: int) -> int:
     if record is None or record.status != RecordStatus.DECLINED:
         return 0
     signatories = list(record.signatories.all())
-    by = next((s for s in signatories if s.status == SignatoryStatus.DECLINED), None)
+    # The required signatory whose refusal closed the record; an optional
+    # signatory may have declined earlier without closing it.
+    by = next(
+        (s for s in signatories if s.required and s.status == SignatoryStatus.DECLINED),
+        None,
+    )
     if by is None:
         return 0
     return sum(

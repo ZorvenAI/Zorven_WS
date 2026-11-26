@@ -348,6 +348,35 @@ def test_a_record_expires_with_its_links(issued):
     assert abs((row.token_expires_at - record.expires_at).total_seconds()) < 5
 
 
+def test_a_record_past_its_deadline_cannot_be_signed_before_the_sweep(
+    api_client, public, client_token, issued
+):
+    """The daily job closes expired records; until it runs, the deadline binds."""
+    opened = open_session(public, client_token)
+    MeetingRecord.objects.filter(pk=issued["id"]).update(
+        expires_at=timezone.now() - timedelta(seconds=1)
+    )
+
+    by_link = submit(public, client_token, opened, **SIGN)
+    by_account = agency_signs(api_client, issued)
+
+    assert by_link.json()["error"] == "not_open"
+    assert by_account.json()["error"] == "not_open"
+    assert client_row(issued["id"]).status == SignatoryStatus.PENDING
+
+
+def test_a_reminder_link_never_outlives_the_record(api_client, issued):
+    MeetingRecord.objects.filter(pk=issued["id"]).update(
+        expires_at=timezone.now() + timedelta(days=1)
+    )
+    row = client_row(issued["id"])
+
+    signing.issue_link(row)
+
+    row.refresh_from_db()
+    assert row.token_expires_at <= row.record.expires_at
+
+
 # ── The link alone shows almost nothing ──────────────────────────────
 
 
@@ -681,6 +710,21 @@ def test_the_record_tells_a_viewer_which_signatory_they_are(api_client, issued):
     assert "electronically" in issued["consent"]["text"]
 
 
+def test_a_workspace_account_cannot_sign_for_the_client(api_client, tenant, issued):
+    """A client signatory proves their address by code, even with an account."""
+    user = User.objects.create_user("maria", CLIENT_EMAIL, "TestPass123!")
+    Membership.objects.create(user=user, tenant=tenant, role=Membership.Role.EDITOR)
+    api_client.force_authenticate(user=user)
+
+    response = agency_signs(api_client, issued, typed_name="Maria Rossi")
+    detail = api_client.get(f"{BASE}/records/{issued['id']}/").json()
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "not_a_signatory"
+    assert detail["you"] is None
+    assert client_row(issued["id"]).status == SignatoryStatus.PENDING
+
+
 def test_a_member_who_is_not_signing_is_no_signatory(api_client, tenant, issued):
     other = User.objects.create_user("viewer", "viewer@agency.test", "TestPass123!")
     Membership.objects.create(user=other, tenant=tenant, role=Membership.Role.VIEWER)
@@ -821,6 +865,44 @@ def test_declining_closes_the_record_and_tells_the_others(public, client_token, 
     assert row.decline_reason == "The budget figure is wrong: we said 15, not 50."
     assert "we said 15, not 50" in mail_to(AGENCY_EMAIL, "declined to sign").body
     assert [m.to for m in mail.outbox] == [[AGENCY_EMAIL]]
+
+
+def test_an_optional_signatory_declining_leaves_the_record_open(
+    api_client, public, draft
+):
+    api_client.put(
+        f"{BASE}/records/{draft['id']}/signatories/",
+        {
+            "signatories": [
+                {"party": "AGENCY", "name": "Naveen H", "email": AGENCY_EMAIL},
+                {"party": "CLIENT", "name": "Maria Rossi", "email": CLIENT_EMAIL},
+                {
+                    "party": "CLIENT",
+                    "name": "Luca",
+                    "email": "luca@example.com",
+                    "required": False,
+                },
+            ]
+        },
+        format="json",
+    )
+    issued = api_client.post(
+        f"{BASE}/records/{draft['id']}/issue/", format="json"
+    ).json()
+    luca = link_in(mail_to("luca@example.com", "ready for your signature"))
+    sent = public.post(f"{PUBLIC}/{luca}/code/", format="json")
+    assert sent.status_code == 200, sent.content
+    code = code_in(mail_to("luca@example.com", "Your code"))
+    opened = public.post(f"{PUBLIC}/{luca}/verify/", {"code": code}, format="json")
+
+    declined = submit(public, luca, opened.json(), action="decline", reason="Not me.")
+
+    assert declined.status_code == 200, declined.content
+    assert MeetingRecord.objects.get(pk=draft["id"]).status == RecordStatus.ISSUED
+    maria = link_in(mail_to(CLIENT_EMAIL, "ready for your signature"))
+    agency_signs(api_client, issued)
+    submit(public, maria, open_session(public, maria), **SIGN)
+    assert MeetingRecord.objects.get(pk=draft["id"]).status == RecordStatus.COMPLETED
 
 
 def test_a_declined_record_can_be_superseded_with_the_same_signatories(

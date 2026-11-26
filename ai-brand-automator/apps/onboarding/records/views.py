@@ -30,6 +30,7 @@ from apps.onboarding.records.models import (
     MeetingRecord,
     RecordEventType,
     RecordStatus,
+    SignatoryParty,
     SigningMethod,
 )
 from apps.onboarding.records.pdf import (
@@ -176,7 +177,7 @@ def _signatory_of(record: MeetingRecord, user) -> int | None:
     if not email:
         return None
     for s in record.signatories.all():
-        if s.email.lower() == email:
+        if s.party == SignatoryParty.AGENCY and s.email.lower() == email:
             return s.pk
     return None
 
@@ -359,8 +360,15 @@ def sign_record(request, pk):
     """
     record = _record_or_404(request, pk)
     email = (request.user.email or "").strip().lower()
+    # Only the agency's own signatories sign from the workspace. A client
+    # signatory always proves their address with the emailed code, even if
+    # someone holds a workspace account under the same email.
     signatory = (
-        record.signatories.filter(email__iexact=email).first() if email else None
+        record.signatories.filter(
+            email__iexact=email, party=SignatoryParty.AGENCY
+        ).first()
+        if email
+        else None
     )
     if signatory is None:
         return Response(

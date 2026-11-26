@@ -213,7 +213,11 @@ def issue_link(signatory: RecordSignatory) -> str:
     """A fresh signing link token. Replaces any earlier one."""
     token = new_token()
     signatory.token_hash = hash_secret(token)
-    signatory.token_expires_at = timezone.now() + link_ttl()
+    expires = timezone.now() + link_ttl()
+    # A link never outlives the record it signs.
+    if signatory.record.expires_at and signatory.record.expires_at < expires:
+        expires = signatory.record.expires_at
+    signatory.token_expires_at = expires
     signatory.save(update_fields=["token_hash", "token_expires_at", "updated_at"])
     return token
 
@@ -414,6 +418,13 @@ def act(
             f"{record.record_number} is {record.get_status_display().lower()} "
             "and can no longer be signed.",
         )
+    # The daily expiry job may not have run yet: the deadline itself binds.
+    if record.expires_at and record.expires_at <= timezone.now():
+        raise RecordError(
+            "not_open",
+            f"{record.record_number} expired and can no longer be signed.",
+        )
+
     # What the signer saw must be what is on file. Guards against a page left
     # open across a void-and-reissue, and against a tampered client.
     if not content_hash or not hmac.compare_digest(
@@ -470,8 +481,11 @@ def act(
             signatory.session_hash = ""
             signatory.session_expires_at = None
             signatory.save()
-            record.status = RecordStatus.DECLINED
-            record.save(update_fields=["status", "updated_at"])
+            # Only a required signatory's refusal closes the record. An
+            # optional signatory's decline is on file; others still sign.
+            if signatory.required:
+                record.status = RecordStatus.DECLINED
+                record.save(update_fields=["status", "updated_at"])
             log_event(
                 record,
                 RecordEventType.DECLINED,
