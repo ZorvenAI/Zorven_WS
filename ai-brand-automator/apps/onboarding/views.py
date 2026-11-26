@@ -15,7 +15,7 @@ import uuid
 
 from django.db import IntegrityError
 from django.shortcuts import get_object_or_404
-from django.db.models import Prefetch, Q
+from django.db.models import F, Prefetch, Q
 from django.db import transaction as db_transaction
 from django.utils import timezone
 from rest_framework import mixins
@@ -56,6 +56,7 @@ from apps.onboarding.transcript_assembler import (
     enrich_segments,
 )
 from apps.onboarding.erasure.tasks import execute_erasure_cascade
+from apps.onboarding import contract_fields
 from apps.onboarding.field_map import all_mapped_fields, label_for, page_for
 from apps.onboarding.live_tickets import USABLE_SECONDS, mint, resolve
 from apps.onboarding.uploads import (
@@ -81,6 +82,7 @@ from apps.onboarding.models import (
     OnboardingSession,
     ProvenanceStatus,
     Question,
+    QuestionCategory,
     QuestionOrigin,
     QuestionStatus,
     Questionnaire,
@@ -1770,6 +1772,25 @@ def upsert_research_brief(request):
     )
 
 
+def _mandatory_refusal(verb: str) -> Response:
+    """Why a contract-detail question cannot be changed.
+
+    Their wording is fixed so it is the same for every client and can be
+    reviewed once; dropping one would let a record be prepared without the
+    detail it needs.
+    """
+    return Response(
+        {
+            "error": f"a mandatory question cannot be {verb}",
+            "detail": (
+                "Contract-detail questions are fixed. They leave the "
+                "questionnaire on their own once the detail is confirmed."
+            ),
+        },
+        status=http.HTTP_409_CONFLICT,
+    )
+
+
 class QuestionnaireViewSet(
     RoleBasedPermissionMixin,
     mixins.RetrieveModelMixin,
@@ -1902,6 +1923,8 @@ class QuestionnaireViewSet(
                     {"error": "text is required"},
                     status=http.HTTP_400_BAD_REQUEST,
                 )
+            if question.mandatory:
+                return _mandatory_refusal("reworded")
 
             question.text = text
             question.origin = QuestionOrigin.PREPARED
@@ -1925,6 +1948,8 @@ class QuestionnaireViewSet(
                     {"error": "question_id is not in this questionnaire"},
                     status=http.HTTP_400_BAD_REQUEST,
                 )
+            if question.mandatory:
+                return _mandatory_refusal("dropped")
             question.delete()
             self._renumber(questionnaire)
 
@@ -2057,12 +2082,18 @@ class QuestionnaireViewSet(
                         origin=q.origin,
                         workflow_target=q.workflow_target,
                         target_field=q.target_field,
+                        category=q.category,
+                        mandatory=q.mandatory,
                         status=QuestionStatus.OPEN,
                     )
                     for q in approved.questions.order_by("order", "id")
                 ]
             )
+            # A revision is usually opened for a later meeting: drop the
+            # contract questions answered since, add any that are new.
+            _sync_mandatory_questions(draft, approved.company)
 
+        draft.refresh_from_db()
         return Response(
             QuestionnaireSerializer(draft).data, status=http.HTTP_201_CREATED
         )
@@ -2115,12 +2146,18 @@ class QuestionnaireViewSet(
                         origin=QuestionOrigin.PREPARED,
                         workflow_target=q.workflow_target,
                         target_field=q.target_field,
+                        category=q.category,
+                        mandatory=q.mandatory,
                         status=QuestionStatus.OPEN,
                     )
                     for q in source.questions.order_by("order", "id")
                 ]
             )
+            # A template carries the template company's outstanding details,
+            # not this one's.
+            _sync_mandatory_questions(clone, company)
 
+        clone.refresh_from_db()
         return Response(
             QuestionnaireSerializer(clone).data, status=http.HTTP_201_CREATED
         )
@@ -2129,6 +2166,89 @@ class QuestionnaireViewSet(
 def _normalised(text: str) -> str:
     """A question's identity for dedupe: case and spacing are not meaning."""
     return " ".join(text.lower().split())
+
+
+def _contract_fields_outstanding(company) -> list[contract_fields.ContractField]:
+    """The contract details still to be collected for this company.
+
+    Outstanding means empty, or filled by extraction and not yet confirmed. A
+    value the agent wrote and nobody has reviewed is a guess about a legal
+    name or an address, and asking once more is cheaper than signing a guess.
+
+    With no company — the common case before onboarding starts — everything
+    is outstanding.
+    """
+    if company is None:
+        return list(contract_fields.CONTRACT_FIELDS)
+
+    unreviewed = set(
+        FieldProvenance.objects.filter(
+            session__company=company,
+            model_name="Company",
+            field_name__in=contract_fields.contract_field_names(),
+            status__in=(ProvenanceStatus.PENDING, ProvenanceStatus.CONFLICT),
+        ).values_list("field_name", flat=True)
+    )
+    return [
+        item
+        for item in contract_fields.CONTRACT_FIELDS
+        if item.field in unreviewed
+        or not contract_fields.is_answered(getattr(company, item.field, None))
+    ]
+
+
+def _sync_mandatory_questions(questionnaire, company) -> int:
+    """Make a DRAFT carry exactly the outstanding contract questions, first.
+
+    Called wherever a draft is created or grown, so no path can produce a
+    questionnaire without them. Returns how many were added.
+
+    - an outstanding detail with no question gets one, at the front;
+    - a mandatory question whose detail has since been answered and confirmed
+      is removed, so a later meeting does not ask for it again;
+    - everything else is left where the operator put it.
+
+    Only ever touches a DRAFT. An approved set is frozen, and a contract
+    question appearing in it after approval would be a checklist the operator
+    did not approve.
+    """
+    if questionnaire.status != QuestionnaireStatus.DRAFT:
+        return 0
+
+    outstanding = _contract_fields_outstanding(company)
+    wanted = {item.field for item in outstanding}
+
+    present: set[str] = set()
+    for question in questionnaire.questions.filter(mandatory=True):
+        if question.target_field in wanted:
+            present.add(question.target_field)
+        else:
+            question.delete()
+
+    missing = [item for item in outstanding if item.field not in present]
+    if missing:
+        # Open a gap at the front, then fill it. Ordering is made contiguous
+        # again below, so the size of the shift only has to be large enough.
+        questionnaire.questions.update(order=F("order") + len(missing))
+        Question.objects.bulk_create(
+            [
+                Question(
+                    questionnaire=questionnaire,
+                    order=index,
+                    text=item.question,
+                    origin=QuestionOrigin.PREPARED,
+                    workflow_target=WorkflowTarget.WF1,
+                    target_field=item.field,
+                    category=QuestionCategory.CONTRACTUAL,
+                    mandatory=True,
+                    status=QuestionStatus.OPEN,
+                )
+                for index, item in enumerate(missing)
+            ]
+        )
+
+    QuestionnaireViewSet._renumber(questionnaire)
+    return len(missing)
 
 
 def _land_questions(*, tenant, company, session, cleaned, depth, chat_session_id):
@@ -2246,6 +2366,8 @@ def _land_questions(*, tenant, company, session, cleaned, depth, chat_session_id
                 origin=q.origin,
                 workflow_target=q.workflow_target,
                 target_field=q.target_field,
+                category=q.category,
+                mandatory=q.mandatory,
                 status=QuestionStatus.OPEN,
             )
         )
@@ -2278,6 +2400,9 @@ def _land_questions(*, tenant, company, session, cleaned, depth, chat_session_id
     Question.objects.bulk_create(rows)
     target.question_count = target.questions.count()
     target.save(update_fields=["question_count", "updated_at"])
+    # After the generated set has landed, so the contract questions are always
+    # on top of the count the operator asked for rather than part of it.
+    _sync_mandatory_questions(target, company)
     # Carried rows are not additions. On the superseding path `rows` holds the
     # whole new draft -- every approved question copied forward plus whatever
     # was new -- so returning len(rows) reported the draft's size and told a
@@ -2471,7 +2596,18 @@ def field_vocabulary(request):
             {"error": "Invalid or missing X-Service-Token"},
             status=http.HTTP_403_FORBIDDEN,
         )
-    return Response({"fields": sorted(all_mapped_fields())}, status=http.HTTP_200_OK)
+    return Response(
+        {
+            "fields": sorted(all_mapped_fields()),
+            # What the fixed contract questions already ask about, so the
+            # generator spends none of its own count repeating them.
+            "covered": [
+                {"field": item.field, "topic": item.topic}
+                for item in contract_fields.CONTRACT_FIELDS
+            ],
+        },
+        status=http.HTTP_200_OK,
+    )
 
 
 def _consent_block(session) -> dict:
@@ -3359,7 +3495,11 @@ def patch_company_fields(request, pk):
 
     from onboarding.serializers import CompanyUpdateSerializer
 
-    mapped = all_mapped_fields()
+    # Written-only contract details are never filled from a recording. The
+    # agent is not given them as extraction targets; refusing them here as
+    # well means a replay or a future caller cannot write a misheard email
+    # address into the field signing links are sent to.
+    mapped = all_mapped_fields() - contract_fields.written_only_fields()
     accepted_data = {k: v for k, v in request.data.items() if k in mapped}
     rejected = [k for k in request.data if k not in mapped and k != "id"]
     if rejected:

@@ -44,6 +44,16 @@ const TAG_LABELS: Record<WorkflowTarget, string> = {
   WF3: 'campaigns',
 };
 
+/**
+ * Contract-detail questions are tagged by what they are for rather than by
+ * workflow: they feed the signed meeting record, not a brand workflow, and
+ * "discovery" beside "Who is authorised to sign?" would be wrong. Same quiet
+ * weight as the workflow tags, and they stay in the one numbered list — the
+ * operator reads those numbers aloud.
+ */
+const CONTRACT_TAG_STYLE = 'text-emerald-300/70';
+const CONTRACT_TAG_LABEL = 'contract details · required';
+
 export interface QuestionChecklistProps {
   questions: PreparedQuestion[];
   /** Null when the session has no approved questionnaire yet (AC-2). */
@@ -183,13 +193,22 @@ export default function QuestionChecklist({
                 {question.text}
               </p>
               <span
-                className={`text-xs ${TAG_STYLES[question.workflow_target]}`}
+                data-testid={
+                  question.category === 'CONTRACTUAL' ? 'contract-tag' : undefined
+                }
+                className={`text-xs ${
+                  question.category === 'CONTRACTUAL'
+                    ? CONTRACT_TAG_STYLE
+                    : TAG_STYLES[question.workflow_target]
+                }`}
                 // Not part of the accessible name: a screen reader announcing
                 // "campaigns" before every question would be the audible
                 // version of a tag competing with the text.
                 aria-hidden
               >
-                {TAG_LABELS[question.workflow_target]}
+                {question.category === 'CONTRACTUAL'
+                  ? CONTRACT_TAG_LABEL
+                  : TAG_LABELS[question.workflow_target]}
               </span>
             </div>
           </li>

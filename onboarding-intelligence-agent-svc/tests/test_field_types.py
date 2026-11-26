@@ -32,10 +32,22 @@ def test_wizard_pages_match_django():
 
 
 def test_field_count():
-    """40 fields across 4 pages, matching Django's field_map.py."""
+    """Every extraction target across the 4 pages.
+
+    Django's field_map.py has three more on page 1 — signatory_email,
+    billing_contact_email and registration_number. Those are collected in
+    writing only and are deliberately not extraction targets here.
+    """
     total = sum(len(fields) for _, fields in WIZARD_PAGES.values())
-    # 14 + 12 + 7 + 6 = 39 fields (Django has the same)
-    assert total == 39
+    # 17 + 12 + 7 + 6 = 42 fields
+    assert total == 42
+
+
+def test_written_only_contract_fields_are_not_extraction_targets():
+    """A misheard email address must never reach the field links are sent to."""
+    written_only = {"signatory_email", "billing_contact_email", "registration_number"}
+    assert not written_only & all_mapped_fields()
+    assert not written_only & set(FIELD_TYPE_HINTS)
 
 
 def test_no_field_overlap_between_pages():

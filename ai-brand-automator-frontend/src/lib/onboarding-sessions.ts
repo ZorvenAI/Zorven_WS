@@ -75,6 +75,14 @@ export interface PreparedQuestion {
   workflow_target: WorkflowTarget;
   target_field: string;
   /**
+   * CONTRACTUAL questions collect the party details a signed meeting record
+   * needs. They come from a fixed list on the server, not from the generator.
+   * Optional because a backend that predates them sends neither field.
+   */
+  category?: 'BRAND' | 'CONTRACTUAL';
+  /** A mandatory question cannot be reworded or dropped. */
+  mandatory?: boolean;
+  /**
    * Server-authoritative checkbox state. OPEN is unchecked, GREEN is ticked.
    *
    * The C-05 card is explicit that this must not become client state: G-03

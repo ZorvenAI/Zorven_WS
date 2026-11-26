@@ -14,6 +14,7 @@ from django.contrib.auth.models import User
 from django.db import DatabaseError, transaction
 from rest_framework.test import APIClient
 
+from apps.onboarding.contract_fields import CONTRACT_FIELDS
 from apps.onboarding.field_map import all_mapped_fields
 from apps.onboarding.models import (
     DEPTH_NAMES,
@@ -44,6 +45,11 @@ def api_client():
 @pytest.fixture
 def tenant():
     return Tenant.objects.create(name="C03 Co", schema_name="c03_q")
+
+
+#: Every draft also carries the fixed contract-detail questions, first. These
+#: tests are about the generated set, so they count on top of this.
+MANDATORY = len(CONTRACT_FIELDS)
 
 
 def a_field() -> str:
@@ -95,7 +101,7 @@ def test_a_generated_set_is_stored_as_draft_version_one(api_client, tenant):
     row = Questionnaire.objects.get()
     assert row.status == QuestionnaireStatus.DRAFT
     assert row.version == 1
-    assert row.question_count == 3
+    assert row.question_count == 3 + MANDATORY
 
 
 def test_children_are_ordered(api_client, tenant):
@@ -104,9 +110,9 @@ def test_children_are_ordered(api_client, tenant):
     emit."""
     generate(api_client, tenant)
 
-    stored = list(Question.objects.all())
+    stored = list(Question.objects.filter(mandatory=False))
 
-    assert [q.order for q in stored] == [0, 1, 2]
+    assert [q.order for q in stored] == [MANDATORY, MANDATORY + 1, MANDATORY + 2]
     assert stored[0].text == "What do you sell?"
     assert stored[-1].workflow_target == "WF3"
 
@@ -199,7 +205,7 @@ def test_an_invented_field_costs_that_question_not_the_set(api_client, tenant):
     )
 
     assert response.status_code == 201
-    assert Question.objects.count() == 3
+    assert Question.objects.filter(mandatory=False).count() == 3
 
 
 def test_every_stored_target_field_is_in_the_vocabulary_or_empty(api_client, tenant):
@@ -372,7 +378,9 @@ def test_the_read_surface_nests_questions_in_order(api_client, tenant):
     response = api_client.get(f"/api/v1/onboarding/questionnaires/{created['id']}/")
 
     assert response.status_code == 200, response.content
-    assert [q["order"] for q in response.json()["questions"]] == [0, 1, 2]
+    assert [q["order"] for q in response.json()["questions"]] == list(
+        range(3 + MANDATORY)
+    )
 
 
 # ── Tenant attribution through the endpoint ──────────────────────────
@@ -614,7 +622,7 @@ def orders(questionnaire_id) -> list[int]:
 
 def test_rewrite_replaces_one_question(api_client, tenant):
     qid = a_draft(api_client, tenant)
-    question = Question.objects.filter(questionnaire_id=qid).first()
+    question = Question.objects.filter(questionnaire_id=qid, mandatory=False).first()
     editor_user = User.objects.create_user("rw", "rw@t.com", "TestPass123!")
     Membership.objects.create(
         user=editor_user, tenant=tenant, role=Membership.Role.EDITOR
@@ -636,7 +644,9 @@ def test_dropping_a_question_closes_the_gap(api_client, tenant):
     """AC-1: "leaves ordering contiguous". A hole would put the meeting view
     out of step with the numbers the operator says out loud."""
     qid = a_draft(api_client, tenant)
-    middle = Question.objects.filter(questionnaire_id=qid).order_by("order")[1]
+    middle = Question.objects.filter(questionnaire_id=qid, mandatory=False).order_by(
+        "order"
+    )[1]
     user = User.objects.create_user("dr", "dr@t.com", "TestPass123!")
     Membership.objects.create(user=user, tenant=tenant, role=Membership.Role.EDITOR)
     api_client.force_authenticate(user=user)
@@ -648,8 +658,8 @@ def test_dropping_a_question_closes_the_gap(api_client, tenant):
     )
 
     assert response.status_code == 200, response.content
-    assert orders(qid) == [0, 1]
-    assert Questionnaire.objects.get(pk=qid).question_count == 2
+    assert orders(qid) == list(range(2 + MANDATORY))
+    assert Questionnaire.objects.get(pk=qid).question_count == 2 + MANDATORY
 
 
 def test_reorder_requires_every_question_exactly_once(api_client, tenant):
@@ -676,7 +686,7 @@ def test_reorder_requires_every_question_exactly_once(api_client, tenant):
     )
 
     assert full.status_code == 200, full.content
-    assert orders(qid) == [0, 1, 2]
+    assert orders(qid) == list(range(3 + MANDATORY))
     reordered = list(
         Question.objects.filter(questionnaire_id=qid)
         .order_by("order")
@@ -706,7 +716,7 @@ def test_refining_an_approved_set_is_refused_with_advice(api_client, tenant, adm
         assert response.status_code == 409, (path, response.content)
         assert "revise" in response.json()["detail"]
 
-    assert Question.objects.filter(questionnaire_id=qid).count() == 3
+    assert Question.objects.filter(questionnaire_id=qid).count() == 3 + MANDATORY
 
 
 # ── C-04 AC-2 · approval ─────────────────────────────────────────────
@@ -867,7 +877,7 @@ def test_a_template_can_be_cloned_for_another_company(api_client, tenant, editor
     assert clone.company == other
     assert clone.version == 1
     assert clone.status == QuestionnaireStatus.DRAFT
-    assert clone.questions.count() == 3
+    assert clone.questions.count() == 3 + MANDATORY
 
 
 def test_a_non_template_cannot_be_cloned(api_client, tenant, editor):
@@ -994,7 +1004,7 @@ def test_a_second_turn_grows_the_draft_rather_than_versioning_it(
     assert response.data["version"] == 1
     assert response.data["appended_to_existing"] is True
     assert Questionnaire.objects.filter(session=session).count() == 1
-    assert Questionnaire.objects.get(session=session).question_count == 5
+    assert Questionnaire.objects.get(session=session).question_count == 5 + MANDATORY
 
 
 def test_a_turn_after_approval_opens_the_next_version(api_client, tenant, session):
@@ -1022,7 +1032,7 @@ def test_a_turn_after_approval_opens_the_next_version(api_client, tenant, sessio
     approved.refresh_from_db()
     session.refresh_from_db()
     assert approved.status == QuestionnaireStatus.APPROVED
-    assert approved.question_count == 3
+    assert approved.question_count == 3 + MANDATORY
     assert session.questionnaire_id == approved.pk
 
 
@@ -1137,7 +1147,7 @@ def test_questions_added_counts_only_the_new_ones_on_a_new_version(
     approved = Questionnaire.objects.get(session=session)
     approved.status = QuestionnaireStatus.APPROVED
     approved.save(update_fields=["status"])
-    carried_count = approved.questions.count()
+    carried_count = approved.questions.filter(mandatory=False).count()
     assert carried_count == 3, "fixture changed; the arithmetic below assumes 3"
 
     response = second_turn(api_client, tenant, session)
@@ -1146,7 +1156,7 @@ def test_questions_added_counts_only_the_new_ones_on_a_new_version(
     assert response.data["questions_added"] == 2
     # And the draft really does hold both, on top of everything carried.
     draft = Questionnaire.objects.get(version=2, session=session)
-    assert draft.question_count == carried_count + 2
+    assert draft.question_count == carried_count + 2 + MANDATORY
 
 
 def test_a_concurrent_first_turn_waits_for_the_session_lock(

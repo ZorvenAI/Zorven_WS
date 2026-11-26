@@ -250,9 +250,38 @@ class BackendClient:
         field hints and Django drops any name it invents, so the questionnaire
         is still usable — it just loses the J-02 joins until the next fetch.
         """
-        body = await self._get(VOCABULARY_PATH, tenant_id=tenant_id)
-        fields = (body or {}).get("fields")
-        return [str(f) for f in fields] if isinstance(fields, list) else []
+        fields, _covered = await self.field_vocabulary_detail(tenant_id=tenant_id)
+        return fields
+
+    async def field_vocabulary_detail(
+        self, *, tenant_id: str
+    ) -> tuple[list[str], list[dict[str, str]]]:
+        """The vocabulary plus what Django's fixed contract questions cover.
+
+        ``covered`` is a list of ``{"field", "topic"}``. Django adds those
+        questions to every questionnaire itself, so the generator is told
+        about them to avoid spending its own count on duplicates. Empty when
+        the backend predates the field or is unreachable — the generator then
+        simply does not get the exclusion, which costs a duplicate at worst.
+        """
+        body = await self._get(VOCABULARY_PATH, tenant_id=tenant_id) or {}
+        fields = body.get("fields")
+        covered = body.get("covered")
+        return (
+            [str(f) for f in fields] if isinstance(fields, list) else [],
+            (
+                [
+                    {
+                        "field": str(c.get("field") or ""),
+                        "topic": str(c.get("topic") or ""),
+                    }
+                    for c in covered
+                    if isinstance(c, dict) and c.get("field")
+                ]
+                if isinstance(covered, list)
+                else []
+            ),
+        )
 
     async def _get(
         self, path: str, *, tenant_id: str, timeout: float = TIMEOUT_S

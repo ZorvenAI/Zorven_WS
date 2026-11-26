@@ -504,3 +504,72 @@ async def test_an_empty_completion_degrades_rather_than_topping_up():
     assert result.degraded is True
     assert result.questions == []
     assert "Nothing was saved" in result.summary_line()
+
+
+# ── Contract details are Django's, not the generator's ───────────────
+
+COVERED = [
+    {"field": "legal_name", "topic": "the company's registered legal name"},
+    {"field": "signatory_name", "topic": "who is authorised to sign for the company"},
+]
+
+
+@pytest.mark.unit
+async def test_covered_topics_reach_the_prompt_as_exclusions():
+    """Django adds the contract questions itself. A generator that was not
+    told would spend the operator's requested count asking them again."""
+    skill = GenerateQuestionnaire(
+        meta(), llm=llm(payload(3)), vocabulary=VOCABULARY + ["legal_name"]
+    )
+    skill.set_covered(COVERED)
+    await skill.run(context(count=3))
+
+    prompt = skill._llm._client.prompts[0]
+    assert "do NOT ask about any of these" in prompt
+    assert "the company's registered legal name" in prompt
+    assert "who is authorised to sign for the company" in prompt
+
+
+@pytest.mark.unit
+async def test_a_covered_field_is_withheld_from_the_allowed_targets():
+    skill = GenerateQuestionnaire(
+        meta(), llm=llm(payload(3)), vocabulary=VOCABULARY + ["legal_name"]
+    )
+    skill.set_covered(COVERED)
+    await skill.run(context(count=3))
+
+    allowed = skill._llm._client.prompts[0].split("Allowed target_field values:")[1]
+    assert "legal_name" not in allowed
+    assert "brand_voice" in allowed
+
+
+@pytest.mark.unit
+async def test_a_generated_question_cannot_claim_a_covered_field():
+    """If the model targets a contract field anyway, the mapping is dropped:
+    only the fixed question may fill it."""
+    skill = GenerateQuestionnaire(
+        meta(),
+        llm=llm(
+            [
+                {"text": "A?", "workflow_target": "WF1", "target_field": "legal_name"},
+                {"text": "B?", "workflow_target": "WF3", "target_field": "brand_voice"},
+            ]
+        ),
+        vocabulary=VOCABULARY + ["legal_name"],
+    )
+    skill.set_covered(COVERED)
+    result = GeneratedQuestionnaire.model_validate(
+        (await skill.run(context(count=2))).output
+    )
+
+    by_text = {q.text: q.target_field for q in result.questions}
+    assert by_text["A?"] == ""
+    assert by_text["B?"] == "brand_voice"
+
+
+@pytest.mark.unit
+async def test_with_nothing_covered_the_prompt_says_so():
+    skill = GenerateQuestionnaire(meta(), llm=llm(payload(3)), vocabulary=VOCABULARY)
+    await skill.run(context(count=3))
+
+    assert "(nothing)" in skill._llm._client.prompts[0]

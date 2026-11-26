@@ -47,6 +47,14 @@ WIZARD_PAGES: dict[int, tuple[str, frozenset[str]]] = {
                 "founder_story",
                 "trademark_status",
                 "decision_maker",
+                # Contract details. They sit with the company's identity
+                # because that is where an operator would look for them.
+                "registered_address",
+                "registration_number",
+                "signatory_name",
+                "signatory_title",
+                "signatory_email",
+                "billing_contact_email",
             }
         ),
     ),

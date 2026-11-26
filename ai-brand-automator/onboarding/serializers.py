@@ -29,6 +29,19 @@ ONBOARDING_FIELDS = [
     "decision_maker",
 ]
 
+#: Party details a signed meeting record needs. Deliberately not part of
+#: ONBOARDING_FIELDS: that list is B-03's thirteen and its tests count them.
+#: The canonical definition, with question text and how each may be
+#: collected, is ``apps/onboarding/contract_fields.py``.
+CONTRACT_FIELDS = [
+    "registered_address",
+    "registration_number",
+    "signatory_name",
+    "signatory_title",
+    "signatory_email",
+    "billing_contact_email",
+]
+
 
 #: ISO 4217 active currency codes. A regex for three uppercase letters
 #: accepts "AAA", which is not a currency — and extraction storing a garbage
@@ -264,6 +277,7 @@ class CompanySerializer(OnboardingFieldShapesMixin, serializers.ModelSerializer)
             "messaging_guide",
             # B-03 · the thirteen approved onboarding fields (Design §10.1).
             *ONBOARDING_FIELDS,
+            *CONTRACT_FIELDS,
             "created_at",
             "updated_at",
         ]
@@ -373,6 +387,7 @@ class CompanyCreateSerializer(OnboardingFieldShapesMixin, serializers.ModelSeria
             # B-03 · optional here too, so a single-call create can carry
             # them. The wizard does not send them (AC-3); Epic J may.
             *ONBOARDING_FIELDS,
+            *CONTRACT_FIELDS,
         ]
         read_only_fields = ["id"]
         # Tenant is set in the viewset's perform_create method
@@ -414,6 +429,7 @@ class CompanyUpdateSerializer(OnboardingFieldShapesMixin, serializers.ModelSeria
             # B-03 · this is the PATCH path FR-PROC-03 says J-02 writes
             # through, so it matters most that the fields land here.
             *ONBOARDING_FIELDS,
+            *CONTRACT_FIELDS,
         ]
         read_only_fields = ["id"]
 

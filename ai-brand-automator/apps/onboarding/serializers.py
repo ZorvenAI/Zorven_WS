@@ -499,6 +499,8 @@ class QuestionSerializer(serializers.ModelSerializer):
             "origin",
             "workflow_target",
             "target_field",
+            "category",
+            "mandatory",
             "status",
         ]
         read_only_fields = fields
@@ -541,7 +543,10 @@ class QuestionnaireSerializer(serializers.ModelSerializer):
         Computed rather than stored: a stored figure would drift the moment
         C-04 edits or removes a question, and the number is cheap.
         """
-        questions = list(obj.questions.all())
+        # Contract-detail questions are not part of any workflow. They carry a
+        # workflow_target only because the column requires one, and counting
+        # them would dilute WF1 with eight questions about legal names.
+        questions = [q for q in obj.questions.all() if not q.mandatory]
         if not questions:
             return {t: 0.0 for t in WorkflowTarget.values}
         by_wf: dict[str, list] = {t: [] for t in WorkflowTarget.values}

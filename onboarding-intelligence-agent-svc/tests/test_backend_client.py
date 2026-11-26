@@ -61,6 +61,7 @@ def django_stub():
 
         do_POST = _handle
         do_PATCH = _handle
+        do_GET = _handle
 
         def log_message(self, *args):
             pass
@@ -412,3 +413,67 @@ async def test_patch_4xx_does_not_open_breaker(django_stub):
     )
 
     assert brk.state is State.CLOSED, "a 4xx should not open the breaker"
+
+
+# ── The field vocabulary and what Django's contract questions cover ──
+
+
+@pytest.mark.unit
+async def test_the_vocabulary_carries_what_the_contract_questions_cover(django_stub):
+    """Django adds the contract-detail questions itself. The generator has to
+    be told, or it spends the operator's requested count repeating them."""
+    django_stub["status"] = 200
+    django_stub["body"] = {
+        "fields": ["brand_voice", "legal_name"],
+        "covered": [
+            {"field": "legal_name", "topic": "the company's registered legal name"}
+        ],
+    }
+    client = BackendClient(django_stub["url"], "tok", breaker=breaker())
+
+    fields, covered = await client.field_vocabulary_detail(tenant_id="t-1")
+
+    assert fields == ["brand_voice", "legal_name"]
+    assert covered == [
+        {"field": "legal_name", "topic": "the company's registered legal name"}
+    ]
+    request = django_stub["requests"][0]
+    assert request["method"] == "GET"
+    assert request["path"] == "/api/v1/onboarding/field-vocabulary/"
+    assert request["token"] == "tok"
+
+
+@pytest.mark.unit
+async def test_a_backend_without_covered_still_serves_the_vocabulary(django_stub):
+    """An older Django sends only ``fields``. The generator then goes without
+    the exclusion, which costs a duplicate question at worst."""
+    django_stub["status"] = 200
+    django_stub["body"] = {"fields": ["brand_voice"]}
+    client = BackendClient(django_stub["url"], "tok", breaker=breaker())
+
+    assert await client.field_vocabulary_detail(tenant_id="t-1") == (
+        ["brand_voice"],
+        [],
+    )
+    assert await client.field_vocabulary(tenant_id="t-1") == ["brand_voice"]
+
+
+@pytest.mark.unit
+async def test_malformed_covered_entries_are_dropped(django_stub):
+    django_stub["status"] = 200
+    django_stub["body"] = {
+        "fields": ["brand_voice"],
+        "covered": ["legal_name", {"topic": "no field"}, {"field": "legal_name"}],
+    }
+    client = BackendClient(django_stub["url"], "tok", breaker=breaker())
+
+    _fields, covered = await client.field_vocabulary_detail(tenant_id="t-1")
+
+    assert covered == [{"field": "legal_name", "topic": ""}]
+
+
+@pytest.mark.unit
+async def test_an_unreachable_backend_yields_an_empty_vocabulary():
+    client = BackendClient("http://127.0.0.1:1", "tok", breaker=breaker())
+
+    assert await client.field_vocabulary_detail(tenant_id="t-1") == ([], [])

@@ -197,6 +197,44 @@ class Company(models.Model):
         help_text="Who signs off on brand and campaign decisions",
     )
 
+    # Contract details — the party information a signed meeting record needs.
+    # Separate from the thirteen B-03 fields: these identify who is signing,
+    # not what the brand is.
+    registered_address = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="Registered business address, as it should appear on a record",
+    )
+    registration_number = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Company registration number. Entered in writing, never by voice",
+    )
+    signatory_name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Full name of the person authorised to sign for the company",
+    )
+    signatory_title = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="The authorised signatory's title or role",
+    )
+    signatory_email = models.EmailField(
+        blank=True,
+        null=True,
+        help_text="Where signing links are sent. Entered in writing, never by voice",
+    )
+    billing_contact_email = models.EmailField(
+        blank=True,
+        null=True,
+        help_text="Billing contact. Entered in writing, never by voice",
+    )
+
     # Metadata
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
