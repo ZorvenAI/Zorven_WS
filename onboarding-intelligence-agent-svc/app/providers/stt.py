@@ -614,6 +614,13 @@ class FakeSTTAdapter(STTAdapter):
         try:
             import time as _time
 
+            if not self._events:
+                # Nothing to replay: wait out the audio. Looping over an
+                # empty list never awaits, so it starved the drain task and
+                # spun forever.
+                await drain_task
+                return
+
             offset_s = 0.0
             while not drain_task.done():
                 loop_start = _time.monotonic()
