@@ -15,6 +15,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone as dj_timezone
 from rest_framework import serializers
 
+from apps.onboarding import contract_fields
 from apps.onboarding.field_map import all_mapped_fields
 from apps.onboarding.models import (
     ConsentRecord,
@@ -103,7 +104,10 @@ class OnboardingSessionSerializer(serializers.ModelSerializer):
         company = getattr(obj, "company", None)
         if "fields_written" not in summary or company is None:
             return summary
-        mapped = all_mapped_fields()
+        # Contract details are collected by the fixed questions and the
+        # company form, not by PROCESS: counting them would leave a complete
+        # run short of its total forever.
+        mapped = all_mapped_fields() - set(contract_fields.contract_field_names())
         filled = sum(
             1
             for name in mapped
@@ -502,8 +506,16 @@ class QuestionSerializer(serializers.ModelSerializer):
             "category",
             "mandatory",
             "status",
+            "required_to_issue",
         ]
         read_only_fields = fields
+
+    required_to_issue = serializers.SerializerMethodField()
+
+    def get_required_to_issue(self, obj) -> bool:
+        """Whether a meeting record cannot be issued without this answer."""
+        item = contract_fields.get(obj.target_field or "") if obj.mandatory else None
+        return bool(item and item.required_to_issue)
 
 
 class QuestionnaireSerializer(serializers.ModelSerializer):

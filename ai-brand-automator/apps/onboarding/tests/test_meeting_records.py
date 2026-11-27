@@ -334,13 +334,35 @@ def test_an_unconfirmed_detail_blocks_issue(
 ):
     """What the agent heard is a guess until someone confirms it, and a guess
     about a legal name does not belong on a record people sign."""
-    make_provenance(session=session, field_name="legal_name", status=status)
+    # The legal name on file is still exactly what the agent heard.
+    make_provenance(
+        session=session,
+        field_name="legal_name",
+        status=status,
+        extracted_value=PARTY["legal_name"],
+    )
     draft = prepare(api_client, recording).json()
 
     item = readiness_of(draft)["unreviewed_details"]
     assert item["ok"] is False
     assert item["fields"] == ["legal_name"]
     assert issue(api_client, draft["id"]).status_code == 409
+
+
+def test_a_detail_typed_over_the_agents_guess_does_not_block_issue(
+    api_client, editor, session, recording
+):
+    """The operator replaced the guess in the company form: the value on
+    file is theirs, so the stale extraction no longer holds the record."""
+    make_provenance(
+        session=session,
+        field_name="legal_name",
+        status=ProvenanceStatus.PENDING,
+        extracted_value="Pomodoro Trattoria",
+    )
+    draft = prepare(api_client, recording).json()
+
+    assert readiness_of(draft)["unreviewed_details"]["ok"] is True
 
 
 def test_a_confirmed_detail_does_not_block_issue(

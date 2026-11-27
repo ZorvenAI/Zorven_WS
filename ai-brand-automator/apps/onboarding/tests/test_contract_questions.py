@@ -24,6 +24,7 @@ from apps.onboarding.models import (
     Question,
     QuestionCategory,
     Questionnaire,
+    SessionStatus,
 )
 from apps.onboarding.tests.factories import make_provenance, make_session
 from onboarding.models import Company
@@ -267,11 +268,60 @@ def test_an_extracted_but_unreviewed_detail_is_still_asked(api_client, tenant, s
     confirms it. Asking once more is cheaper than signing a guess."""
     company = Company.objects.create(tenant=tenant, name="Kalyani Roasters", **SETTLED)
     session = make_session(company=company)
-    make_provenance(session=session, field_name="legal_name", status=status)
+    # The value on file is the agent's guess, and nobody has reviewed it.
+    make_provenance(
+        session=session,
+        field_name="legal_name",
+        status=status,
+        extracted_value=SETTLED["legal_name"],
+    )
 
     body = generate(api_client, tenant, session_id=str(session.pk)).json()
 
     assert mandatory_fields_on(body["id"]) == ["legal_name"]
+
+
+@pytest.mark.django_db
+def test_a_detail_typed_over_the_guess_is_settled(api_client, tenant):
+    """The operator replaced the agent's guess in the company form without
+    the review screen: the value on file is theirs, so stop asking."""
+    company = Company.objects.create(tenant=tenant, name="Kalyani Roasters", **SETTLED)
+    session = make_session(company=company)
+    make_provenance(
+        session=session,
+        field_name="legal_name",
+        status=ProvenanceStatus.PENDING,
+        extracted_value="Kalyani Coffee Roasters Pvt Ltd",
+    )
+
+    body = generate(api_client, tenant, session_id=str(session.pk)).json()
+
+    assert mandatory_fields_on(body["id"]) == []
+
+
+@pytest.mark.django_db
+def test_only_the_newest_extraction_of_a_detail_counts(api_client, tenant):
+    """An old unreviewed guess from an earlier meeting does not keep the
+    question alive once a later one was confirmed."""
+    company = Company.objects.create(tenant=tenant, name="Kalyani Roasters", **SETTLED)
+    earlier = make_session(company=company, status=SessionStatus.COMPLETED)
+    later = make_session(company=company)
+    make_provenance(
+        session=earlier,
+        field_name="legal_name",
+        status=ProvenanceStatus.PENDING,
+        extracted_value=SETTLED["legal_name"],
+    )
+    make_provenance(
+        session=later,
+        field_name="legal_name",
+        status=ProvenanceStatus.CONFIRMED,
+        extracted_value=SETTLED["legal_name"],
+    )
+
+    body = generate(api_client, tenant, session_id=str(later.pk)).json()
+
+    assert mandatory_fields_on(body["id"]) == []
 
 
 @pytest.mark.django_db
@@ -372,6 +422,56 @@ def test_revising_for_a_later_meeting_drops_what_has_been_answered(
     ]
     # The approved version is the record of what was asked; it is untouched.
     assert mandatory_fields_on(qid) == MANDATORY_FIELDS
+
+
+@pytest.mark.django_db
+def test_revising_a_prep_questionnaire_uses_the_sessions_company(
+    api_client, tenant, admin
+):
+    """Prep runs before onboarding, so the questionnaire carries no company;
+    the session gains one later. A revision must still see what is on file."""
+    company = Company.objects.create(tenant=tenant, name="Kalyani Roasters")
+    session = make_session(company=company, status=SessionStatus.PREPARING)
+    qid = generate(api_client, tenant, session_id=str(session.pk)).json()["id"]
+    Questionnaire.objects.filter(pk=qid).update(company=None)
+    approved = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/approve/", format="json"
+    )
+    assert approved.status_code == 200, approved.content
+    Company.objects.filter(pk=company.pk).update(**SETTLED)
+
+    response = api_client.post(
+        f"/api/v1/onboarding/questionnaires/{qid}/revise/", format="json"
+    )
+
+    assert response.status_code == 201, response.content
+    assert mandatory_fields_on(response.json()["id"]) == []
+
+
+@pytest.mark.django_db
+def test_a_generated_question_cannot_claim_a_contract_field(api_client, tenant):
+    """The fixed question owns the field; a second, generated ask for the
+    signing email would sit beside it unreviewed."""
+    questions = generated_set()
+    questions[0]["target_field"] = "signatory_email"
+
+    body = generate(api_client, tenant, questions=questions).json()
+
+    brand = Question.objects.get(questionnaire_id=body["id"], text="What do you sell?")
+    assert brand.target_field == ""
+
+
+@pytest.mark.django_db
+def test_only_details_a_record_needs_are_marked_required(api_client, tenant, editor):
+    body = generate(api_client, tenant).json()
+
+    required = {
+        q["target_field"]: q["required_to_issue"]
+        for q in body["questions"]
+        if q["mandatory"]
+    }
+
+    assert required == {item.field: item.required_to_issue for item in CONTRACT_FIELDS}
 
 
 @pytest.mark.django_db
@@ -488,3 +588,20 @@ def test_contract_questions_are_left_out_of_workflow_coverage(api_client, tenant
     coverage = QuestionnaireSerializer(questionnaire).data["coverage"]
 
     assert coverage["WF1"] == 1.0
+
+
+@pytest.mark.django_db
+def test_the_process_total_counts_only_what_extraction_can_fill(tenant):
+    """Contract details come from the fixed questions and the company form,
+    so a run that extracted everything it may must reach its own total."""
+    from apps.onboarding.serializers import OnboardingSessionSerializer
+
+    company = Company.objects.create(tenant=tenant, name="Kalyani Roasters", **SETTLED)
+    session = make_session(company=company)
+    session.process_summary = {"fields_written": 1}
+
+    summary = OnboardingSessionSerializer(session).data["process_summary"]
+
+    assert summary["fields_total"] == len(
+        all_mapped_fields() - set(contract_fields.contract_field_names())
+    )

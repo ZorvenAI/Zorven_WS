@@ -83,6 +83,12 @@ export interface PreparedQuestion {
   /** A mandatory question cannot be reworded or dropped. */
   mandatory?: boolean;
   /**
+   * Whether a signed meeting record cannot be issued without this answer.
+   * Some contract details (registration number, billing contact) are
+   * collected but optional.
+   */
+  required_to_issue?: boolean;
+  /**
    * Server-authoritative checkbox state. OPEN is unchecked, GREEN is ticked.
    *
    * The C-05 card is explicit that this must not become client state: G-03

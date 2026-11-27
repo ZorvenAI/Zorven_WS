@@ -1829,8 +1829,9 @@ def _mandatory_refusal(verb: str) -> Response:
         {
             "error": f"a mandatory question cannot be {verb}",
             "detail": (
-                "Contract-detail questions are fixed. They leave the "
-                "questionnaire on their own once the detail is confirmed."
+                "Contract-detail questions are fixed. Once the detail is "
+                "confirmed, the next revision of the questionnaire leaves "
+                "the question out."
             ),
         },
         status=http.HTTP_409_CONFLICT,
@@ -2137,7 +2138,10 @@ class QuestionnaireViewSet(
             )
             # A revision is usually opened for a later meeting: drop the
             # contract questions answered since, add any that are new.
-            _sync_mandatory_questions(draft, approved.company)
+            # Prep runs before onboarding, so the questionnaire's own company
+            # is usually NULL; the session's is the one onboarding filled in.
+            company = approved.company or getattr(approved.session, "company", None)
+            _sync_mandatory_questions(draft, company)
 
         draft.refresh_from_db()
         return Response(
@@ -2512,6 +2516,10 @@ def create_questionnaire(request):
             # invented name should cost that question its mapping, not cost
             # the operator their questionnaire. Reported so it is visible.
             invented.append(field)
+            field = ""
+        elif field in contract_fields.contract_field_names():
+            # The fixed contract question owns this field; a generated one
+            # claiming it would sit beside it as a second, unreviewed ask.
             field = ""
 
         cleaned.append(
