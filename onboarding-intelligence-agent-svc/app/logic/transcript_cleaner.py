@@ -51,7 +51,7 @@ class TranscriptCleaner:
         keys: TenantKeys,
         session_id: str,
         llm: LLMProvider,
-        storage: StorageProvider,
+        storage: StorageProvider | None,
         settings: Any,
         send_ws: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ) -> None:
@@ -189,6 +189,8 @@ class TranscriptCleaner:
 
     async def _flush_to_gcs(self) -> None:
         if not self._clean_text:
+            return
+        if self._storage is None:
             return
         path = self.gcs_path
         try:

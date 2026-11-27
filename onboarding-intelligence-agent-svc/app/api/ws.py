@@ -317,7 +317,7 @@ async def _audio_from_queue(
 async def _stt_loop(
     websocket: WebSocket,
     session: LiveSessionManager,
-    stt: STTAdapter,
+    stt: STTAdapter | None,
     audio_q: asyncio.Queue[bytes | None],
     *,
     codec: str,
@@ -343,6 +343,10 @@ async def _stt_loop(
     batcher = stt_state.get("batcher")
     analysis_state = stt_state.get("analysis_state")
     try:
+        if stt is None:
+            # No adapter configured: the same RECORD_ONLY fallback below as
+            # any other STT failure, stated rather than left to AttributeError.
+            raise RuntimeError("STT adapter is not configured")
         async for result in stt.stream(
             _audio_from_queue(audio_q),
             sample_rate=sample_rate,
@@ -398,6 +402,8 @@ async def _stt_loop(
             logger.warning("stt_unavailable", reason=exc.reason, mode=exc.degraded_mode)
             await session.set_mode(LiveSessionManager.MODE_RECORD_ONLY)
             await _send_error_frame(websocket, session, exc.reason)
+            # STTUnavailable comes only from the adapter, so it exists here.
+            assert stt is not None
             recovery = asyncio.create_task(
                 _stt_recovery_task(
                     websocket,

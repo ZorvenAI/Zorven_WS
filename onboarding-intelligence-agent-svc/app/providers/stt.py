@@ -402,6 +402,8 @@ class GoogleSTTAdapter(STTAdapter):
         """One STT v2 bidirectional stream: reads audio_q, writes result_q."""
         from google.cloud.speech_v2.types import cloud_speech as cs
 
+        chunks_sent = 0
+
         async def _requests() -> AsyncIterator[Any]:
             nonlocal chunks_sent
             yield cs.StreamingRecognizeRequest(
@@ -415,7 +417,6 @@ class GoogleSTTAdapter(STTAdapter):
                 yield cs.StreamingRecognizeRequest(audio=chunk)
 
         client = self._ensure_client()
-        chunks_sent = 0
         try:
             responses = await client.streaming_recognize(requests=_requests())
             logger.info("stt_worker_stream_opened", offset_s=round(offset_s, 1))
