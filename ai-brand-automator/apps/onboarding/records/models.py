@@ -177,6 +177,11 @@ class RecordEvent(models.Model):
     Insert-only. An audit trail that can be edited proves nothing, so the
     model refuses updates and deletes itself rather than relying on callers
     to remember.
+
+    A deliberate exception to the repo's model convention: no ``created_at``
+    or ``updated_at``. ``occurred_at`` is the creation time, and a row is
+    never updated, so ``updated_at`` could only ever equal it. Ordered oldest
+    first because an audit trail is read in the order things happened.
     """
 
     tenant = models.ForeignKey(

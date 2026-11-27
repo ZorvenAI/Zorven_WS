@@ -143,6 +143,12 @@ def issue(
     acknowledge_incomplete: bool = False,
 ) -> MeetingRecord:
     """Freeze the record's content and fingerprint it. There is no undo."""
+    # Recording first, the same order as create_draft. A summary callback
+    # locks the recording before writing its texts, so holding that lock
+    # while the snapshot is read means the frozen content is the recording's
+    # final content: a callback either lands before, and is frozen in, or
+    # waits and then sees the record issued.
+    MeetingRecording.objects.select_for_update(of=("self",)).get(pk=record.recording_id)
     record = _locked(record)
     if record.status != RecordStatus.DRAFT:
         raise RecordError(

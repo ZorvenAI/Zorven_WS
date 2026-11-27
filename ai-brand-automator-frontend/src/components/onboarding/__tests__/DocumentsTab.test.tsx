@@ -506,6 +506,18 @@ describe('DocumentsTab', () => {
       expect(screen.queryByRole('button', { name: 'Void record…' })).toBeNull();
     });
 
+    it('keeps a void reason being typed when a PDF is downloaded', async () => {
+      const user = await openIssued();
+      jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+      await user.click(screen.getByRole('button', { name: 'Void record…' }));
+      await user.type(screen.getByLabelText('Reason for voiding'), 'Wrong signatory');
+      await user.click(screen.getByRole('button', { name: 'Download MR-000085-v1' }));
+
+      await waitFor(() => expect(get).toHaveBeenCalledWith('/onboarding/records/11/pdf/'));
+      expect(screen.getByLabelText('Reason for voiding')).toHaveValue('Wrong signatory');
+    });
+
     it('prepares a new version from a voided record', async () => {
       serve({
         '/sessions/6/records/': { meetings: [meetingRow(summary('VOIDED'))] },
