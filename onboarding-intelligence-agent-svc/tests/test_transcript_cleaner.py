@@ -14,7 +14,7 @@ import json
 
 import pytest
 
-from app.cache.redis_manager import RedisManager, TenantKeys, TTL_SESSION
+from app.cache.redis_manager import RedisManager, TenantKeys
 from app.logic.transcript_cleaner import TranscriptCleaner, CLEAN_PROMPT
 
 TENANT = "t-cleaner-test"

@@ -298,7 +298,7 @@ class GoogleSTTAdapter(STTAdapter):
                     raise STTUnavailable(
                         "STT stream ended (time limit reached)",
                         resync=True,
-                    )
+                    ) from exc
 
                 if not rolling_over and elapsed >= self._stream_limit_s:
                     if not container:
