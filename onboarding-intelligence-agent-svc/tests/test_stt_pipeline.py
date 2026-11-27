@@ -14,6 +14,7 @@ without touching Google's servers.
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,23 @@ from app.skills.redact_pii import redact_text
 pytestmark = pytest.mark.integration
 
 FIXTURE = Path(__file__).parent / "fixtures" / "two_speaker_2min.jsonl"
+
+
+def _quick_fixture() -> list[dict[str, Any]]:
+    """The fixture's events, a thousand times faster.
+
+    The fake adapter replays events at their real ``t_end`` (since #697), so
+    the 35-second fixture would need 35 seconds of audio. Scaling keeps the
+    order, the text and the PII the redaction tests need.
+    """
+    events = []
+    for line in FIXTURE.read_text().splitlines():
+        if line.strip():
+            event = json.loads(line)
+            event["t_start"] /= 1000
+            event["t_end"] /= 1000
+            events.append(event)
+    return events
 
 
 @pytest.fixture
@@ -51,7 +69,8 @@ async def _run_pipeline(
     display: list[dict[str, Any]] = []
 
     async def _silent() -> None:
-        for _ in range(5):
+        # Longer than the scaled fixture, so every event is heard once.
+        for _ in range(6):
             yield b"\x00" * 320
             await asyncio.sleep(0.01)
 
@@ -96,7 +115,7 @@ async def test_persisted_transcript_is_redacted(session):
     The fixture carries ``555-867-5309`` and ``john@example.com``. The
     Redis buffer must contain neither; the display stream must contain both.
     """
-    adapter = FakeSTTAdapter(FIXTURE)
+    adapter = FakeSTTAdapter(events=_quick_fixture())
     buffered, display = await _run_pipeline(session, adapter)
 
     finals_buffered = [f for f in buffered if f["type"] == "transcript.final"]
@@ -115,7 +134,7 @@ async def test_persisted_transcript_is_redacted(session):
 async def test_redacted_finals_carry_flag(session):
     """A final that was redacted carries ``redaction_applied=True`` in the
     buffer but ``False`` in the display stream."""
-    adapter = FakeSTTAdapter(FIXTURE)
+    adapter = FakeSTTAdapter(events=_quick_fixture())
     buffered, display = await _run_pipeline(session, adapter)
 
     buf_finals = [f for f in buffered if f["type"] == "transcript.final"]
@@ -130,7 +149,7 @@ async def test_redacted_finals_carry_flag(session):
 
 async def test_partials_are_not_redacted(session):
     """AC-1: partials go to the client as-is, no redaction pass."""
-    adapter = FakeSTTAdapter(FIXTURE)
+    adapter = FakeSTTAdapter(events=_quick_fixture())
     buffered, _ = await _run_pipeline(session, adapter)
 
     partials = [f for f in buffered if f["type"] == "transcript.partial"]
@@ -141,7 +160,7 @@ async def test_partials_are_not_redacted(session):
 async def test_all_speaker_tags_are_zero(session):
     """STT v2 does not support diarization (A-01). All segments carry
     speaker=0 until the follow-up story adds real attribution."""
-    adapter = FakeSTTAdapter(FIXTURE)
+    adapter = FakeSTTAdapter(events=_quick_fixture())
     buffered, display = await _run_pipeline(session, adapter)
 
     for frame in buffered + display:
@@ -150,7 +169,7 @@ async def test_all_speaker_tags_are_zero(session):
 
 async def test_finals_ordered_by_t_start(session):
     """AC-2: finals are ordered by t_start in the buffer."""
-    adapter = FakeSTTAdapter(FIXTURE)
+    adapter = FakeSTTAdapter(events=_quick_fixture())
     buffered, _ = await _run_pipeline(session, adapter)
 
     finals = [f for f in buffered if f["type"] == "transcript.final"]
@@ -160,7 +179,7 @@ async def test_finals_ordered_by_t_start(session):
 
 async def test_seq_is_strictly_increasing(session):
     """AC-4: seq is strictly increasing across partials and finals."""
-    adapter = FakeSTTAdapter(FIXTURE)
+    adapter = FakeSTTAdapter(events=_quick_fixture())
     buffered, _ = await _run_pipeline(session, adapter)
 
     seqs = [f["seq"] for f in buffered]

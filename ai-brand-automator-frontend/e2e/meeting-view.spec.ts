@@ -20,7 +20,20 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const SESSION_ID = 'e2e-session';
-const MEETING_URL = `/onboarding/sessions/${SESSION_ID}/meeting`;
+// Since #697 the meeting view is a tab of the unified onboarding screen; the
+// old /onboarding/sessions/<id>/meeting route only redirects here.
+const MEETING_URL = `/onboarding?session=${SESSION_ID}&tab=meeting`;
+
+/** The session the sidebar lists; the meeting tab renders once it is chosen. */
+const SESSION = {
+  id: SESSION_ID,
+  company: 'c-1',
+  company_name: 'Kalyani Roasters',
+  status: 'READY',
+  questionnaire: 'qn-1',
+  created_at: '2026-11-20T10:00:00Z',
+  updated_at: '2026-11-20T10:00:00Z',
+};
 
 /** Long enough to need wrapping at this width, which is the case AC-2 names. */
 const QUESTIONS = Array.from({ length: 20 }, (_, i) => ({
@@ -64,9 +77,11 @@ async function openMeeting(page: Page) {
     // A bare array for everything else. Tenant context calls `.find` on its
     // response, so an object shaped like a paginated page throws inside the
     // provider and the error boundary swallows the whole page.
-    const body: unknown =
-      url.includes('/questionnaires/')
-        ? [{ id: 'qn-1', version: 3, questions: QUESTIONS }]
+    const path = new URL(url).pathname;
+    const body: unknown = url.includes('/questionnaires/')
+      ? [{ id: 'qn-1', version: 3, questions: QUESTIONS }]
+      : path.endsWith('/onboarding/sessions/')
+        ? [SESSION]
         : [];
     await route.fulfill({
       status: 200,
@@ -76,6 +91,9 @@ async function openMeeting(page: Page) {
   });
 
   await page.goto(MEETING_URL);
+  // The URL names the session, but the screen shows it once it is picked
+  // from the list, as an operator would.
+  await page.getByRole('button', { name: /Kalyani Roasters/ }).click();
   await expect(page.getByRole('region', { name: /prepared questions/i })).toBeVisible();
 }
 

@@ -298,7 +298,7 @@ class GoogleSTTAdapter(STTAdapter):
                     raise STTUnavailable(
                         "STT stream ended (time limit reached)",
                         resync=True,
-                    )
+                    ) from exc
 
                 if not rolling_over and elapsed >= self._stream_limit_s:
                     if not container:
@@ -402,6 +402,8 @@ class GoogleSTTAdapter(STTAdapter):
         """One STT v2 bidirectional stream: reads audio_q, writes result_q."""
         from google.cloud.speech_v2.types import cloud_speech as cs
 
+        chunks_sent = 0
+
         async def _requests() -> AsyncIterator[Any]:
             nonlocal chunks_sent
             yield cs.StreamingRecognizeRequest(
@@ -415,7 +417,6 @@ class GoogleSTTAdapter(STTAdapter):
                 yield cs.StreamingRecognizeRequest(audio=chunk)
 
         client = self._ensure_client()
-        chunks_sent = 0
         try:
             responses = await client.streaming_recognize(requests=_requests())
             logger.info("stt_worker_stream_opened", offset_s=round(offset_s, 1))
@@ -612,6 +613,13 @@ class FakeSTTAdapter(STTAdapter):
         drain_task = asyncio.create_task(self._drain_audio(audio))
         try:
             import time as _time
+
+            if not self._events:
+                # Nothing to replay: wait out the audio. Looping over an
+                # empty list never awaits, so it starved the drain task and
+                # spun forever.
+                await drain_task
+                return
 
             offset_s = 0.0
             while not drain_task.done():
