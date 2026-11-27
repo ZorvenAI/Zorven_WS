@@ -1,6 +1,8 @@
 from decimal import Decimal
 
 from rest_framework import serializers
+from apps.onboarding import contract_fields
+
 from .models import Company, BrandAsset, OnboardingProgress
 
 
@@ -33,13 +35,12 @@ ONBOARDING_FIELDS = [
 #: ONBOARDING_FIELDS: that list is B-03's thirteen and its tests count them.
 #: The canonical definition, with question text and how each may be
 #: collected, is ``apps/onboarding/contract_fields.py``.
+#: Derived from it so a field added there cannot be silently dropped on
+#: PATCH here. legal_name and decision_maker are already serialized above.
 CONTRACT_FIELDS = [
-    "registered_address",
-    "registration_number",
-    "signatory_name",
-    "signatory_title",
-    "signatory_email",
-    "billing_contact_email",
+    name
+    for name in contract_fields.contract_field_names()
+    if name not in ("legal_name", "decision_maker")
 ]
 
 
