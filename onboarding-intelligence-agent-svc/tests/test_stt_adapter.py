@@ -46,44 +46,51 @@ async def _silent_audio(n: int = 5) -> None:
 # ── FakeSTTAdapter ───────────────────────────────────────────────────
 
 
+#: Paced in real time since #697: each result arrives at its ``t_end`` and the
+#: list repeats until the audio stops. Kept to milliseconds so tests are fast.
+QUICK_EVENTS = [
+    {"text": "hello", "is_final": False, "t_start": 0.0, "t_end": 0.01},
+    {"text": "Hello world.", "is_final": True, "t_start": 0.0, "t_end": 0.02},
+]
+
+
 async def test_fake_adapter_yields_partials_and_finals():
-    adapter = FakeSTTAdapter(FIXTURE)
-    results = [r async for r in adapter.stream(_silent_audio())]
+    adapter = FakeSTTAdapter(events=QUICK_EVENTS)
+    results = [r async for r in adapter.stream(_silent_audio(10))]
     partials = [r for r in results if not r.is_final]
     finals = [r for r in results if r.is_final]
     assert len(partials) > 0
     assert len(finals) > 0
-    assert len(results) == 21
 
 
 async def test_fake_adapter_from_event_list():
-    events = [
-        {
-            "text": "hello",
-            "is_final": False,
-            "t_start": 0.0,
-            "t_end": 0.5,
-            "delay_ms": 10,
-        },
-        {
-            "text": "Hello world.",
-            "is_final": True,
-            "t_start": 0.0,
-            "t_end": 1.5,
-            "delay_ms": 10,
-        },
+    adapter = FakeSTTAdapter(events=QUICK_EVENTS)
+    results = [r async for r in adapter.stream(_silent_audio(10))]
+    assert [(r.text, r.is_final) for r in results[:2]] == [
+        ("hello", False),
+        ("Hello world.", True),
     ]
-    adapter = FakeSTTAdapter(events=events)
-    results = [r async for r in adapter.stream(_silent_audio())]
-    assert len(results) == 2
-    assert results[0].text == "hello"
-    assert results[1].is_final is True
+
+
+async def test_fake_adapter_repeats_with_advancing_timestamps():
+    """A long recording keeps transcribing: the list replays, later in time."""
+    adapter = FakeSTTAdapter(events=QUICK_EVENTS)
+    results = [r async for r in adapter.stream(_silent_audio(10))]
+    assert len(results) > len(QUICK_EVENTS)
+    assert results[2].text == "hello"
+    assert results[2].t_start > results[0].t_start
 
 
 async def test_fake_adapter_empty_events():
     adapter = FakeSTTAdapter(events=[])
-    results = [r async for r in adapter.stream(_silent_audio())]
+    results = await asyncio.wait_for(
+        _collect(adapter.stream(_silent_audio())), timeout=5.0
+    )
     assert results == []
+
+
+async def _collect(stream) -> list[STTResult]:
+    return [r async for r in stream]
 
 
 async def test_partial_bypasses_llm_and_redaction():

@@ -72,8 +72,7 @@ def test_a_dropped_socket_gives_the_slot_back(
                 "text": "x",
                 "is_final": True,
                 "t_start": 0.0,
-                "t_end": 0.1,
-                "delay_ms": 600000,
+                "t_end": 600.0,
             }
         ]
     )
@@ -122,8 +121,7 @@ def test_the_operator_can_start_again_right_after_a_drop(
                 "text": "x",
                 "is_final": True,
                 "t_start": 0.0,
-                "t_end": 0.1,
-                "delay_ms": 600000,
+                "t_end": 600.0,
             }
         ]
     )

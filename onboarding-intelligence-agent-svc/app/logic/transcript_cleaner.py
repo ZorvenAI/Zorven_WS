@@ -14,7 +14,7 @@ from app.logic.live_session import frames_for_latest_recording
 from app.cache.redis_manager import RedisManager, TenantKeys, TTL_SESSION
 from app.core.logging import get_logger
 from app.providers.llm import LLMProvider, LLMUnavailable
-from app.providers.storage import StorageProvider, StorageUnavailable
+from app.providers.storage import StorageProvider
 
 logger = get_logger(__name__)
 
@@ -51,7 +51,7 @@ class TranscriptCleaner:
         keys: TenantKeys,
         session_id: str,
         llm: LLMProvider,
-        storage: StorageProvider,
+        storage: StorageProvider | None,
         settings: Any,
         send_ws: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ) -> None:
@@ -189,6 +189,8 @@ class TranscriptCleaner:
 
     async def _flush_to_gcs(self) -> None:
         if not self._clean_text:
+            return
+        if self._storage is None:
             return
         path = self.gcs_path
         try:

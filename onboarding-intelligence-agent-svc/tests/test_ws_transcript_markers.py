@@ -112,8 +112,7 @@ def hob(client, django_stub, redis_client):  # noqa: F811
                 "text": "unused",
                 "is_final": True,
                 "t_start": 0.0,
-                "t_end": 0.1,
-                "delay_ms": 600000,
+                "t_end": 600.0,
             }
         ]
     )

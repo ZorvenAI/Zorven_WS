@@ -194,7 +194,7 @@ class SummarizeRecording(BaseSkill):
         segments: list[dict[str, Any]],
     ) -> str:
         """Generate T2 (clean transcript) from raw segments."""
-        if not segments or self._llm is None:
+        if not segments or self._llm is None or self._redis is None:
             return ""
         try:
             from app.logic.transcript_cleaner import TranscriptCleaner
@@ -226,7 +226,7 @@ class SummarizeRecording(BaseSkill):
         t2_text: str,
     ) -> str:
         """Generate T3 (description) from clean transcript."""
-        if not t2_text or self._llm is None:
+        if not t2_text or self._llm is None or self._redis is None:
             return ""
         try:
             from app.logic.description_generator import DescriptionGenerator

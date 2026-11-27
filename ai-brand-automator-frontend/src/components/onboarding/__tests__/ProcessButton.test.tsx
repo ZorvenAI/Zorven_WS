@@ -112,7 +112,9 @@ it('dispatches without modal when coverage is good', async () => {
   });
 });
 
-it('shows coverage warning when below threshold', () => {
+// The first run always dispatches: a session that has just been gathered
+// has nothing better to process from. The warning guards a re-run.
+it('dispatches the first run without a warning even when coverage is low', async () => {
   render(
     <ProcessButton
       sessionId="sess-1"
@@ -121,18 +123,34 @@ it('shows coverage warning when below threshold', () => {
     />,
   );
   fireEvent.click(screen.getByRole('button', { name: /Process onboarding data/i }));
+  await waitFor(() => {
+    expect(mockTrigger).toHaveBeenCalledWith('sess-1');
+  });
+  expect(screen.queryByText(/Some areas have low coverage/)).not.toBeInTheDocument();
+});
+
+it('shows coverage warning on a re-run below threshold', () => {
+  render(
+    <ProcessButton
+      sessionId="sess-1"
+      status="REVIEW_PENDING"
+      coverage={lowCoverage}
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: /Re-process onboarding data/i }));
   expect(screen.getByText(/Some areas have low coverage/)).toBeInTheDocument();
+  expect(mockTrigger).not.toHaveBeenCalled();
 });
 
 it('dispatches on "Continue anyway"', async () => {
   render(
     <ProcessButton
       sessionId="sess-1"
-      status="GATHERED"
+      status="REVIEW_PENDING"
       coverage={lowCoverage}
     />,
   );
-  fireEvent.click(screen.getByRole('button', { name: /Process onboarding data/i }));
+  fireEvent.click(screen.getByRole('button', { name: /Re-process onboarding data/i }));
   fireEvent.click(screen.getByText('Continue anyway'));
   await waitFor(() => {
     expect(mockTrigger).toHaveBeenCalledWith('sess-1');
@@ -143,14 +161,15 @@ it('closes modal on "Return to capture"', () => {
   render(
     <ProcessButton
       sessionId="sess-1"
-      status="GATHERED"
+      status="REVIEW_PENDING"
       coverage={lowCoverage}
     />,
   );
-  fireEvent.click(screen.getByRole('button', { name: /Process onboarding data/i }));
+  fireEvent.click(screen.getByRole('button', { name: /Re-process onboarding data/i }));
   expect(screen.getByText(/Some areas have low coverage/)).toBeInTheDocument();
   fireEvent.click(screen.getByText('Return to capture'));
   expect(screen.queryByText(/Some areas have low coverage/)).not.toBeInTheDocument();
+  expect(mockTrigger).not.toHaveBeenCalled();
 });
 
 it('shows error on dispatch failure', async () => {
