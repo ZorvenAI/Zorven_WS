@@ -79,8 +79,12 @@ def build_snapshot(record) -> dict[str, Any]:
             session=session, recording__isnull=True
         ).order_by("stream_index")
 
+    # A revoked consent is not consent on file: the record must not present
+    # a withdrawn agreement to be recorded as a standing one.
     consent = (
-        ConsentRecord.objects.filter(session=session).order_by("-granted_at").first()
+        ConsentRecord.objects.filter(session=session, revoked_at__isnull=True)
+        .order_by("-granted_at")
+        .first()
     )
 
     split = split_agreements(recording.description or "")

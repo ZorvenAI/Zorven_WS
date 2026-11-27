@@ -112,6 +112,7 @@ from apps.onboarding.serializers import (
     ScheduledMeetingSerializer,
 )
 from apps.onboarding.records.lifecycle import recording_is_frozen
+from apps.onboarding.records.models import FROZEN_RECORD_STATUSES, MeetingRecord
 from apps.onboarding.services.contract_details import outstanding_contract_fields
 from apps.onboarding.services.session_state import InvalidTransition, transition
 from apps.onboarding.state import TRANSITIONS
@@ -175,6 +176,29 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         # the session). Listed explicitly — see the B-06 comment above.
         "process": [IsAuthenticated, IsTenantEditor],
     }
+
+    def destroy(self, request, *args, **kwargs):
+        """Refuse to delete a session holding an issued meeting record.
+
+        The cascade would take the record, its fingerprint and its insert-only
+        audit trail with it, without ever calling their guards. The same rule
+        as deleting one of its recordings.
+        """
+        session = self.get_object()
+        if MeetingRecord.objects.filter(
+            session=session, status__in=FROZEN_RECORD_STATUSES
+        ).exists():
+            return Response(
+                {
+                    "error": "session_has_issued_record",
+                    "detail": (
+                        "A meeting record has been issued in this session, "
+                        "so it cannot be deleted."
+                    ),
+                },
+                status=http.HTTP_409_CONFLICT,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     def get_queryset(self):
         """Tenant-scoped, which is also what makes a cross-tenant id 404.
@@ -3161,7 +3185,9 @@ def update_recording_summary(request, pk):
             "raw_transcript_gcs_path",
         ):
             value = request.data.get(gcs_field)
-            if isinstance(value, str) and value:
+            # The stored copies are part of what was frozen: repointing one
+            # would let the GCS text drift from the signed record.
+            if not frozen and isinstance(value, str) and value:
                 setattr(recording, gcs_field, value)
                 update_fields.append(gcs_field)
 
@@ -3295,7 +3321,7 @@ def process_callback(request, pk):
                     "raw_transcript_gcs_path",
                 ):
                     value = tier.get(name)
-                    if isinstance(value, str) and value:
+                    if not rec_frozen and isinstance(value, str) and value:
                         setattr(rec, name, value)
                         rec_fields.append(name)
                 if rec_fields:

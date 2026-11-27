@@ -174,17 +174,17 @@ urlpatterns = [
     ),
     # Signed meeting records: one per recording, frozen at issue.
     path(
-        "sessions/<pk>/records/",
+        "sessions/<int:pk>/records/",
         record_views.session_records,
         name="onboarding-session-records",
     ),
     path(
-        "sessions/<pk>/binder/",
+        "sessions/<int:pk>/binder/",
         record_views.session_binder,
         name="onboarding-session-binder",
     ),
     path(
-        "recordings/<pk>/records/",
+        "recordings/<int:pk>/records/",
         record_views.create_record,
         name="onboarding-recording-record-create",
     ),

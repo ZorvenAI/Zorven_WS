@@ -129,15 +129,23 @@ export default function DocumentsTab({ sessionId }: DocumentsTabProps) {
     void load();
   }, [load]);
 
-  /** Run one action, then show whatever record it produced and refresh rows. */
-  const run = async (action: () => Promise<RecordDetail | null | void>) => {
+  /**
+   * Run one action, then show whatever record it produced and refresh rows.
+   *
+   * Only an action that changes a record closes the open forms: downloading a
+   * PDF to check the wording must not throw away a void reason being typed.
+   */
+  const run = async (
+    action: () => Promise<RecordDetail | null | void>,
+    { changes = false }: { changes?: boolean } = {},
+  ) => {
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
       const result = await action();
       if (result !== undefined) setDetail(result);
-      resetActions();
+      if (changes) resetActions();
       setMeetings(await listSessionRecords(sessionId));
     } catch (err: unknown) {
       // A refused issue comes back with the checks that failed; show them in
@@ -290,7 +298,7 @@ export default function DocumentsTab({ sessionId }: DocumentsTabProps) {
                         type="button"
                         disabled={!meeting.has_content || busy}
                         onClick={() =>
-                          void run(() => prepareRecord(meeting.recording_id))
+                          void run(() => prepareRecord(meeting.recording_id), { changes: true })
                         }
                         className="btn-primary text-xs disabled:cursor-not-allowed disabled:opacity-40"
                       >
@@ -354,10 +362,13 @@ export default function DocumentsTab({ sessionId }: DocumentsTabProps) {
                     type="button"
                     disabled={busy}
                     onClick={() =>
-                      void run(async () => {
-                        await discardRecord(detail.id);
-                        return null;
-                      })
+                      void run(
+                        async () => {
+                          await discardRecord(detail.id);
+                          return null;
+                        },
+                        { changes: true },
+                      )
                     }
                     className="rounded border border-white/10 px-3 py-1.5 text-sm text-brand-silver transition-colors hover:bg-white/5 hover:text-white disabled:opacity-40"
                   >
@@ -392,7 +403,9 @@ export default function DocumentsTab({ sessionId }: DocumentsTabProps) {
                     <button
                       type="button"
                       disabled={busy || (needsAcknowledgement && !acknowledged)}
-                      onClick={() => void run(() => issueRecord(detail.id, acknowledged))}
+                      onClick={() =>
+                        void run(() => issueRecord(detail.id, acknowledged), { changes: true })
+                      }
                       className="btn-primary text-sm disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Issue and freeze
@@ -441,7 +454,7 @@ export default function DocumentsTab({ sessionId }: DocumentsTabProps) {
                         type="button"
                         disabled={busy || !voidReason.trim()}
                         onClick={() =>
-                          void run(() => voidRecord(detail.id, voidReason.trim()))
+                          void run(() => voidRecord(detail.id, voidReason.trim()), { changes: true })
                         }
                         className="rounded border border-rose-300/30 px-3 py-1.5 text-sm text-rose-200 transition-colors hover:bg-rose-300/10 disabled:cursor-not-allowed disabled:opacity-40"
                       >
@@ -465,7 +478,7 @@ export default function DocumentsTab({ sessionId }: DocumentsTabProps) {
             <button
               type="button"
               disabled={busy}
-              onClick={() => void run(() => supersedeRecord(detail.id))}
+              onClick={() => void run(() => supersedeRecord(detail.id), { changes: true })}
               className="btn-primary text-sm disabled:opacity-40"
             >
               Prepare a new version

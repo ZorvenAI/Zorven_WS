@@ -486,8 +486,8 @@ def build_binder_pdf(
     pdf.ln(2)
     pdf.paragraph(
         "This binder compiles the record of each meeting in the session, in "
-        "date order. Each record was issued and is signed separately; its "
-        "status and fingerprint are its own."
+        "date order. Each record has its own status, fingerprint and "
+        "signatures; a record marked as a draft has not been issued."
     )
 
     pdf.section("Index")

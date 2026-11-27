@@ -16,10 +16,16 @@ import io
 import pytest
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 from pypdf import PdfReader
 from rest_framework.test import APIClient
 
-from apps.onboarding.models import MeetingAttendee, ProvenanceStatus, RecordingStatus
+from apps.onboarding.models import (
+    MeetingAttendee,
+    MeetingRecording,
+    ProvenanceStatus,
+    RecordingStatus,
+)
 from apps.onboarding.records import lifecycle
 from apps.onboarding.records.models import (
     MeetingRecord,
@@ -273,6 +279,19 @@ def test_attendance_and_consent_are_carried_onto_the_record(
     assert document["consent"]["method"] == "VERBAL_RECORDED"
 
 
+def test_a_revoked_consent_is_not_consent_on_file(
+    api_client, editor, session, recording
+):
+    consent = make_consent(session=session, subject_name="Maria Rossi")
+    consent.revoked_at = timezone.now()
+    consent.save(update_fields=["revoked_at"])
+
+    body = prepare(api_client, recording).json()
+
+    assert body["document"]["consent"] is None
+    assert readiness_of(body)["consent"]["ok"] is False
+
+
 # ── Readiness ────────────────────────────────────────────────────────
 
 
@@ -496,6 +515,31 @@ def test_the_agents_summary_callback_cannot_rewrite_an_issued_recording(
     assert recording.summary["key_findings"] == ["rewritten"]
 
 
+def test_the_callbacks_cannot_repoint_an_issued_recordings_stored_copies(
+    issued, recording, tenant, settings
+):
+    """The GCS copies are part of what was frozen: a re-run must not swap
+    the stored description for a regenerated one."""
+    MeetingRecording.objects.filter(pk=recording.pk).update(
+        description_gcs_path="t/original/description.json"
+    )
+
+    response = service_client(tenant, settings).patch(
+        f"{BASE}/internal/recordings/{recording.pk}/summary/",
+        data={
+            "summary": {"key_findings": ["rerun"]},
+            "description_gcs_path": "t/rerun/description.json",
+            "transcript_clean_gcs_path": "t/rerun/clean.json",
+        },
+        format="json",
+    )
+
+    assert response.status_code == 200, response.content
+    recording.refresh_from_db()
+    assert recording.description_gcs_path == "t/original/description.json"
+    assert recording.transcript_clean_gcs_path in ("", None)
+
+
 def test_the_summary_callback_still_writes_while_the_record_is_a_draft(
     draft, recording, tenant, settings
 ):
@@ -552,6 +596,23 @@ def test_a_recording_with_an_issued_record_cannot_be_deleted(
     assert response.status_code == 409, response.content
     assert response.json()["error"] == "recording_has_issued_record"
     assert MeetingRecord.objects.filter(pk=issued["id"]).exists()
+
+
+def test_a_session_with_an_issued_record_cannot_be_deleted(
+    api_client, issued, session, tenant
+):
+    """Deleting the session would cascade the record and its audit trail
+    away without ever calling their guards."""
+    response = api_client.delete(f"{BASE}/sessions/{session.pk}/")
+
+    assert response.status_code == 409, response.content
+    assert response.json()["error"] == "session_has_issued_record"
+    assert MeetingRecord.objects.filter(pk=issued["id"]).exists()
+
+
+def test_a_non_numeric_id_is_not_found(api_client, editor):
+    assert api_client.post(f"{BASE}/recordings/abc/records/").status_code == 404
+    assert api_client.get(f"{BASE}/sessions/abc/binder/").status_code == 404
 
 
 def test_a_recording_with_only_a_draft_can_be_deleted_and_takes_it_along(
