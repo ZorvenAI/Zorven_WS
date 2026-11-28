@@ -158,3 +158,83 @@ class TestErasureCascadeWithData:
         serialized = json.dumps(data)
         assert len(serialized) > 0
         assert data["tenant_id"] == str(tenant.pk)
+
+
+def _session_for(tenant, company, subject, *, record_status=None, number=""):
+    """A consented session, optionally with one meeting record."""
+    from apps.onboarding.records.models import MeetingRecord
+    from apps.onboarding.tests.factories import make_recording
+
+    session = OnboardingSession.objects.create(
+        tenant=tenant, company=company, status=SessionStatus.COMPLETED
+    )
+    ConsentRecord.objects.create(
+        tenant=tenant, session=session, subject_name=subject, granted_at=timezone.now()
+    )
+    if record_status is not None:
+        MeetingRecord.objects.create(
+            tenant=tenant,
+            session=session,
+            recording=make_recording(session=session, tenant=tenant),
+            record_number=number,
+            status=record_status,
+        )
+    return session
+
+
+@pytest.mark.django_db(transaction=True)
+class TestErasureHoldsSignedRecords:
+    """A signed meeting record is evidence of an agreement: erasure leaves its
+    session alone and flags it for a person to decide (Art. 17(3)(e))."""
+
+    @pytest.mark.parametrize("status", ["ISSUED", "COMPLETED", "VOIDED", "DECLINED"])
+    def test_a_session_with_an_issued_record_is_held(self, tenant, company, status):
+        from apps.onboarding.records.models import MeetingRecord
+
+        _register_all_stores()
+        session = _session_for(
+            tenant, company, "Held Subject", record_status=status, number="MR-HOLD-1"
+        )
+
+        report = ErasureCascade().execute(
+            tenant_id=str(tenant.pk), subject_name="Held Subject"
+        )
+
+        assert OnboardingSession.objects.filter(pk=session.pk).exists()
+        assert MeetingRecord.objects.filter(record_number="MR-HOLD-1").exists()
+        assert report.manual_review_required is True
+        assert report.completeness_verified is False
+        assert report.held_for_review == [
+            {"session_id": str(session.pk), "records": ["MR-HOLD-1"]}
+        ]
+        assert report.to_dict()["manual_review_required"] is True
+
+    def test_a_draft_does_not_hold_its_session(self, tenant, company):
+        _register_all_stores()
+        session = _session_for(
+            tenant, company, "Draft Subject", record_status="DRAFT", number="MR-D-1"
+        )
+
+        report = ErasureCascade().execute(
+            tenant_id=str(tenant.pk), subject_name="Draft Subject"
+        )
+
+        assert not OnboardingSession.objects.filter(pk=session.pk).exists()
+        assert report.manual_review_required is False
+        assert report.held_for_review == []
+
+    def test_only_the_held_session_survives(self, tenant, company):
+        _register_all_stores()
+        plain = _session_for(tenant, company, "Mixed Subject")
+        signed = _session_for(
+            tenant, company, "Mixed Subject", record_status="ISSUED", number="MR-M-1"
+        )
+
+        report = ErasureCascade().execute(
+            tenant_id=str(tenant.pk), subject_name="Mixed Subject"
+        )
+
+        assert not OnboardingSession.objects.filter(pk=plain.pk).exists()
+        assert OnboardingSession.objects.filter(pk=signed.pk).exists()
+        assert [h["session_id"] for h in report.held_for_review] == [str(signed.pk)]
+        assert report.completeness_verified is False
