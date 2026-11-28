@@ -99,11 +99,32 @@ def e2e_client(app_with_live_redis, django_stub, live_company):
         yield tc
 
 
+def _compressed_45min() -> list[dict]:
+    """The 45-minute fixture, replayed in about a second.
+
+    Since #697 the fake adapter emits each event at its real ``t_end``, so the
+    raw fixture would take 45 minutes. The stream is played at 3000x speed and
+    the timestamps put back to meeting time on the way out, which is what the
+    test checks: frames spanning the whole meeting, and a bounded buffer.
+    """
+    events = []
+    for line in FIXTURE_45MIN_PATH.read_text().splitlines():
+        if line.strip():
+            event = json.loads(line)
+            event["t_start"] /= _SPEEDUP
+            event["t_end"] /= _SPEEDUP
+            events.append(event)
+    return events
+
+
+_SPEEDUP = 3000.0
+
+
 @pytest.fixture
 def e2e_client_45min(app_with_live_redis, django_stub, live_company):
     """TestClient with FakeSTTAdapter loaded with the 45-minute fixture."""
     with TestClient(app_with_live_redis) as tc:
-        app_with_live_redis.state.stt = FakeSTTAdapter(FIXTURE_45MIN_PATH)
+        app_with_live_redis.state.stt = FakeSTTAdapter(events=_compressed_45min())
         app_with_live_redis.state.backend = BackendClient(django_stub["url"], "tok")
         app_with_live_redis.state.live_poll_s = 0.05
         django_stub["company_id"] = live_company
