@@ -118,6 +118,12 @@ def live_company(request):
 
 @pytest.fixture
 def client(app_with_live_redis, django_stub, live_company):
+    # Every socket here authenticates as the same user, and the server allows
+    # that user 10 control frames a minute. A run of these tests used the
+    # budget up, so a later test's `start` frame closed the socket before it
+    # was handled and the test saw nothing at all (#703). Each test starts
+    # with the full budget; the limit's own behaviour has its own tests.
+    _reset_control_frame_budget()
     with TestClient(app_with_live_redis) as test_client:
         app_with_live_redis.state.backend = BackendClient(django_stub["url"], "tok")
         # F-04 holds the socket open and re-checks on a cadence. The real one
@@ -131,6 +137,20 @@ def client(app_with_live_redis, django_stub, live_company):
         # errored inside the running one — cleanup that breaks the tests it
         # protects is worse than the leak it was guarding against.
         yield test_client
+
+
+def _reset_control_frame_budget() -> None:
+    import redis as redis_sync
+
+    from app.cache.redis_manager import TenantKeys
+    from tests.conftest import REDIS_URL
+
+    try:
+        conn = redis_sync.from_url(REDIS_URL)
+        conn.delete(TenantKeys("t-1").ratelimit("u-1"))
+        conn.close()
+    except redis_sync.RedisError:
+        pass  # No Redis: the tests that need it skip themselves.
 
 
 def expect_close(socket, within: float = 10.0) -> WebSocketDisconnect:
