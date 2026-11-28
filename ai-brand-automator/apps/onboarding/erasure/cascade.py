@@ -8,7 +8,7 @@ failure so one broken dependency does not block the rest.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Iterable
 
 from apps.onboarding.erasure.registry import (
     CompletionReport,
@@ -37,7 +37,14 @@ class ErasureCascade:
         subject_name: str,
         requested_by: str = "system",
         reason: str = "",
+        force_session_ids: Iterable[Any] = (),
     ) -> CompletionReport:
+        """Erase the subject's data.
+
+        ``force_session_ids`` names held sessions a reviewer decided to erase
+        anyway. They are erased like any other session, and a tombstone of
+        their signed records is added to the report first.
+        """
         from django.db.models import Q
 
         from apps.onboarding.models import ConsentRecord
@@ -60,6 +67,9 @@ class ErasureCascade:
         # its recordings and transcripts are what the record rests on -- and
         # listed for review rather than erased.
         held = _sessions_with_signed_records(session_ids)
+        forced = {str(sid) for sid in force_session_ids}
+        tombstone = _tombstone([sid for sid in held if str(sid) in forced])
+        held = {sid: n for sid, n in held.items() if str(sid) not in forced}
         session_ids = [sid for sid in session_ids if sid not in held]
 
         if not session_ids:
@@ -77,6 +87,7 @@ class ErasureCascade:
                 reason=reason,
                 completeness_verified=not held,
                 held_for_review=_held_entries(held),
+                erased_signed_records=tombstone,
             )
 
         report = CompletionReport(
@@ -85,6 +96,7 @@ class ErasureCascade:
             requested_by=requested_by,
             reason=reason,
             held_for_review=_held_entries(held),
+            erased_signed_records=tombstone,
         )
 
         store_map: dict[str, Any] = {
@@ -168,4 +180,28 @@ def _held_entries(held: dict[Any, list[str]]) -> list[dict[str, Any]]:
     return [
         {"session_id": str(session_id), "records": numbers}
         for session_id, numbers in sorted(held.items(), key=lambda kv: str(kv[0]))
+    ]
+
+
+def _tombstone(session_ids) -> list[dict[str, Any]]:
+    """What is left of signed records erased on review: proof they existed.
+
+    Record numbers, fingerprints and dates only -- no names, emails or text,
+    which are exactly what the erasure removes.
+    """
+    if not session_ids:
+        return []
+    from apps.onboarding.records.models import FROZEN_RECORD_STATUSES, MeetingRecord
+
+    return [
+        {
+            "record_number": r.record_number,
+            "status": r.status,
+            "content_hash": r.content_hash,
+            "issued_at": r.issued_at.isoformat() if r.issued_at else None,
+            "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+        }
+        for r in MeetingRecord.objects.filter(
+            session_id__in=session_ids, status__in=FROZEN_RECORD_STATUSES
+        ).order_by("record_number")
     ]
