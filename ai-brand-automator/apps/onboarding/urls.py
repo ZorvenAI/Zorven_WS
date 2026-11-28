@@ -15,6 +15,7 @@ from apps.onboarding.erasure.views import (
     ErasureRequestView,
     RetentionConfigView,
 )
+from apps.onboarding.records import views as record_views
 from apps.onboarding.views import (
     FieldProvenanceViewSet,
     MeetingRecordingViewSet,
@@ -169,6 +170,52 @@ urlpatterns = [
         "retention/",
         RetentionConfigView.as_view(),
         name="onboarding-retention-config",
+    ),
+    # Signed meeting records: one per recording, frozen at issue.
+    path(
+        "sessions/<int:pk>/records/",
+        record_views.session_records,
+        name="onboarding-session-records",
+    ),
+    path(
+        "sessions/<int:pk>/binder/",
+        record_views.session_binder,
+        name="onboarding-session-binder",
+    ),
+    path(
+        "recordings/<int:pk>/records/",
+        record_views.create_record,
+        name="onboarding-recording-record-create",
+    ),
+    path(
+        "records/<int:pk>/",
+        record_views.record_detail,
+        name="onboarding-record-detail",
+    ),
+    path(
+        "records/<int:pk>/issue/",
+        record_views.issue_record,
+        name="onboarding-record-issue",
+    ),
+    path(
+        "records/<int:pk>/void/",
+        record_views.void_record,
+        name="onboarding-record-void",
+    ),
+    path(
+        "records/<int:pk>/supersede/",
+        record_views.supersede_record,
+        name="onboarding-record-supersede",
+    ),
+    path(
+        "records/<int:pk>/discard/",
+        record_views.discard_record,
+        name="onboarding-record-discard",
+    ),
+    path(
+        "records/<int:pk>/pdf/",
+        record_views.record_pdf,
+        name="onboarding-record-pdf",
     ),
     path("", include(router.urls)),
 ]

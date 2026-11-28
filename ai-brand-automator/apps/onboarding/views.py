@@ -111,6 +111,9 @@ from apps.onboarding.serializers import (
     ResearchBriefSerializer,
     ScheduledMeetingSerializer,
 )
+from apps.onboarding.records.lifecycle import recording_is_frozen
+from apps.onboarding.records.models import FROZEN_RECORD_STATUSES, MeetingRecord
+from apps.onboarding.services.contract_details import outstanding_contract_fields
 from apps.onboarding.services.session_state import InvalidTransition, transition
 from apps.onboarding.state import TRANSITIONS
 from apps.onboarding.text import levenshtein, normalise_company_name
@@ -173,6 +176,29 @@ class OnboardingSessionViewSet(RoleBasedPermissionMixin, viewsets.ModelViewSet):
         # the session). Listed explicitly — see the B-06 comment above.
         "process": [IsAuthenticated, IsTenantEditor],
     }
+
+    def destroy(self, request, *args, **kwargs):
+        """Refuse to delete a session holding an issued meeting record.
+
+        The cascade would take the record, its fingerprint and its insert-only
+        audit trail with it, without ever calling their guards. The same rule
+        as deleting one of its recordings.
+        """
+        session = self.get_object()
+        if MeetingRecord.objects.filter(
+            session=session, status__in=FROZEN_RECORD_STATUSES
+        ).exists():
+            return Response(
+                {
+                    "error": "session_has_issued_record",
+                    "detail": (
+                        "A meeting record has been issued in this session, "
+                        "so it cannot be deleted."
+                    ),
+                },
+                status=http.HTTP_409_CONFLICT,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     def get_queryset(self):
         """Tenant-scoped, which is also what makes a cross-tenant id 404.
@@ -879,6 +905,26 @@ class MeetingRecordingViewSet(
         return MeetingRecording.objects.select_related("session").filter(
             tenant_scope_q(tenant)
         )
+
+    def destroy(self, request, *args, **kwargs):
+        """Refuse to delete a recording an issued meeting record was made from.
+
+        The record would outlive the audio and transcript it rests on. A
+        recording with only a draft record can go, and takes the draft with it.
+        """
+        recording = self.get_object()
+        if recording_is_frozen(recording):
+            return Response(
+                {
+                    "error": "recording_has_issued_record",
+                    "detail": (
+                        "A meeting record has been issued from this recording, "
+                        "so it cannot be deleted."
+                    ),
+                },
+                status=http.HTTP_409_CONFLICT,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     def retrieve(self, request, *args, **kwargs):
         """``GET /recordings/{id}/`` with optional ``?include=signed_urls``.
@@ -2182,36 +2228,7 @@ def _contract_fields_outstanding(company) -> list[contract_fields.ContractField]
     With no company — the common case before onboarding starts — everything
     is outstanding.
     """
-    if company is None:
-        return list(contract_fields.CONTRACT_FIELDS)
-
-    # Only the newest extraction of each field matters, and only while the
-    # value on file is still that guess. Once a person has typed something
-    # else into the company form, the value on file is theirs, even though
-    # the old provenance row was never reviewed.
-    latest: dict[str, FieldProvenance] = {}
-    for row in FieldProvenance.objects.filter(
-        session__company=company,
-        model_name="Company",
-        field_name__in=contract_fields.contract_field_names(),
-    ).order_by("field_name", "-created_at", "-pk"):
-        latest.setdefault(row.field_name, row)
-
-    def unreviewed_guess(field: str) -> bool:
-        row = latest.get(field)
-        if row is None or row.status not in (
-            ProvenanceStatus.PENDING,
-            ProvenanceStatus.CONFLICT,
-        ):
-            return False
-        return _as_text(getattr(company, field, None)) == _as_text(row.extracted_value)
-
-    return [
-        item
-        for item in contract_fields.CONTRACT_FIELDS
-        if not contract_fields.is_answered(getattr(company, item.field, None))
-        or unreviewed_guess(item.field)
-    ]
+    return outstanding_contract_fields(company)
 
 
 def _sync_mandatory_questions(questionnaire, company) -> int:
@@ -3110,12 +3127,27 @@ def update_recording_summary(request, pk):
         recording.summary = summary
         transcript = request.data.get("transcript")
         update_fields = ["summary", "status", "updated_at"]
-        if isinstance(transcript, list) and all(
-            isinstance(seg, dict)
-            and isinstance(seg.get("text"), str)
-            and isinstance(seg.get("t_start"), (int, float))
-            and isinstance(seg.get("t_end"), (int, float))
-            for seg in transcript
+        # Once a meeting record has been issued from this recording, the texts
+        # it was made from are fixed: a record that says one thing beside a
+        # transcript that now says another is worse than either alone. The
+        # summary and paths may still move; the words may not.
+        frozen = recording_is_frozen(recording)
+        if frozen:
+            logger.info(
+                "recording_texts_frozen recording=%s — transcript, clean "
+                "transcript and description left unchanged",
+                recording.pk,
+            )
+        if (
+            not frozen
+            and isinstance(transcript, list)
+            and all(
+                isinstance(seg, dict)
+                and isinstance(seg.get("text"), str)
+                and isinstance(seg.get("t_start"), (int, float))
+                and isinstance(seg.get("t_end"), (int, float))
+                for seg in transcript
+            )
         ):
             recording.transcript = transcript
             update_fields.append("transcript")
@@ -3129,7 +3161,11 @@ def update_recording_summary(request, pk):
         # "never assessed" is a third state, distinct from complete, and it is
         # the honest answer for anything finalised by an older agent.
         coverage = summary.get("transcript_coverage")
-        if isinstance(coverage, dict) and isinstance(coverage.get("complete"), bool):
+        if (
+            not frozen
+            and isinstance(coverage, dict)
+            and isinstance(coverage.get("complete"), bool)
+        ):
             recording.transcript_complete = coverage["complete"]
             missing = coverage.get("missing_s")
             if isinstance(missing, (int, float)) and missing >= 0:
@@ -3138,12 +3174,16 @@ def update_recording_summary(request, pk):
 
         # Three-Tier Transcript: T2 clean transcript, T3 description, GCS paths.
         transcript_clean = request.data.get("transcript_clean")
-        if isinstance(transcript_clean, (list, str)) and transcript_clean:
+        if (
+            not frozen
+            and isinstance(transcript_clean, (list, str))
+            and transcript_clean
+        ):
             recording.transcript_clean = transcript_clean
             update_fields.append("transcript_clean")
 
         description_text = request.data.get("description")
-        if isinstance(description_text, str) and description_text:
+        if not frozen and isinstance(description_text, str) and description_text:
             recording.description = description_text
             update_fields.append("description")
 
@@ -3153,7 +3193,9 @@ def update_recording_summary(request, pk):
             "raw_transcript_gcs_path",
         ):
             value = request.data.get(gcs_field)
-            if isinstance(value, str) and value:
+            # The stored copies are part of what was frozen: repointing one
+            # would let the GCS text drift from the signed record.
+            if not frozen and isinstance(value, str) and value:
                 setattr(recording, gcs_field, value)
                 update_fields.append(gcs_field)
 
@@ -3267,9 +3309,18 @@ def process_callback(request, pk):
                 if rec is None:
                     continue
                 rec_fields: list[str] = []
+                # Already write-once (only when empty). The freeze makes the
+                # same promise explicit for a recording with an issued record,
+                # so it does not rest on the texts happening to be non-empty.
+                rec_frozen = recording_is_frozen(rec)
                 for name in ("transcript_clean", "description"):
                     value = tier.get(name)
-                    if isinstance(value, str) and value and not getattr(rec, name):
+                    if (
+                        not rec_frozen
+                        and isinstance(value, str)
+                        and value
+                        and not getattr(rec, name)
+                    ):
                         setattr(rec, name, value)
                         rec_fields.append(name)
                 for name in (
@@ -3278,7 +3329,7 @@ def process_callback(request, pk):
                     "raw_transcript_gcs_path",
                 ):
                     value = tier.get(name)
-                    if isinstance(value, str) and value:
+                    if not rec_frozen and isinstance(value, str) and value:
                         setattr(rec, name, value)
                         rec_fields.append(name)
                 if rec_fields:

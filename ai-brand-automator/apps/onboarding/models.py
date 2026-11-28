@@ -1343,3 +1343,7 @@ class MeetingAttendee(models.Model):
 
 
 from apps.onboarding.erasure.models import ErasureLog  # noqa: E402, F401
+from apps.onboarding.records.models import (  # noqa: E402, F401
+    MeetingRecord,
+    RecordEvent,
+)
