@@ -154,6 +154,8 @@ class TestLongSession:
         """
         from app.logic.live_session import BUFFER_FRAMES
 
+        from tests.e2e.conftest import _SPEEDUP
+
         tenant = f"long-{live_company}"
         session_id = f"sess-{live_company}-long"
 
@@ -173,9 +175,12 @@ class TestLongSession:
         all_t_ends = [f.get("t_end", 0.0) for f in finals if f.get("t_end") is not None]
         if all_t_ends:
             max_t = max(all_t_ends)
+            # The fixture is replayed at _SPEEDUP; scaled back, the finals
+            # must still reach the 45-minute meeting's last minutes.
+            meeting_s = max_t * _SPEEDUP
             assert (
-                max_t > 2000.0
-            ), f"expected finals spanning > 2000s, got max t_end={max_t:.1f}"
+                meeting_s > 2000.0
+            ), f"expected finals spanning > 2000s, got {meeting_s:.1f}s"
 
         r = sync_redis.Redis.from_url(REDIS_URL)
         keys = TenantKeys(tenant)
