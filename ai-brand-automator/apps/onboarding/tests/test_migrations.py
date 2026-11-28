@@ -302,6 +302,14 @@ def test_constraint_replay():
             )
             assert cursor.fetchone()[0] == 1, "the constraint did not come back"
 
+        # Reversing this app to zero also unapplied every ``onboarding``
+        # migration from 0013 on, and ``migrate_to(head)`` only brought back
+        # the ones this app depends on. A later onboarding migration that
+        # nothing here depends on stays unapplied, and the Company created
+        # just below then fails on a missing column — which is what happened
+        # when 0016 added the contract-detail columns.
+        restore_all_migrations()
+
         # And it still bites after the round trip.
         rebuilt = make_session(status=SessionStatus.GATHERED)
         with pytest.raises(IntegrityError):

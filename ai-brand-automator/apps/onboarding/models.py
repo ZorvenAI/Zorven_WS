@@ -325,6 +325,18 @@ class WorkflowTarget(models.TextChoices):
     WF3 = "WF3", "WF3"
 
 
+class QuestionCategory(models.TextChoices):
+    """What a question is for.
+
+    BRAND questions feed the brand workflows. CONTRACTUAL ones collect the
+    party details a signed meeting record needs, and come from the fixed list
+    in ``contract_fields.py`` rather than from the generator.
+    """
+
+    BRAND = "BRAND", "Brand"
+    CONTRACTUAL = "CONTRACTUAL", "Contractual"
+
+
 class QuestionStatus(models.TextChoices):
     OPEN = "OPEN", "Open"
     GREEN = "GREEN", "Green"
@@ -356,6 +368,18 @@ class Question(models.Model):
         blank=True,
         default="",
         help_text="Join to FieldProvenance (B-05)",
+    )
+    category = models.CharField(
+        max_length=16,
+        choices=QuestionCategory.choices,
+        default=QuestionCategory.BRAND,
+    )
+    mandatory = models.BooleanField(
+        default=False,
+        help_text=(
+            "A mandatory question cannot be reworded or dropped. Set only for "
+            "the fixed contract-detail questions."
+        ),
     )
     status = models.CharField(
         max_length=16,

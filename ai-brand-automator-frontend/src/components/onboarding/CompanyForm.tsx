@@ -26,6 +26,12 @@ export function CompanyForm() {
     founderStory: '',
     trademarkStatus: '',
     decisionMaker: '',
+    registeredAddress: '',
+    registrationNumber: '',
+    signatoryName: '',
+    signatoryTitle: '',
+    signatoryEmail: '',
+    billingContactEmail: '',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [existingCompanyId, setExistingCompanyId] = useState<number | null>(null);
@@ -57,6 +63,12 @@ export function CompanyForm() {
               founderStory: company.founder_story || '',
               trademarkStatus: company.trademark_status || '',
               decisionMaker: company.decision_maker || '',
+              registeredAddress: company.registered_address || '',
+              registrationNumber: company.registration_number || '',
+              signatoryName: company.signatory_name || '',
+              signatoryTitle: company.signatory_title || '',
+              signatoryEmail: company.signatory_email || '',
+              billingContactEmail: company.billing_contact_email || '',
             };
             setFormData(loaded);
             initialValues.current = { ...loaded };
@@ -82,6 +94,12 @@ export function CompanyForm() {
     founderStory: 'founder_story',
     trademarkStatus: 'trademark_status',
     decisionMaker: 'decision_maker',
+    registeredAddress: 'registered_address',
+    registrationNumber: 'registration_number',
+    signatoryName: 'signatory_name',
+    signatoryTitle: 'signatory_title',
+    signatoryEmail: 'signatory_email',
+    billingContactEmail: 'billing_contact_email',
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -104,6 +122,14 @@ export function CompanyForm() {
         founder_story: formData.founderStory,
         trademark_status: formData.trademarkStatus,
         decision_maker: formData.decisionMaker,
+        registered_address: formData.registeredAddress,
+        registration_number: formData.registrationNumber,
+        signatory_name: formData.signatoryName,
+        signatory_title: formData.signatoryTitle,
+        // Email columns reject an empty string as "not an email"; an unset
+        // one is sent as null.
+        signatory_email: formData.signatoryEmail || null,
+        billing_contact_email: formData.billingContactEmail || null,
       };
 
       let response;
@@ -400,6 +426,111 @@ export function CompanyForm() {
           />
         </div>
       </div>
+
+      {/*
+        Contract details: who the client is on a signed meeting record. The
+        spoken ones may arrive from the meeting and are confirmed here. The
+        emails and the registration number are never taken from a recording —
+        a misheard address is worse than a missing one — so this form is where
+        they are entered.
+      */}
+      <fieldset className="space-y-4 rounded-lg border border-white/10 p-4">
+        <legend className="px-2 text-sm font-semibold text-white">
+          Contract details
+        </legend>
+        <p className="text-xs text-brand-silver">
+          Used on signed meeting records. Email addresses and the registration
+          number must be entered here; they are not picked up from the meeting.
+        </p>
+        <div>
+          <label htmlFor="registeredAddress" className="label-dark">
+            Registered Business Address
+            <ProvenanceBadge row={provenanceMap.get('registered_address')} />
+          </label>
+          <input
+            type="text"
+            id="registeredAddress"
+            name="registeredAddress"
+            value={formData.registeredAddress}
+            onChange={handleChange}
+            className="input-dark mt-1"
+            placeholder="As it should appear on a signed record"
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="signatoryName" className="label-dark">
+              Authorised Signatory
+              <ProvenanceBadge row={provenanceMap.get('signatory_name')} />
+            </label>
+            <input
+              type="text"
+              id="signatoryName"
+              name="signatoryName"
+              value={formData.signatoryName}
+              onChange={handleChange}
+              className="input-dark mt-1"
+              placeholder="Full name"
+            />
+          </div>
+          <div>
+            <label htmlFor="signatoryTitle" className="label-dark">
+              Signatory Title
+              <ProvenanceBadge row={provenanceMap.get('signatory_title')} />
+            </label>
+            <input
+              type="text"
+              id="signatoryTitle"
+              name="signatoryTitle"
+              value={formData.signatoryTitle}
+              onChange={handleChange}
+              className="input-dark mt-1"
+              placeholder="e.g. Director"
+            />
+          </div>
+          <div>
+            <label htmlFor="signatoryEmail" className="label-dark">
+              Signatory Email
+            </label>
+            <input
+              type="email"
+              id="signatoryEmail"
+              name="signatoryEmail"
+              value={formData.signatoryEmail}
+              onChange={handleChange}
+              className="input-dark mt-1"
+              placeholder="Where signing requests are sent"
+            />
+          </div>
+          <div>
+            <label htmlFor="billingContactEmail" className="label-dark">
+              Billing Contact Email
+            </label>
+            <input
+              type="email"
+              id="billingContactEmail"
+              name="billingContactEmail"
+              value={formData.billingContactEmail}
+              onChange={handleChange}
+              className="input-dark mt-1"
+              placeholder="Where invoices go"
+            />
+          </div>
+          <div>
+            <label htmlFor="registrationNumber" className="label-dark">
+              Company Registration Number
+            </label>
+            <input
+              type="text"
+              id="registrationNumber"
+              name="registrationNumber"
+              value={formData.registrationNumber}
+              onChange={handleChange}
+              className="input-dark mt-1"
+            />
+          </div>
+        </div>
+      </fieldset>
 
       <div className="flex justify-end">
         <button

@@ -1,6 +1,8 @@
 from decimal import Decimal
 
 from rest_framework import serializers
+from apps.onboarding import contract_fields
+
 from .models import Company, BrandAsset, OnboardingProgress
 
 
@@ -27,6 +29,18 @@ ONBOARDING_FIELDS = [
     "sales_channels",
     "audience_languages",
     "decision_maker",
+]
+
+#: Party details a signed meeting record needs. Deliberately not part of
+#: ONBOARDING_FIELDS: that list is B-03's thirteen and its tests count them.
+#: The canonical definition, with question text and how each may be
+#: collected, is ``apps/onboarding/contract_fields.py``.
+#: Derived from it so a field added there cannot be silently dropped on
+#: PATCH here. legal_name and decision_maker are already serialized above.
+CONTRACT_FIELDS = [
+    name
+    for name in contract_fields.contract_field_names()
+    if name not in ("legal_name", "decision_maker")
 ]
 
 
@@ -264,6 +278,7 @@ class CompanySerializer(OnboardingFieldShapesMixin, serializers.ModelSerializer)
             "messaging_guide",
             # B-03 · the thirteen approved onboarding fields (Design §10.1).
             *ONBOARDING_FIELDS,
+            *CONTRACT_FIELDS,
             "created_at",
             "updated_at",
         ]
@@ -373,6 +388,7 @@ class CompanyCreateSerializer(OnboardingFieldShapesMixin, serializers.ModelSeria
             # B-03 · optional here too, so a single-call create can carry
             # them. The wizard does not send them (AC-3); Epic J may.
             *ONBOARDING_FIELDS,
+            *CONTRACT_FIELDS,
         ]
         read_only_fields = ["id"]
         # Tenant is set in the viewset's perform_create method
@@ -414,6 +430,7 @@ class CompanyUpdateSerializer(OnboardingFieldShapesMixin, serializers.ModelSeria
             # B-03 · this is the PATCH path FR-PROC-03 says J-02 writes
             # through, so it matters most that the fields land here.
             *ONBOARDING_FIELDS,
+            *CONTRACT_FIELDS,
         ]
         read_only_fields = ["id"]
 

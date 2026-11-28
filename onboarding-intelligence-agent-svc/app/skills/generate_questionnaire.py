@@ -67,6 +67,9 @@ What research could NOT establish — these are the most valuable things to ask:
 Business: {company_name}
 Operator's notes: {notes}
 
+Already on the questionnaire — do NOT ask about any of these, in any wording:
+{covered}
+
 Generate exactly {count} questions. {depth_guidance}
 
 Every question must carry:
@@ -129,6 +132,19 @@ class GenerateQuestionnaire(BaseSkill):
         super().__init__(meta)
         self._llm = llm
         self._vocabulary = vocabulary or []
+        self._covered: list[dict[str, str]] = []
+
+    def set_covered(self, covered: list[dict[str, str]]) -> None:
+        """Install what Django's fixed contract questions already ask.
+
+        Django appends those questions to every questionnaire itself, with
+        fixed wording, because the details a signature depends on cannot be
+        left to a generator that trims and rewords. Telling the model about
+        them here stops it spending the operator's requested count on the
+        same ground. Their fields are also withheld from ``target_field``, so
+        a generated question cannot claim to fill one.
+        """
+        self._covered = [c for c in covered if c.get("field")]
 
     def set_vocabulary(self, fields: list[str]) -> None:
         """Install the target_field names fetched from Django.
@@ -138,6 +154,11 @@ class GenerateQuestionnaire(BaseSkill):
         a Django round trip inside every generation.
         """
         self._vocabulary = sorted(set(fields))
+
+    def _allowed_fields(self) -> list[str]:
+        """The vocabulary minus what the fixed contract questions own."""
+        covered = {c["field"] for c in self._covered}
+        return [f for f in self._vocabulary if f not in covered]
 
     async def run(self, context: SkillContext) -> SkillResult:
         hints = context.input_context or {}
@@ -223,7 +244,11 @@ class GenerateQuestionnaire(BaseSkill):
             notes=hints.get("operator_notes") or "(none)",
             count=count,
             depth_guidance=DEPTH_GUIDANCE[depth],
-            vocabulary="\n".join(f"  {f}" for f in self._vocabulary)
+            covered="\n".join(
+                f"- {c.get('topic') or c['field']}" for c in self._covered
+            )
+            or "(nothing)",
+            vocabulary="\n".join(f"  {f}" for f in self._allowed_fields())
             or '  (none available — use "" for every target_field)',
             # A floor rather than a share: on a small set a percentage rounds
             # to zero, which is exactly when WF3 goes missing.
@@ -253,7 +278,8 @@ class GenerateQuestionnaire(BaseSkill):
         if not isinstance(parsed, list):
             return []
 
-        allowed = set(self._vocabulary)
+        allowed = set(self._allowed_fields())
+        covered_fields = {c["field"] for c in self._covered}
         questions: list[GeneratedQuestion] = []
         for item in parsed:
             if not isinstance(item, dict):
@@ -267,7 +293,12 @@ class GenerateQuestionnaire(BaseSkill):
                         # Dropped here as well as at Django's boundary. Both
                         # matter: this keeps the coverage figure honest, and
                         # Django's stops a caller that is not this skill.
-                        target_field=field if (not allowed or field in allowed) else "",
+                        target_field=(
+                            field
+                            if field not in covered_fields
+                            and (not allowed or field in allowed)
+                            else ""
+                        ),
                     )
                 )
             except ValueError:

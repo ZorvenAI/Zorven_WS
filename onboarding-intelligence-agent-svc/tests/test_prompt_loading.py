@@ -54,6 +54,7 @@ PLACEHOLDER_VARS: dict[str, dict[str, str]] = {
         "count": "12",
         "depth_guidance": "standard",
         "vocabulary": "name, industry",
+        "covered": "- legal_name",
         "wf3_min": "3",
     },
     "oia.media_analysis": {"ocr_text": "Sample OCR text"},

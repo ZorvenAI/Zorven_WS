@@ -33,6 +33,20 @@ FIELD_TYPE_HINTS: Final[dict[str, str]] = {
     "founder_story": "string — Origin story in the founder's words",
     "trademark_status": "string — exactly one of: registered, pending, none",
     "decision_maker": "string — Who signs off on brand/campaign decisions",
+    # Contract details. Only the ones safe to take from speech: the written-
+    # only ones (signatory email, billing email, registration number) are
+    # deliberately absent, so they are never extraction targets.
+    "registered_address": (
+        "string — The company's registered business address, exactly as "
+        "stated. Leave empty unless the speaker gives it as the registered "
+        "or official address"
+    ),
+    "signatory_name": (
+        "string — Full name of the person authorised to sign for the "
+        "company, exactly as stated. Leave empty unless someone is "
+        "explicitly named as the signatory"
+    ),
+    "signatory_title": "string — That signatory's title or role in the company",
     # Page 2 — Brand Voice
     "brand_voice": (
         "string — exactly one of: professional, friendly, bold, authoritative, "
@@ -111,6 +125,9 @@ WIZARD_PAGES: Final[dict[int, tuple[str, frozenset[str]]]] = {
                 "founder_story",
                 "trademark_status",
                 "decision_maker",
+                "registered_address",
+                "signatory_name",
+                "signatory_title",
             }
         ),
     ),

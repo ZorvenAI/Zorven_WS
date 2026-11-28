@@ -172,4 +172,77 @@ describe('QuestionChecklist', () => {
     expect(screen.queryByText('What do you sell?')).toBeNull();
     expect(screen.getByText('version 2')).toBeInTheDocument();
   });
+
+  describe('contract-detail questions', () => {
+    const CONTRACT = question({
+      id: 'c-1',
+      order: 0,
+      text: 'What is the registered legal name of the company?',
+      target_field: 'legal_name',
+      category: 'CONTRACTUAL',
+      mandatory: true,
+      required_to_issue: true,
+    });
+
+    it('tags a contract question by purpose, not by workflow', () => {
+      /**
+       * It feeds the signed record, not a brand workflow: "discovery" beside
+       * "Who is authorised to sign?" would be wrong.
+       */
+      render(<QuestionChecklist questions={[CONTRACT]} />);
+
+      const item = screen.getByRole('listitem');
+      expect(within(item).getByTestId('contract-tag')).toHaveTextContent(
+        'contract details · required',
+      );
+      expect(within(item).queryByText('discovery')).toBeNull();
+    });
+
+    it('marks only the details a record cannot be issued without as required', () => {
+      const optional = question({
+        id: 'c-2',
+        order: 1,
+        text: 'What is the company registration number?',
+        target_field: 'registration_number',
+        category: 'CONTRACTUAL',
+        mandatory: true,
+        required_to_issue: false,
+      });
+      render(<QuestionChecklist questions={[CONTRACT, optional]} />);
+
+      const [required, notRequired] = screen.getAllByTestId('contract-tag');
+      expect(required).toHaveTextContent('contract details · required');
+      expect(notRequired).toHaveTextContent(/^contract details$/);
+    });
+
+    it('keeps the contract tag out of the accessible name', () => {
+      render(<QuestionChecklist questions={[CONTRACT]} />);
+
+      expect(screen.getByRole('checkbox')).toHaveAccessibleName(CONTRACT.text);
+      expect(screen.getByTestId('contract-tag')).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    it('numbers contract and brand questions as one list', () => {
+      /** The operator says these numbers aloud; two sequences would clash. */
+      render(
+        <QuestionChecklist
+          questions={[CONTRACT, question({ id: 'q-9', order: 1 })]}
+        />,
+      );
+
+      const items = screen.getAllByRole('listitem');
+      expect(items[0]).toHaveTextContent('1.');
+      expect(items[1]).toHaveTextContent('2.');
+      expect(screen.getAllByTestId('contract-tag')).toHaveLength(1);
+      expect(within(items[1]).getByText('discovery')).toBeInTheDocument();
+    });
+
+    it('leaves a question with no category on its workflow tag', () => {
+      /** A backend that predates the field sends neither. */
+      render(<QuestionChecklist questions={[question({ workflow_target: 'WF2' })]} />);
+
+      expect(screen.queryByTestId('contract-tag')).toBeNull();
+      expect(screen.getByText('strategy')).toBeInTheDocument();
+    });
+  });
 });

@@ -69,6 +69,7 @@ class PrepExecutor:
         #: would put a round trip on the path for a list that changes when a
         #: migration ships.
         self._vocabulary: list[str] | None = None
+        self._covered: list[dict[str, str]] = []
 
     @staticmethod
     def _build_registry(
@@ -206,7 +207,9 @@ class PrepExecutor:
         if self._backend is None:
             self._vocabulary = []
             return self._vocabulary
-        self._vocabulary = await self._backend.field_vocabulary(tenant_id=tenant_id)
+        self._vocabulary, self._covered = await self._backend.field_vocabulary_detail(
+            tenant_id=tenant_id
+        )
         if not self._vocabulary:
             # Not cached as final — an empty list here usually means the
             # backend was briefly unreachable, and pinning that for the life
@@ -240,6 +243,9 @@ class PrepExecutor:
         setter = getattr(skill, "set_vocabulary", None)
         if setter is not None:
             setter(vocabulary)
+        cover = getattr(skill, "set_covered", None)
+        if cover is not None:
+            cover(self._covered)
 
         context = SkillContext(
             input_prompt=input_prompt,

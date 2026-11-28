@@ -286,6 +286,78 @@ describe('CompanyForm', () => {
     })
   })
 
+  it('sends the contract details typed into the form', async () => {
+    ;(apiClient.post as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 1 }),
+    })
+
+    render(<CompanyForm />)
+
+    fireEvent.change(screen.getByLabelText(/company name/i), {
+      target: { value: 'Test' },
+    })
+    fireEvent.change(screen.getByLabelText(/industry/i), {
+      target: { value: 'technology' },
+    })
+    fireEvent.change(screen.getByLabelText(/company description/i), {
+      target: { value: 'Test' },
+    })
+    fireEvent.change(screen.getByLabelText(/registered business address/i), {
+      target: { value: '14 MG Road, Pune' },
+    })
+    fireEvent.change(screen.getByLabelText(/authorised signatory/i), {
+      target: { value: 'Asha Kalyani' },
+    })
+    fireEvent.change(screen.getByLabelText(/signatory title/i), {
+      target: { value: 'Director' },
+    })
+    fireEvent.change(screen.getByLabelText(/signatory email/i), {
+      target: { value: 'asha@example.com' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /next step/i }))
+
+    await waitFor(() => {
+      const callArgs = (apiClient.post as jest.Mock).mock.calls[0][1]
+      expect(callArgs).toMatchObject({
+        registered_address: '14 MG Road, Pune',
+        signatory_name: 'Asha Kalyani',
+        signatory_title: 'Director',
+        signatory_email: 'asha@example.com',
+      })
+    })
+  })
+
+  it('sends an unset email as null, not an empty string', async () => {
+    // The backend rejects '' as "not an email address", which would fail the
+    // whole save for a field the operator never touched.
+    ;(apiClient.post as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 1 }),
+    })
+
+    render(<CompanyForm />)
+
+    fireEvent.change(screen.getByLabelText(/company name/i), {
+      target: { value: 'Test' },
+    })
+    fireEvent.change(screen.getByLabelText(/industry/i), {
+      target: { value: 'technology' },
+    })
+    fireEvent.change(screen.getByLabelText(/company description/i), {
+      target: { value: 'Test' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /next step/i }))
+
+    await waitFor(() => {
+      const callArgs = (apiClient.post as jest.Mock).mock.calls[0][1]
+      expect(callArgs.signatory_email).toBeNull()
+      expect(callArgs.billing_contact_email).toBeNull()
+    })
+  })
+
   it('handles submission errors', async () => {
     const mockResponse = {
       ok: false,
