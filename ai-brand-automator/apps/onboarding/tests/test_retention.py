@@ -381,3 +381,22 @@ class TestRetentionEnforcement:
 
         result = enforce_retention_windows()
         assert result["dispatched"] == 0
+
+    def test_beat_job_does_not_requeue_a_subject_awaiting_review(self, tenant, company):
+        """Held sessions stay held until a person decides; re-flagging the
+        same subject on every run would bury the request in duplicates."""
+        from apps.onboarding.erasure.tasks import enforce_retention_windows
+
+        RetentionConfig.objects.create(tenant=tenant, retention_days=30)
+        _create_subject(tenant, company, "Held Subject", days_ago=60)
+        ErasureLog.objects.create(
+            tenant=tenant,
+            subject_name="Held Subject",
+            reason="retention_enforcement",
+            completion_report={"manual_review_required": True},
+            completed_at=timezone.now(),
+        )
+
+        result = enforce_retention_windows()
+
+        assert result["dispatched"] == 0

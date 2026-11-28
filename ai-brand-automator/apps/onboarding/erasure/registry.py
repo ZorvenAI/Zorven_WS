@@ -60,6 +60,13 @@ class CompletionReport:
     reason: str
     store_results: list[StoreResult] = dataclasses.field(default_factory=list)
     completeness_verified: bool = False
+    #: Sessions left untouched because they hold a signed meeting record:
+    #: ``{"session_id", "records": [record numbers]}``. A person decides each.
+    held_for_review: list[dict[str, Any]] = dataclasses.field(default_factory=list)
+
+    @property
+    def manual_review_required(self) -> bool:
+        return bool(self.held_for_review)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -68,6 +75,8 @@ class CompletionReport:
             "requested_by": self.requested_by,
             "reason": self.reason,
             "completeness_verified": self.completeness_verified,
+            "manual_review_required": self.manual_review_required,
+            "held_for_review": self.held_for_review,
             "stores": {
                 r.store_name: {
                     "items_erased": r.items_erased,

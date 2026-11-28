@@ -117,7 +117,14 @@ def enforce_retention_windows(self):
                 reason="retention_enforcement",
                 completed_at__isnull=True,
             ).exists()
-            if already_pending:
+            # A subject whose sessions are held for review would otherwise be
+            # re-queued, and re-flagged, on every run until someone decides.
+            awaiting_review = ErasureLog.objects.filter(
+                tenant=tenant,
+                subject_name=entry["subject_name"],
+                completion_report__manual_review_required=True,
+            ).exists()
+            if already_pending or awaiting_review:
                 continue
 
             log_entry = ErasureLog.objects.create(
