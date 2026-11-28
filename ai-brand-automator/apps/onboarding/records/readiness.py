@@ -149,6 +149,26 @@ def check_readiness(
         )
     )
 
+    # 3b · Someone signs for each party.
+    parties = {s["party"] for s in snapshot.get("signatories", []) if s.get("required")}
+    lacking = tuple(
+        label
+        for party, label in (("AGENCY", "the agency"), ("CLIENT", "the client"))
+        if party not in parties
+    )
+    items.append(
+        ReadinessItem(
+            code="signatories",
+            ok=not lacking,
+            blocking=True,
+            message=(
+                "Each party has a signatory."
+                if not lacking
+                else "Add a required signatory for " + " and ".join(lacking) + "."
+            ),
+        )
+    )
+
     # 4 · A gap in the transcript is issued knowingly, not by accident.
     state = (snapshot.get("completeness") or {}).get("state")
     complete = state == "complete"

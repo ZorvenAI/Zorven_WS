@@ -159,12 +159,117 @@ class MeetingRecord(models.Model):
         return self.status != RecordStatus.DRAFT
 
 
+class SignatoryParty(models.TextChoices):
+    AGENCY = "AGENCY", "Agency"
+    CLIENT = "CLIENT", "Client"
+
+
+class SignatoryStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending"
+    SIGNED = "SIGNED", "Signed"
+    DECLINED = "DECLINED", "Declined"
+
+
+class SigningMethod(models.TextChoices):
+    #: Emailed single-use link, then a one-time code sent to the same address.
+    EMAIL_CODE = "EMAIL_CODE", "Emailed link and one-time code"
+    #: Signed while logged in to the workspace.
+    ACCOUNT = "ACCOUNT", "Signed in to the workspace"
+
+
+class RecordSignatory(models.Model):
+    """One person who signs a record, and the evidence that they did.
+
+    Secrets are never stored: the link token, the one-time code and the
+    signing session are each kept only as a hash, so a copy of this table
+    cannot be used to sign anything.
+    """
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="%(class)ss",
+    )
+    record = models.ForeignKey(
+        MeetingRecord, on_delete=models.CASCADE, related_name="signatories"
+    )
+    party = models.CharField(max_length=8, choices=SignatoryParty.choices)
+    name = models.CharField(max_length=255)
+    title = models.CharField(max_length=255, blank=True, default="")
+    email = models.EmailField()
+    required = models.BooleanField(default=True)
+    order = models.PositiveSmallIntegerField(default=0)
+    status = models.CharField(
+        max_length=10,
+        choices=SignatoryStatus.choices,
+        default=SignatoryStatus.PENDING,
+    )
+
+    # The emailed link.
+    token_hash = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    token_expires_at = models.DateTimeField(null=True, blank=True)
+    # The one-time code sent once the link is opened.
+    code_hash = models.CharField(max_length=64, blank=True, default="")
+    code_expires_at = models.DateTimeField(null=True, blank=True)
+    code_sent_at = models.DateTimeField(null=True, blank=True)
+    code_attempts = models.PositiveSmallIntegerField(default=0)
+    # The short-lived session a correct code opens.
+    session_hash = models.CharField(max_length=64, blank=True, default="")
+    session_expires_at = models.DateTimeField(null=True, blank=True)
+
+    # What they did.
+    signed_at = models.DateTimeField(null=True, blank=True)
+    declined_at = models.DateTimeField(null=True, blank=True)
+    method = models.CharField(
+        max_length=12, choices=SigningMethod.choices, blank=True, default=""
+    )
+    typed_name = models.CharField(max_length=255, blank=True, default="")
+    remarks = models.TextField(blank=True, default="")
+    decline_reason = models.TextField(blank=True, default="")
+    #: When this signatory last accepted the other signatories' remarks.
+    remarks_acknowledged_at = models.DateTimeField(null=True, blank=True)
+    consent_version = models.CharField(max_length=40, blank=True, default="")
+    #: The fingerprint that was on screen when they acted.
+    content_hash = models.CharField(max_length=64, blank=True, default="")
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=400, blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "onboarding_sessions"
+        ordering = ["order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["record", "email"], name="unique_signatory_email_per_record"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.party}) · {self.status}"
+
+
 class RecordEventType(models.TextChoices):
     CREATED = "CREATED", "Created"
     ISSUED = "ISSUED", "Issued"
     VOIDED = "VOIDED", "Voided"
     SUPERSEDED = "SUPERSEDED", "Superseded"
     DOWNLOADED = "DOWNLOADED", "Downloaded"
+    EMAIL_SENT = "EMAIL_SENT", "Email sent"
+    EMAIL_FAILED = "EMAIL_FAILED", "Email failed"
+    VIEWED = "VIEWED", "Signing link opened"
+    CODE_SENT = "CODE_SENT", "One-time code sent"
+    CODE_VERIFIED = "CODE_VERIFIED", "One-time code verified"
+    CODE_FAILED = "CODE_FAILED", "One-time code rejected"
+    SIGNED = "SIGNED", "Signed"
+    REMARKS_ACKNOWLEDGED = "REMARKS_ACKNOWLEDGED", "Remarks acknowledged"
+    DECLINED = "DECLINED", "Declined"
+    COMPLETED = "COMPLETED", "Completed"
+    EXPIRED = "EXPIRED", "Expired"
+    REMINDED = "REMINDED", "Reminder sent"
 
 
 class RecordEventError(RuntimeError):
@@ -200,6 +305,13 @@ class RecordEvent(models.Model):
         null=True,
         blank=True,
         related_name="meeting_record_events",
+    )
+    signatory = models.ForeignKey(
+        RecordSignatory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="events",
     )
     event_type = models.CharField(max_length=24, choices=RecordEventType.choices)
     detail = models.JSONField(default=dict, blank=True)

@@ -107,6 +107,21 @@ services:
           - auth
           - public
 
+      # Meeting-record signing (public: a signer has a link and an emailed
+      # one-time code, not an account; Django checks both)
+      - name: record-signing-route
+        paths:
+          - /api/v1/onboarding/public/records/sign
+        strip_path: false
+        preserve_host: true
+        methods:
+          - GET
+          - POST
+          - OPTIONS
+        tags:
+          - auth
+          - public
+
   # ---------------------------------------------------------------------------
   # 3. Health Check Routes (Anonymous)
   # ---------------------------------------------------------------------------
@@ -283,6 +298,7 @@ plugins:
         - X-Requested-With
         - X-CSRF-Token
         - X-Tenant-ID
+        - X-Signing-Session
       exposed_headers:
         - X-Auth-Token
         - X-Request-Id

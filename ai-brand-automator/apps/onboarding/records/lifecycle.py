@@ -7,8 +7,10 @@ trail cannot fall out of step with the state it describes.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -58,6 +60,7 @@ def log_event(
     event_type: str,
     *,
     user=None,
+    signatory=None,
     ip_address: str | None = None,
     **detail: Any,
 ) -> RecordEvent:
@@ -65,6 +68,7 @@ def log_event(
         tenant=record.tenant,
         record=record,
         actor_user=user if getattr(user, "pk", None) else None,
+        signatory=signatory,
         event_type=event_type,
         detail=detail,
         ip_address=ip_address,
@@ -174,6 +178,10 @@ def issue(
     record.status = RecordStatus.ISSUED
     record.issued_at = now
     record.issued_by = user if getattr(user, "pk", None) else None
+    # Signing links stop working at the same moment the record expires.
+    record.expires_at = now + timedelta(
+        days=int(getattr(settings, "RECORDS_LINK_TTL_DAYS", 14))
+    )
     record.save(
         update_fields=[
             "snapshot",
@@ -182,6 +190,7 @@ def issue(
             "status",
             "issued_at",
             "issued_by",
+            "expires_at",
             "updated_at",
         ]
     )

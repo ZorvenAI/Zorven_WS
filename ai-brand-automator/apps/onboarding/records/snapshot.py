@@ -131,6 +131,18 @@ def build_snapshot(record) -> dict[str, Any]:
             if consent
             else None
         ),
+        # Who is to sign is part of what is frozen: bound into the
+        # fingerprint, the list cannot change after issue without showing.
+        "signatories": [
+            {
+                "party": s.party,
+                "name": s.name,
+                "title": s.title,
+                "email": s.email,
+                "required": s.required,
+            }
+            for s in record.signatories.all()
+        ],
         "completeness": _completeness(recording),
         "agreements": {
             "preamble": split.preamble,

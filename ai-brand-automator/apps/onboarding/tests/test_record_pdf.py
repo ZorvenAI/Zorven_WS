@@ -241,8 +241,8 @@ def test_transcript_lines_are_numbered_in_order():
 def test_each_party_has_a_signature_block():
     text = text_of(build_record_pdf(view()))
 
-    assert "Signed for Zorven Agency" in text
-    assert "Signed for Pomodoro Trattoria LLC" in text
+    assert "For Zorven Agency" in text
+    assert "For Pomodoro Trattoria LLC" in text
     assert "maria@example.com" in text
     assert text.count("Not signed") == 2
 
@@ -459,7 +459,7 @@ def test_the_binder_carries_each_meetings_own_content_and_signatures():
     assert "Budget split evenly — ₹50,000 each." in text
     assert "Photo shoot booked for January." in text
     assert "Naveen: Second meeting line." in text
-    assert text.count("Signed for Pomodoro Trattoria LLC") == 2
+    assert text.count("For Pomodoro Trattoria LLC") == 2
 
 
 @pytest.mark.unit

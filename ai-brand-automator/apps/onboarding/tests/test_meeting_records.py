@@ -396,7 +396,12 @@ def test_an_incomplete_transcript_must_be_acknowledged(
     accepted = issue(api_client, draft["id"], acknowledge_incomplete=True)
     assert accepted.status_code == 200, accepted.content
     assert accepted.json()["status"] == RecordStatus.ISSUED
-    assert accepted.json()["events"][-1]["detail"]["acknowledged_incomplete"] is True
+    issued_event = next(
+        e
+        for e in accepted.json()["events"]
+        if e["event_type"] == RecordEventType.ISSUED
+    )
+    assert issued_event["detail"]["acknowledged_incomplete"] is True
 
 
 def test_acknowledgement_must_be_an_explicit_true(api_client, editor, session):
@@ -461,12 +466,16 @@ def test_issuing_freezes_and_fingerprints_the_content(issued, editor):
 
 
 def test_issuing_is_recorded_in_the_audit_trail_with_the_fingerprint(issued):
-    assert [e["event_type"] for e in issued["events"]] == [
-        RecordEventType.CREATED,
-        RecordEventType.ISSUED,
-    ]
-    assert issued["events"][-1]["detail"]["content_hash"] == issued["content_hash"]
-    assert issued["events"][-1]["actor"] == "rec_editor"
+    """Issuing is followed by the signing requests it sends, one per person."""
+    types = [e["event_type"] for e in issued["events"]]
+    assert types[:2] == [RecordEventType.CREATED, RecordEventType.ISSUED]
+    assert set(types[2:]) <= {
+        RecordEventType.EMAIL_SENT,
+        RecordEventType.EMAIL_FAILED,
+    }
+    issued_event = issued["events"][1]
+    assert issued_event["detail"]["content_hash"] == issued["content_hash"]
+    assert issued_event["actor"] == "rec_editor"
 
 
 def test_a_record_cannot_be_issued_twice(api_client, issued):
@@ -894,8 +903,8 @@ def test_an_issued_record_downloads_as_a_watermarked_pdf(api_client, issued):
     assert "Launch budget split evenly;" in text
     assert "Maria Rossi: Yes, agreed." in text
     assert issued["content_hash"] in text.replace("\n", "")
-    assert "Signed for Zorven Agency" in text
-    assert "Signed for Pomodoro Trattoria LLC" in text
+    assert "For Zorven Agency" in text
+    assert "For Pomodoro Trattoria LLC" in text
 
 
 def test_a_draft_downloads_marked_as_not_issued(api_client, draft):

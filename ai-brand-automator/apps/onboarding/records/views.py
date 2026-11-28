@@ -15,6 +15,7 @@ import ipaddress
 from typing import Any
 
 from django.conf import settings
+from django.db import transaction
 from django.http import Http404, HttpResponse
 from rest_framework import status as http
 from rest_framework.decorators import api_view, permission_classes
@@ -22,34 +23,31 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.onboarding.models import MeetingRecording, OnboardingSession, tenant_scope_q
-from apps.onboarding.records import lifecycle, readiness
+from apps.onboarding.records import completion, lifecycle, readiness, signing
+from apps.onboarding.records.clauses import CONSENT_VERSION, consent_text
 from apps.onboarding.records.lifecycle import RecordError
 from apps.onboarding.records.models import (
     MeetingRecord,
     RecordEventType,
     RecordStatus,
+    SignatoryParty,
+    SigningMethod,
 )
 from apps.onboarding.records.pdf import (
-    AuditEntry,
-    RecordView,
-    SignatureBlock,
     build_binder_pdf,
     build_record_pdf,
 )
-from apps.onboarding.records.snapshot import build_snapshot
+from apps.onboarding.records.presentation import (
+    acknowledgements_owed,
+    events_of as _events,
+    signatory_private,
+    snapshot_of as _snapshot_of,
+    view_of as _view,
+)
 from tenants.permissions import IsTenantEditor, IsTenantViewer
 
 READ = [IsAuthenticated, IsTenantViewer]
 WRITE = [IsAuthenticated, IsTenantEditor]
-
-_EVENT_LABELS = {
-    RecordEventType.CREATED: "Draft prepared",
-    RecordEventType.ISSUED: "Issued",
-    RecordEventType.VOIDED: "Voided",
-    RecordEventType.SUPERSEDED: "Superseded by a newer version",
-    RecordEventType.DOWNLOADED: "Downloaded",
-}
-
 
 # ── Scoping ──────────────────────────────────────────────────────────
 
@@ -135,6 +133,9 @@ def _refusal(error: RecordError) -> Response:
         "is_terminal",
         "not_supersedable",
         "already_superseded",
+        "not_open",
+        "already_acted",
+        "content_mismatch",
     }
     return Response(
         {"error": error.code, "detail": error.message, **error.extra},
@@ -147,78 +148,6 @@ def _refusal(error: RecordError) -> Response:
 
 
 # ── Shaping ──────────────────────────────────────────────────────────
-
-
-def _actor(user) -> str:
-    if user is None:
-        return ""
-    return (user.get_full_name() or user.get_username() or "").strip()
-
-
-def _snapshot_of(record: MeetingRecord) -> dict[str, Any]:
-    """Frozen content once issued; a live view of the recording before."""
-    if record.status != RecordStatus.DRAFT and record.snapshot:
-        return record.snapshot
-    return build_snapshot(record)
-
-
-def _signature_blocks(record: MeetingRecord, snapshot: dict[str, Any]):
-    """The two parties' signature blocks.
-
-    Signing itself is the next step of the plan, so nothing here is ever
-    marked signed yet: the client's signatory comes from the frozen party
-    details and the agency's from whoever issued the record.
-    """
-    client = snapshot["parties"]["client"]
-    issuer = record.issued_by
-    return (
-        SignatureBlock(
-            party=snapshot["parties"]["agency"]["name"] or "the agency",
-            name=_actor(issuer),
-            email=getattr(issuer, "email", "") or "",
-        ),
-        SignatureBlock(
-            party=client.get("legal_name") or client.get("name") or "the client",
-            name=client.get("signatory_name", ""),
-            title=client.get("signatory_title", ""),
-            email=client.get("signatory_email", ""),
-        ),
-    )
-
-
-def _events(record: MeetingRecord) -> list[dict[str, Any]]:
-    return [
-        {
-            "event_type": event.event_type,
-            "label": _EVENT_LABELS.get(event.event_type, event.event_type),
-            "actor": _actor(event.actor_user),
-            "occurred_at": event.occurred_at.isoformat(),
-            "detail": event.detail,
-        }
-        for event in record.events.select_related("actor_user")
-    ]
-
-
-def _view(record: MeetingRecord) -> RecordView:
-    snapshot = _snapshot_of(record)
-    return RecordView(
-        snapshot=snapshot,
-        status=record.status,
-        content_hash=record.content_hash,
-        issued_at=record.issued_at.isoformat() if record.issued_at else "",
-        signatures=_signature_blocks(record, snapshot),
-        audit=tuple(
-            AuditEntry(
-                occurred_at=event["occurred_at"],
-                event=event["label"],
-                actor=event["actor"],
-            )
-            for event in _events(record)
-            # Downloads are logged, but printing each one inside the document
-            # being downloaded would make every copy differ from the last.
-            if event["event_type"] != RecordEventType.DOWNLOADED
-        ),
-    )
 
 
 def _summary(record: MeetingRecord) -> dict[str, Any]:
@@ -236,14 +165,34 @@ def _summary(record: MeetingRecord) -> dict[str, Any]:
         "void_reason": record.void_reason,
         "supersedes": record.supersedes_id,
         "created_at": record.created_at,
+        "expires_at": record.expires_at,
+        "completed_at": record.completed_at,
+        "pdf_hash": record.pdf_hash,
     }
 
 
-def _detail(record: MeetingRecord) -> dict[str, Any]:
+def _signatory_of(record: MeetingRecord, user) -> int | None:
+    """Which signatory the viewer is, by their account's email address."""
+    email = (getattr(user, "email", "") or "").strip().lower()
+    if not email:
+        return None
+    for s in record.signatories.all():
+        if s.party == SignatoryParty.AGENCY and s.email.lower() == email:
+            return s.pk
+    return None
+
+
+def _detail(record: MeetingRecord, user=None) -> dict[str, Any]:
     snapshot = _snapshot_of(record)
     body = _summary(record)
+    body["you"] = _signatory_of(record, user)
+    body["consent"] = {"version": CONSENT_VERSION, "text": consent_text()}
     body["document"] = snapshot
     body["events"] = _events(record)
+    body["signatories"] = [
+        signatory_private(s, snapshot) for s in record.signatories.all()
+    ]
+    body["remarks_to_acknowledge"] = acknowledgements_owed(record)
     body["readiness"] = (
         [item.as_dict() for item in readiness.check_readiness(record, snapshot)]
         if record.status == RecordStatus.DRAFT
@@ -305,19 +254,27 @@ def create_record(request, pk):
     if recording is None:
         raise Http404
     try:
-        record = lifecycle.create_draft(
-            recording, user=request.user, ip_address=_client_ip(request)
-        )
+        with transaction.atomic():
+            record = lifecycle.create_draft(
+                recording, user=request.user, ip_address=_client_ip(request)
+            )
+            # A starting point, not a decision: the preparer and the client's
+            # authorised signatory, both editable until issue.
+            signing.set_signatories(
+                record, signing.default_signatories(record, request.user)
+            )
     except RecordError as error:
         return _refusal(error)
-    return Response(_detail(_record_or_404(request, record.pk)), status=201)
+    return Response(
+        _detail(_record_or_404(request, record.pk), request.user), status=201
+    )
 
 
 @api_view(["GET"])
 @permission_classes(READ)
 def record_detail(request, pk):
     """``GET records/<pk>/`` — the record, its content, events and readiness."""
-    return Response(_detail(_record_or_404(request, pk)))
+    return Response(_detail(_record_or_404(request, pk), request.user))
 
 
 @api_view(["POST"])
@@ -346,7 +303,100 @@ def issue_record(request, pk):
         )
     except RecordError as error:
         return _refusal(error)
-    return Response(_detail(_record_or_404(request, pk)))
+    # ``issue`` has committed by now, so a link is never emailed for a record
+    # whose issue rolled back.
+    completion.send_signing_requests(pk)
+    return Response(_detail(_record_or_404(request, pk), request.user))
+
+
+@api_view(["PUT"])
+@permission_classes(WRITE)
+def record_signatories(request, pk):
+    """``PUT records/<pk>/signatories/`` — replace a draft's signatories."""
+    record = _record_or_404(request, pk)
+    try:
+        signing.set_signatories(record, request.data.get("signatories"))
+    except RecordError as error:
+        return _refusal(error)
+    return Response(_detail(_record_or_404(request, pk), request.user))
+
+
+@api_view(["POST"])
+@permission_classes(WRITE)
+def remind_record(request, pk):
+    """``POST records/<pk>/remind/`` — resend to everyone yet to sign.
+
+    Each reminder carries a new link and retires the previous one, so this is
+    also how a link sent to the wrong place is cancelled.
+    """
+    record = _record_or_404(request, pk)
+    if record.status not in signing.OPEN_STATUSES:
+        return _refusal(
+            RecordError(
+                "not_open",
+                f"{record.record_number} is not awaiting signatures.",
+            )
+        )
+    lifecycle.log_event(
+        record,
+        RecordEventType.REMINDED,
+        user=request.user,
+        ip_address=_client_ip(request),
+    )
+    sent = completion.send_signing_requests(pk, reminder=True)
+    return Response(
+        {"sent": sent, **_detail(_record_or_404(request, pk), request.user)}
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsTenantViewer])
+def sign_record(request, pk):
+    """``POST records/<pk>/sign/`` — sign as yourself, while logged in.
+
+    Being logged in stands in for the emailed code. Which signatory you are
+    is decided by your account's email address, never by the request: nobody
+    can sign in another person's place by naming them.
+    """
+    record = _record_or_404(request, pk)
+    email = (request.user.email or "").strip().lower()
+    # Only the agency's own signatories sign from the workspace. A client
+    # signatory always proves their address with the emailed code, even if
+    # someone holds a workspace account under the same email.
+    signatory = (
+        record.signatories.filter(
+            email__iexact=email, party=SignatoryParty.AGENCY
+        ).first()
+        if email
+        else None
+    )
+    if signatory is None:
+        return Response(
+            {
+                "error": "not_a_signatory",
+                "detail": "You are not named as a signatory on this record.",
+            },
+            status=http.HTTP_403_FORBIDDEN,
+        )
+    action = str(request.data.get("action") or "")
+    try:
+        signed = signing.act(
+            signatory,
+            action,
+            method=SigningMethod.ACCOUNT,
+            content_hash=str(request.data.get("content_hash") or ""),
+            typed_name=str(request.data.get("typed_name") or ""),
+            consent=request.data.get("consent") is True,
+            remarks=str(request.data.get("remarks") or ""),
+            reason=str(request.data.get("reason") or ""),
+            ip_address=_client_ip(request),
+            user_agent=request.META.get("HTTP_USER_AGENT", "")[:400],
+            user=request.user,
+        )
+    except RecordError as error:
+        return _refusal(error)
+    completion.after_action(signed, action)
+    return Response(_detail(_record_or_404(request, pk), request.user))
 
 
 @api_view(["POST"])
@@ -363,7 +413,7 @@ def void_record(request, pk):
         )
     except RecordError as error:
         return _refusal(error)
-    return Response(_detail(_record_or_404(request, pk)))
+    return Response(_detail(_record_or_404(request, pk), request.user))
 
 
 @api_view(["POST"])
@@ -372,12 +422,30 @@ def supersede_record(request, pk):
     """``POST records/<pk>/supersede/`` — open the next version as a draft."""
     record = _record_or_404(request, pk)
     try:
-        successor = lifecycle.supersede(
-            record, user=request.user, ip_address=_client_ip(request)
-        )
+        with transaction.atomic():
+            successor = lifecycle.supersede(
+                record, user=request.user, ip_address=_client_ip(request)
+            )
+            # Carried over as they were named, not as they signed: the new
+            # version is a new document and everyone signs it afresh.
+            signing.set_signatories(
+                successor,
+                [
+                    {
+                        "party": s.party,
+                        "name": s.name,
+                        "title": s.title,
+                        "email": s.email,
+                        "required": s.required,
+                    }
+                    for s in record.signatories.all()
+                ],
+            )
     except RecordError as error:
         return _refusal(error)
-    return Response(_detail(_record_or_404(request, successor.pk)), status=201)
+    return Response(
+        _detail(_record_or_404(request, successor.pk), request.user), status=201
+    )
 
 
 @api_view(["GET"])

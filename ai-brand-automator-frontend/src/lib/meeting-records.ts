@@ -76,6 +76,14 @@ export interface RecordDocument {
   };
   attendees: { name: string; role: string }[];
   consent: { subject_name: string; method: string; granted_at: string | null } | null;
+  /** Frozen at issue. Absent on records issued before signing existed. */
+  signatories?: {
+    party: 'AGENCY' | 'CLIENT';
+    name: string;
+    title: string;
+    email: string;
+    required: boolean;
+  }[];
   completeness: { state: string; missing_s: number | null; note: string };
   agreements: { preamble: string; items: { number: string; text: string }[] };
   description: string;
@@ -89,12 +97,54 @@ export interface RecordEvent {
   occurred_at: string;
 }
 
+export type SignatoryParty = 'AGENCY' | 'CLIENT';
+export type SignatoryStatus = 'PENDING' | 'SIGNED' | 'DECLINED';
+
+/** Who is to sign, as entered on a draft. */
+export interface SignatoryInput {
+  party: SignatoryParty;
+  name: string;
+  title: string;
+  email: string;
+  required: boolean;
+}
+
+/** A signatory as the agency sees them, with contact details and evidence. */
+export interface Signatory extends SignatoryInput {
+  id: number;
+  party_name: string;
+  status: SignatoryStatus;
+  signed_at: string | null;
+  declined_at: string | null;
+  remarks: string;
+  decline_reason: string;
+  method: '' | 'EMAIL_CODE' | 'ACCOUNT';
+  typed_name: string;
+  ip_address: string | null;
+  link_expires_at: string | null;
+  remarks_acknowledged_at: string | null;
+}
+
 export interface RecordDetail extends RecordSummary {
   document: RecordDocument;
   events: RecordEvent[];
   /** Empty once the record has been issued. */
   readiness: ReadinessItem[];
+  expires_at?: string | null;
+  completed_at?: string | null;
+  signatories: Signatory[];
+  /** Signatory id (as a string key) → names whose remarks they must accept. */
+  remarks_to_acknowledge: Record<string, string[]>;
+  /** The viewer's own signatory id, or null when they are not signing. */
+  you: number | null;
+  consent: { version: string; text: string };
 }
+
+export type AgencySigningAction =
+  | { action: 'sign'; typed_name: string; consent: boolean }
+  | { action: 'sign_with_remarks'; typed_name: string; consent: boolean; remarks: string }
+  | { action: 'decline'; reason: string }
+  | { action: 'acknowledge_remarks' };
 
 /** A refusal from the server, with the reason it gave. */
 export class RecordActionError extends Error {
@@ -178,6 +228,38 @@ export async function supersedeRecord(recordId: number): Promise<RecordDetail> {
 export async function discardRecord(recordId: number): Promise<void> {
   const response = await apiClient.post(`${BASE}/records/${recordId}/discard/`, {});
   if (!response.ok) throw await failure(response);
+}
+
+export async function setSignatories(
+  recordId: number,
+  signatories: SignatoryInput[],
+): Promise<RecordDetail> {
+  return json<RecordDetail>(
+    await apiClient.put(`${BASE}/records/${recordId}/signatories/`, { signatories }),
+  );
+}
+
+/** Sign as the logged-in user. The server decides which signatory that is. */
+export async function signRecord(
+  recordId: number,
+  contentHash: string,
+  action: AgencySigningAction,
+): Promise<RecordDetail> {
+  return json<RecordDetail>(
+    await apiClient.post(`${BASE}/records/${recordId}/sign/`, {
+      content_hash: contentHash,
+      ...action,
+    }),
+  );
+}
+
+/** Email a fresh link to everyone yet to act; earlier links stop working. */
+export async function remindRecord(
+  recordId: number,
+): Promise<RecordDetail & { sent: number }> {
+  return json<RecordDetail & { sent: number }>(
+    await apiClient.post(`${BASE}/records/${recordId}/remind/`, {}),
+  );
 }
 
 /** Fetch a PDF and hand it to the browser as a download. */

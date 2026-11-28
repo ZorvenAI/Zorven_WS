@@ -347,6 +347,8 @@ CORS_ALLOW_HEADERS = [
     "x-csrftoken",
     "x-requested-with",
     "x-tenant-id",
+    # Meeting-record signing session (apps/onboarding/records/public_views.py)
+    "x-signing-session",
 ]
 
 # =============================================================================
@@ -661,6 +663,14 @@ GOOGLE_BUSINESS_REDIRECT_URI = config(
 
 # Frontend URL for OAuth redirects
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")
+
+# Signed meeting records.
+# How long a signing link, and the record awaiting it, stays open.
+RECORDS_LINK_TTL_DAYS = config("RECORDS_LINK_TTL_DAYS", default=14, cast=int)
+# How many proxies in front of this service append to X-Forwarded-For. The
+# caller's address in a record's audit trail is read that many entries from
+# the right; 0 ignores the header.
+RECORDS_TRUSTED_PROXY_COUNT = config("RECORDS_TRUSTED_PROXY_COUNT", default=1, cast=int)
 
 # F-03 AC-3. Mirrors `gcs.user_message` in the agent's
 # config/circuit_breakers.yaml, which §18.2 makes the source of truth: "these
@@ -1030,6 +1040,12 @@ CELERY_BEAT_SCHEDULE["reconcile-analytics-rollups"] = {
 CELERY_BEAT_SCHEDULE["enforce-onboarding-retention"] = {
     "task": "apps.onboarding.erasure.tasks.enforce_retention_windows",
     "schedule": crontab(hour=3, minute=0),
+}
+
+# Signed meeting records: close those whose signing window has passed.
+CELERY_BEAT_SCHEDULE["expire-meeting-records"] = {
+    "task": "onboarding.records.expire",
+    "schedule": crontab(hour=4, minute=0),
 }
 
 # ILA: expire stale WF2 approval requests hourly

@@ -5,6 +5,10 @@ import logging
 
 import requests
 from celery import shared_task
+
+# Registers the meeting-record tasks with Celery's autodiscovery, which only
+# imports each app's ``tasks`` module.
+from apps.onboarding.records import completion as _record_tasks  # noqa: F401
 from django.conf import settings
 
 logger = logging.getLogger(__name__)

@@ -36,3 +36,21 @@ def clause_text(version: str = CLAUSE_VERSION) -> str:
     """The clause for a version. Raises ``KeyError`` for an unknown one —
     a record must never be issued with wording nobody wrote."""
     return _CLAUSES[version]
+
+
+#: What a signatory agrees to before signing electronically. Versioned like
+#: the clause, and the version each person accepted is stored with their
+#: signature. Draft wording, pending the same legal review.
+CONSENT_VERSION = "2026-11-draft-1"
+
+_CONSENTS: dict[str, str] = {
+    "2026-11-draft-1": (
+        "I agree to sign this document electronically. I understand that "
+        "typing my name and choosing Sign has the same effect as signing on "
+        "paper, and that a copy of the signed document will be sent to me."
+    ),
+}
+
+
+def consent_text(version: str = CONSENT_VERSION) -> str:
+    return _CONSENTS[version]
