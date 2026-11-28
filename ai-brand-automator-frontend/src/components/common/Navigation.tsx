@@ -17,6 +17,7 @@ import {
   FlaskConical,
   Users,
   CreditCard,
+  ShieldCheck,
   PanelLeftClose,
   PanelLeft,
   Menu,
@@ -149,6 +150,10 @@ export function Navigation({ children }: { children: React.ReactNode }) {
       : []),
     ...(canBilling
       ? [{ href: '/billing', label: 'Billing', icon: <CreditCard className={iconCls} />, active: pathname === '/billing' }]
+      : []),
+    // Same people who can request an erasure (owner, admin).
+    ...(canTeam
+      ? [{ href: '/privacy', label: 'Privacy', icon: <ShieldCheck className={iconCls} />, active: pathname === '/privacy' }]
       : []),
   ];
 

@@ -395,6 +395,7 @@ class TestRetentionEnforcement:
             reason="retention_enforcement",
             completion_report={"manual_review_required": True},
             completed_at=timezone.now(),
+            review_status="PENDING",
         )
 
         result = enforce_retention_windows()

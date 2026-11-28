@@ -63,6 +63,11 @@ class CompletionReport:
     #: Sessions left untouched because they hold a signed meeting record:
     #: ``{"session_id", "records": [record numbers]}``. A person decides each.
     held_for_review: list[dict[str, Any]] = dataclasses.field(default_factory=list)
+    #: Signed records erased because a reviewer chose to: numbers and
+    #: fingerprints only, kept as proof they existed (see ``_tombstone``).
+    erased_signed_records: list[dict[str, Any]] = dataclasses.field(
+        default_factory=list
+    )
 
     @property
     def manual_review_required(self) -> bool:
@@ -77,6 +82,7 @@ class CompletionReport:
             "completeness_verified": self.completeness_verified,
             "manual_review_required": self.manual_review_required,
             "held_for_review": self.held_for_review,
+            "erased_signed_records": self.erased_signed_records,
             "stores": {
                 r.store_name: {
                     "items_erased": r.items_erased,

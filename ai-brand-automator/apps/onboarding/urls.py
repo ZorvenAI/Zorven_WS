@@ -13,6 +13,9 @@ from rest_framework.routers import DefaultRouter
 from apps.onboarding.erasure.views import (
     ErasureLogListView,
     ErasureRequestView,
+    ErasureReviewEraseView,
+    ErasureReviewKeepView,
+    ErasureReviewListView,
     RetentionConfigView,
 )
 from apps.onboarding.records import public_views as record_public_views
@@ -166,6 +169,21 @@ urlpatterns = [
         "erasure/logs/",
         ErasureLogListView.as_view(),
         name="onboarding-erasure-logs",
+    ),
+    path(
+        "erasure/review/",
+        ErasureReviewListView.as_view(),
+        name="onboarding-erasure-review",
+    ),
+    path(
+        "erasure/review/<int:pk>/keep/",
+        ErasureReviewKeepView.as_view(),
+        name="onboarding-erasure-review-keep",
+    ),
+    path(
+        "erasure/review/<int:pk>/erase/",
+        ErasureReviewEraseView.as_view(),
+        name="onboarding-erasure-review-erase",
     ),
     path(
         "retention/",
