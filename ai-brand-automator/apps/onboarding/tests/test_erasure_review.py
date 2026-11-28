@@ -451,3 +451,49 @@ def test_a_run_erases_exactly_the_unheld_sessions_unless_forced(
         tenant_id=str(tenant.pk), subject_name=SUBJECT, force_session_ids=held
     )
     assert not OnboardingSession.objects.filter(pk__in=ids).exists()
+
+
+# ── A queued erase must still be the decision that stands ────────────
+
+
+def _forced_run(log, session, token):
+    from apps.onboarding.erasure.tasks import execute_erasure_cascade
+
+    return execute_erasure_cascade.apply(
+        kwargs={
+            "tenant_id": str(log.tenant_id),
+            "subject_name": SUBJECT,
+            "erasure_log_id": log.pk,
+            "force_session_ids": [str(session.pk)],
+            "decision_token": token,
+        }
+    ).result
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_stale_erase_does_nothing_once_the_request_was_kept(tenant, company):
+    """An erase queued earlier must not run over a later decision to keep."""
+    log, session = _held_request(tenant, company)
+    _, user = _client(tenant, Membership.Role.ADMIN, "rq_keeper")
+    stale_token = timezone.now().isoformat()
+    review.keep(log, user=user, reason=REASON)
+
+    result = _forced_run(log, session, stale_token)
+
+    assert result == {"skipped": "decision_no_longer_current"}
+    assert OnboardingSession.objects.filter(pk=session.pk).exists()
+    assert ErasureLog.objects.get(pk=log.pk).review_status == ReviewStatus.KEPT
+
+
+@pytest.mark.django_db(transaction=True)
+def test_an_erase_without_its_decision_does_nothing(tenant, company):
+    """A forced run whose decision was cleared (after a failure) or replaced
+    by another one is refused, so nothing erases without a standing decision."""
+    log, session = _held_request(tenant, company)
+
+    assert _forced_run(log, session, None) == {"skipped": "decision_no_longer_current"}
+    assert _forced_run(log, session, timezone.now().isoformat()) == {
+        "skipped": "decision_no_longer_current"
+    }
+    assert OnboardingSession.objects.filter(pk=session.pk).exists()
+    assert ErasureLog.objects.get(pk=log.pk).review_status == ReviewStatus.PENDING

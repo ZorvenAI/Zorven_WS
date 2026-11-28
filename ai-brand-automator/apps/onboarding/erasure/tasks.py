@@ -26,12 +26,18 @@ def execute_erasure_cascade(
     reason: str = "",
     erasure_log_id: int | None = None,
     force_session_ids: list[str] | None = None,
+    decision_token: str | None = None,
 ):
     """Run the cascade and record its outcome on the log.
 
     With ``force_session_ids`` this is an erase-anyway decision from the
     review queue: the log already carries the reviewer's decision, and the
     run's report is added to it rather than replacing the first run's.
+
+    A forced run is never retried automatically, and only runs while the
+    decision it was queued for is still the current one (``decision_token``
+    is that decision's ``reviewed_at``). Otherwise a retry could erase after
+    the decision was cleared -- or after someone chose to keep instead.
     """
     from apps.onboarding.erasure.cascade import ErasureCascade
     from apps.onboarding.erasure.models import ErasureLog, ReviewStatus
@@ -49,6 +55,13 @@ def execute_erasure_cascade(
             log_entry = ErasureLog.objects.get(pk=erasure_log_id)
         except ErasureLog.DoesNotExist:
             logger.warning("erasure_log_not_found", extra={"id": erasure_log_id})
+
+    if force_session_ids and not _decision_still_current(log_entry, decision_token):
+        logger.warning(
+            "erasure_forced_run_skipped",
+            extra={"erasure_log_id": erasure_log_id},
+        )
+        return {"skipped": "decision_no_longer_current"}
 
     try:
         report = ErasureCascade().execute(
@@ -68,7 +81,6 @@ def execute_erasure_cascade(
             },
         )
         if log_entry and force_session_ids:
-            # Stays in the queue, still PENDING, with the failure visible.
             # Back in the queue, still PENDING, with the failure visible and
             # the decision cleared so a reviewer can try again.
             log_entry.completion_report = {
@@ -87,6 +99,9 @@ def execute_erasure_cascade(
                     "updated_at",
                 ]
             )
+            # Not retried: the decision is cleared, and only a reviewer
+            # deciding again may start another forced run.
+            return {"error": str(exc)}
         elif log_entry:
             log_entry.completion_report = {"error": str(exc)}
             log_entry.completed_at = timezone.now()
@@ -209,3 +224,25 @@ def _awaiting_review(tenant, subject_name: str) -> bool:
             extra={"erasure_log_id": log.pk, "hold_until": str(log.hold_until)},
         )
     return held.exists()
+
+
+def _decision_still_current(log, token: str | None) -> bool:
+    """Whether a forced run's erase-anyway decision still stands.
+
+    Checked under the row lock, so it agrees with whatever a reviewer just
+    did: still PENDING, and the same decision (``reviewed_at``) that queued it.
+    """
+    from django.db import transaction
+
+    from apps.onboarding.erasure.models import ErasureLog, ReviewStatus
+
+    if log is None or not token:
+        return False
+    with transaction.atomic():
+        current = ErasureLog.objects.select_for_update().filter(pk=log.pk).first()
+        return (
+            current is not None
+            and current.review_status == ReviewStatus.PENDING
+            and current.reviewed_at is not None
+            and current.reviewed_at.isoformat() == token
+        )

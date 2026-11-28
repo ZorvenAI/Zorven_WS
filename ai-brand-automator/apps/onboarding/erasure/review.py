@@ -162,6 +162,8 @@ def erase_anyway(log: ErasureLog, *, user, reason, confirm_subject):
         "reason": f"review: {reason}"[:255],
         "erasure_log_id": log.pk,
         "force_session_ids": sessions,
+        # Ties the queued run to this decision; see _decision_still_current.
+        "decision_token": log.reviewed_at.isoformat(),
     }
     transaction.on_commit(lambda: execute_erasure_cascade.delay(**payload))
     logger.warning(
